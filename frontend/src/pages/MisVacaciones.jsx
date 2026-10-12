@@ -82,6 +82,12 @@ export default function MisVacaciones({ usuarioId }) {
     setPeriodoSolicitud((id) => (periodosConSaldo.some((p) => p.id === id) ? id : periodosConSaldo[0]?.id ?? null))
   }, [periodosConSaldo])
   const periodoElegido = periodos.find((p) => p.id === periodoSolicitud)
+  useEffect(() => { if (periodoSolicitud) setPeriodoSel(periodoSolicitud) }, [periodoSolicitud])
+  // Elegir en la tarjeta un periodo con saldo también lo usa para la selección del calendario
+  const elegirPeriodo = (id) => {
+    setPeriodoSel(id)
+    if (periodosConSaldo.some((p) => p.id === id)) setPeriodoSolicitud(id)
+  }
 
   // Tramos del calendario que corresponden a cada periodo (de un aniversario al siguiente), más el próximo
   const franjas = useMemo(() => {
@@ -220,7 +226,7 @@ export default function MisVacaciones({ usuarioId }) {
         <div className="ps-cab">
           <span className="ps-titulo">Vacaciones</span>
           {periodos.length > 1 ? (
-            <select className="ps-select" value={periodoSel ?? ''} onChange={(e) => setPeriodoSel(Number(e.target.value))}>
+            <select className="ps-select" value={periodoSel ?? ''} onChange={(e) => elegirPeriodo(Number(e.target.value))}>
               {periodos.map((p) => <option key={p.id} value={p.id}>{p.nombre}{!p.vigente ? ' (vencido)' : ''}</option>)}
             </select>
           ) : periodo && <span className="muted">{periodo.nombre}</span>}
@@ -466,7 +472,7 @@ function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, onLim
       <b>{fmtFecha(seleccion.inicio)}{!unDia && ` → ${fmtFecha(fin)}`}</b>
       <span className="muted">
         {!seleccion.fin
-          ? `Elige el último día…${periodoSel ? ` (máximo ${Math.floor(periodoSel.dias_disponible + 1e-6)} días laborales)` : ''}`
+          ? `Elige el último día…${periodoSel ? ` (máximo ${Math.floor(periodoSel.dias_disponible + 1e-6)} días laborales del ${periodoSel.nombre})` : ''}`
           : `${naturales} día(s) naturales`}
         {calc && seleccion.fin && ` · ${calc.dias_habiles} laborales`}
       </span>
