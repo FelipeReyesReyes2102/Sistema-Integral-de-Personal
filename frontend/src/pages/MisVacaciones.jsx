@@ -85,6 +85,14 @@ export default function MisVacaciones({ usuarioId }) {
     }).then(setSelCalc).catch(() => {})
   }, [seleccion, periodos])
 
+  // Esc cancela la selección de días (si no hay una ventana abierta)
+  useEffect(() => {
+    if (!seleccion || modal) return
+    const alPresionar = (e) => { if (e.key === 'Escape') setSeleccion(null) }
+    window.addEventListener('keydown', alPresionar)
+    return () => window.removeEventListener('keydown', alPresionar)
+  }, [seleccion, modal])
+
   const refrescar = () => {
     setModal(null)
     setSeleccion(null)
@@ -418,7 +426,8 @@ function BarraSeleccion({ seleccion, calc, onLimpiar, onVacaciones, onPermiso, o
       </button>
       <button className="btn btn-sm" onClick={onHomeOffice} disabled={!seleccion.fin}><Laptop size={14} /> Home office</button>
       {unDia && <button className="btn btn-sm" onClick={onPermiso}><Clock size={14} /> Solicitar permiso</button>}
-      <button className="icon-btn plain" title="Limpiar selección" onClick={onLimpiar}><X size={16} /></button>
+      <button className="icon-btn plain" title="Cancelar selección (Esc)" onClick={onLimpiar}><X size={16} /></button>
+      <kbd className="tecla" title="Presiona Esc para cancelar la selección">Esc</kbd>
     </div>
   )
 }

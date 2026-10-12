@@ -519,3 +519,4 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
   .panel-sup .mi-turno.compacto, .ps-saldo, .ps-registros { flex: 1 1 100%; }
   .ps-acciones { order: -1; }
 }
+.tecla { font-family: inherit; font-size: 10.5px; color: var(--muted); border: 1px solid #cfd4da; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: #fff; margin-left: -6px; }
