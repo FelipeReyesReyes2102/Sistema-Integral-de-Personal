@@ -9,8 +9,10 @@ const PRIORIDAD = ['vacaciones', 'home_office', 'salida_intermedia', 'salida_tem
  * - Clic en un día con eventos: abre sus detalles (`onDia`).
  * - Clic en un día libre: selecciona el rango para una nueva solicitud (`onSeleccion`).
  * - `foco`: muestra solo una categoría (se elige en la leyenda o en el panel de registros).
+ * - Los días anteriores a hoy no se pueden seleccionar: solo se consultan (historial).
+ * - `colorSeleccion`: color del rango seleccionado (p. ej. el del periodo vacacional elegido).
  */
-export default function YearCalendar({ anio, onAnio, datos, seleccion, onSeleccion, onDia, foco, onFoco }) {
+export default function YearCalendar({ anio, onAnio, datos, seleccion, onSeleccion, onDia, foco, onFoco, colorSeleccion }) {
   const [vista, setVista] = useState('anio')
   const [mes, setMes] = useState(new Date().getMonth())
   const [hover, setHover] = useState(null)
@@ -23,12 +25,14 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
   const eventosDe = (f) => (todos[f] || []).filter((e) => !foco || foco === e.cat || (foco === 'consulta' && e.cat === 'consulta_medica'))
   const anios = Array.from({ length: 7 }, (_, i) => new Date().getFullYear() - 4 + i)
 
-  let [ri, rf] = [seleccion?.inicio, seleccion?.fin || (seleccion?.inicio && hover) || seleccion?.inicio]
+  const pasado = (f) => f < hoy
+  const hoverValido = hover && !pasado(hover) ? hover : null
+  let [ri, rf] = [seleccion?.inicio, seleccion?.fin || (seleccion?.inicio && hoverValido) || seleccion?.inicio]
   if (ri && rf && rf < ri) [ri, rf] = [rf, ri]
   const enRango = (f) => ri && f >= ri && f <= rf
 
   function seleccionar(fecha) {
-    if (!seleccionable) return
+    if (!seleccionable || pasado(fecha)) return
     if (!seleccion?.inicio || seleccion.fin) return onSeleccion({ inicio: fecha, fin: null })
     if (fecha === seleccion.inicio) return onSeleccion({ inicio: fecha, fin: fecha })
     const [a, b] = fecha < seleccion.inicio ? [fecha, seleccion.inicio] : [seleccion.inicio, fecha]
@@ -80,7 +84,8 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
     if (f === hoy) clases.push('cd-hoy')
     if (enRango(f)) clases.push(noLab.has(f) || festivos[f] ? 'cd-rango-excluido' : 'cd-rango')
     if (f === ri || f === rf) clases.push('cd-rango-ext')
-    if (evs.length || seleccionable) clases.push('cd-clic')
+    if (evs.length || (seleccionable && !pasado(f))) clases.push('cd-clic')
+    if (seleccionable && pasado(f) && !evs.length) clases.push('cd-pasado')
     if (foco && !evs.length && !(foco === 'festivo' && festivos[f])) clases.push('cd-atenuado')
     const estilo = p && !enRango(f) ? estiloEvento(p.cat, p.estado) : undefined
     return (
@@ -123,11 +128,11 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
   )
 
   return (
-    <div onMouseLeave={() => setHover(null)}>
+    <div onMouseLeave={() => setHover(null)} style={colorSeleccion ? { '--sel': colorSeleccion } : undefined}>
       {nav}
       {seleccionable && (
         <div className="cal-tip">
-          Clic en un evento para ver sus detalles · clic en días libres para seleccionar un rango · clic en el nombre del mes para ampliarlo
+          Clic en un evento para ver sus detalles · clic en días libres (de hoy en adelante) para seleccionar un rango · clic en el nombre del mes para ampliarlo
         </div>
       )}
 
@@ -156,7 +161,8 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
             {fechas.map((f) => {
               const evs = eventosDe(f)
               const clases = ['zoom-dia']
-              if (seleccionable) clases.push('clic')
+              if (seleccionable && !pasado(f)) clases.push('clic')
+              if (seleccionable && pasado(f)) clases.push('pasado')
               if (noLab.has(f)) clases.push('nolab')
               if (f === hoy) clases.push('hoy')
               if (enRango(f)) clases.push(noLab.has(f) || festivos[f] ? 'rango-excluido' : 'rango')

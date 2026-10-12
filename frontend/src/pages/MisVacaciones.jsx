@@ -17,6 +17,10 @@ import EventosDia from '../components/EventosDia'
 import MiTurno from '../components/MiTurno'
 import DetalleConsulta from '../components/DetalleConsulta'
 
+// Color con el que se pinta en el calendario la selección de cada periodo vacacional
+const COLORES_PERIODO = ['#2e7d32', '#6a1b9a', '#00838f', '#c2185b', '#ef6c00', '#1565c0']
+export const colorPeriodo = (p) => (p ? COLORES_PERIODO[(p.numero - 1) % COLORES_PERIODO.length] : COLORES_PERIODO[0])
+
 export default function MisVacaciones({ usuarioId }) {
   const { user } = useAuth()
   const [empleado, setEmpleado] = useState(usuarioId ? null : user)
@@ -34,6 +38,7 @@ export default function MisVacaciones({ usuarioId }) {
   const [modal, setModal] = useState(null) // {tipo: 'vac'|'perm'|'ver', item, tipoPermiso, inicial}
   const [seleccion, setSeleccion] = useState(null) // {inicio, fin} elegido en el calendario
   const [selCalc, setSelCalc] = useState(null)
+  const [periodoSolicitud, setPeriodoSolicitud] = useState(null) // periodo del que se toman los días seleccionados
   const [foco, setFoco] = useState(null) // categoría resaltada en el calendario
   const [error, setError] = useState('')
   const navigate = useNavigate()
@@ -68,10 +73,17 @@ export default function MisVacaciones({ usuarioId }) {
   useEffect(() => { cargar() }, [cargar])
   useEffect(() => { cargarCalendario() }, [cargarCalendario])
 
+  // Periodos de los que todavía se pueden tomar días (el más antiguo primero, para no perderlos)
+  const periodosConSaldo = useMemo(() => periodos.filter((p) => p.vigente && p.horas_disponible > 0).reverse(), [periodos])
+  useEffect(() => {
+    setPeriodoSolicitud((id) => (periodosConSaldo.some((p) => p.id === id) ? id : periodosConSaldo[0]?.id ?? null))
+  }, [periodosConSaldo])
+  const periodoElegido = periodos.find((p) => p.id === periodoSolicitud)
+
   // Vista previa de días laborales del rango seleccionado en el calendario
   useEffect(() => {
     setSelCalc(null)
-    const vigente = periodos.find((p) => p.vigente && p.horas_disponible > 0) || periodos.find((p) => p.vigente)
+    const vigente = periodoElegido || periodos.find((p) => p.vigente)
     if (!seleccion?.fin || soloLectura) return
     if (!vigente) {
       api('/vacaciones/dias-laborales', {
@@ -83,7 +95,7 @@ export default function MisVacaciones({ usuarioId }) {
       method: 'POST',
       body: { periodo_id: vigente.id, fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin, usuario_id: usuarioId },
     }).then(setSelCalc).catch(() => {})
-  }, [seleccion, periodos])
+  }, [seleccion, periodos, periodoSolicitud])
 
   // Esc cancela la selección de días (si no hay una ventana abierta)
   useEffect(() => {
@@ -270,16 +282,18 @@ export default function MisVacaciones({ usuarioId }) {
         </div>
       )}
 
-      <div className={`card cal-card ${tab === 'resumen' ? 'oculto-movil' : ''}`}>
+      <div className={`card cal-card ${tab === 'resumen' ? 'oculto-movil' : ''}`} style={{ '--sel': colorPeriodo(periodoElegido) }}>
         {!soloLectura && (
           <BarraSeleccion seleccion={seleccion} calc={selCalc} onLimpiar={() => setSeleccion(null)}
-            onVacaciones={() => setModal({ tipo: 'vac', inicial: { fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin || seleccion.inicio } })}
+            periodos={periodosConSaldo} periodoId={periodoSolicitud} onPeriodo={setPeriodoSolicitud}
+            onVacaciones={() => setModal({ tipo: 'vac', inicial: { fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin || seleccion.inicio, periodo_id: periodoSolicitud } })}
             onPermiso={() => setModal({ tipo: 'perm', fechaInicial: seleccion.inicio })}
             onHomeOffice={() => setModal({ tipo: 'perm', tipoPermiso: 'home_office', fechaInicial: seleccion.inicio, fechaFinInicial: seleccion.fin || seleccion.inicio })} />
         )}
         <YearCalendar anio={anio} onAnio={setAnio} datos={calendario} seleccion={seleccion}
           onSeleccion={soloLectura ? undefined : setSeleccion}
-          foco={foco} onFoco={enfocar} onDia={(f) => setModal({ tipo: 'dia', fecha: f })} />
+          foco={foco} onFoco={enfocar} onDia={(f) => setModal({ tipo: 'dia', fecha: f })}
+          colorSeleccion={colorPeriodo(periodoElegido)} />
       </div>
 
       <div className={`card lista-card ${tab === 'calendario' ? 'oculto-movil' : ''}`}>
@@ -399,11 +413,25 @@ function PanelRegistros({ anio, registros, foco, onFoco }) {
   )
 }
 
-function BarraSeleccion({ seleccion, calc, onLimpiar, onVacaciones, onPermiso, onHomeOffice }) {
+function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, onLimpiar, onVacaciones, onPermiso, onHomeOffice }) {
+  // Periodo del que se tomarán los días: define también el color de la selección en el calendario
+  const selectorPeriodo = periodos.length > 0 && (
+    <div className="sel-periodos" role="radiogroup" aria-label="Periodo vacacional">
+      {periodos.map((p) => (
+        <button key={p.id} type="button" role="radio" aria-checked={p.id === periodoId}
+          className={`sel-periodo ${p.id === periodoId ? 'activo' : ''}`} style={{ '--c': colorPeriodo(p) }}
+          onClick={() => onPeriodo(p.id)} title={`Vence el ${fmtFecha(p.fecha_vencimiento, false)}`}>
+          <i /> {p.nombre} · {num(p.dias_disponible)} d
+        </button>
+      ))}
+    </div>
+  )
   if (!seleccion) {
     return (
       <div className="barra-sel vacia">
         <MousePointerClick size={16} /> Selecciona en el calendario el primer y el último día para pedir vacaciones, home office o un permiso.
+        <div className="espacio" />
+        {selectorPeriodo}
       </div>
     )
   }
@@ -411,7 +439,7 @@ function BarraSeleccion({ seleccion, calc, onLimpiar, onVacaciones, onPermiso, o
   const naturales = Math.round((parseISO(fin) - parseISO(seleccion.inicio)) / 864e5) + 1
   const unDia = naturales === 1
   return (
-    <div className="barra-sel">
+    <div className="barra-sel con-seleccion">
       <b>{fmtFecha(seleccion.inicio)}{!unDia && ` → ${fmtFecha(fin)}`}</b>
       <span className="muted">
         {!seleccion.fin ? 'Elige el último día…' : `${naturales} día(s) naturales`}
@@ -421,6 +449,7 @@ function BarraSeleccion({ seleccion, calc, onLimpiar, onVacaciones, onPermiso, o
         <span style={{ color: 'var(--danger)', fontSize: 12 }}>{calc.errores[0]}</span>
       )}
       <div className="espacio" />
+      {selectorPeriodo}
       <button className="btn btn-sm btn-primary" onClick={onVacaciones} disabled={!seleccion.fin}>
         <TreePalm size={14} /> Solicitar vacaciones
       </button>

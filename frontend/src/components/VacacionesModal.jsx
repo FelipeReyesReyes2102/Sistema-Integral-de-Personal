@@ -10,7 +10,7 @@ export default function VacacionesModal({ periodos, usuarioId, empleado, solicit
   const vigentes = periodos.filter((p) => p.vigente || p.id === solicitud?.periodo_id)
   const [form, setForm] = useState({
     // Por defecto el periodo vigente más antiguo con saldo, para no perder días al cumplir 18 meses
-    periodo_id: solicitud?.periodo_id || [...vigentes].reverse().find((p) => p.horas_disponible > 0)?.id || vigentes[0]?.id || '',
+    periodo_id: solicitud?.periodo_id || inicial?.periodo_id || [...vigentes].reverse().find((p) => p.horas_disponible > 0)?.id || vigentes[0]?.id || '',
     fecha_inicio: solicitud?.fecha_inicio || inicial?.fecha_inicio || '',
     fecha_fin: solicitud?.fecha_fin || inicial?.fecha_fin || '',
     comentario: solicitud?.comentario || '',
@@ -86,7 +86,7 @@ export default function VacacionesModal({ periodos, usuarioId, empleado, solicit
   const limite = new Date()
   limite.setMonth(limite.getMonth() + 6)
   const porVencer = anterior && parseISO(anterior.fecha_vencimiento) <= limite ? anterior : null
-  const mostrarPeriodo = !!porVencer || (solicitud && conSaldo.length > 1)
+  const mostrarPeriodo = !!porVencer || (conSaldo.length > 1 && (solicitud || inicial?.periodo_id))
   const paraOtro = empleado && user && empleado.id !== user.id
 
   return (
