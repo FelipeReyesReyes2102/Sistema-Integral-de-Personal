@@ -470,7 +470,7 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 /* ---------- Mis vacaciones: franja superior ---------- */
 .panel-sup { display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch; margin-bottom: 12px; }
 .panel-sup > .card { padding: 12px 14px; margin: 0; }
-.panel-sup .mi-turno.compacto { flex: 0 0 200px; }
+.panel-sup .ps-perfil { flex: 0 1 300px; min-width: 250px; }
 .ps-saldo { flex: 0 1 290px; min-width: 240px; }
 .ps-registros { flex: 1 1 380px; }
 .ps-acciones { flex: 0 0 auto; align-self: flex-start; }
@@ -484,7 +484,6 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .ps-bloque.ok { background: #e8f5e9; color: #1b5e20; }
 .ps-bloque.vencido { background: #fdecea; color: var(--danger); }
 .barra.delgada { height: 6px; margin: 6px 0 4px; }
-.mi-turno.compacto .mt-turno { font-size: 17px; margin: 4px 0 0; }
 .dropdown-menu.derecha { left: auto; right: 0; }
 .panel-sup .registros { margin: 0; border: none; padding: 0; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 2px 8px; }
 .panel-sup .registros-cab { grid-column: 1 / -1; justify-content: flex-start; gap: 10px; align-items: center; margin-bottom: 2px; }
@@ -500,13 +499,13 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 
 /* ---------- Menú lateral encogible ---------- */
 .sidebar { transition: width .15s ease; }
-.sidebar .logo-mini { display: none; height: 28px; }
+.sidebar .brand .logo-chip .logo-mini { display: none; height: 28px; }
 .app.menu-colapsado .sidebar { width: 64px; }
 .app.menu-colapsado .sidebar .brand { padding: 14px 8px; align-items: center; }
 .app.menu-colapsado .sidebar .brand .logo-chip { padding: 4px; align-self: center; }
-.app.menu-colapsado .sidebar .logo-completo, .app.menu-colapsado .sidebar .brand-nombre, .app.menu-colapsado .sidebar .brand-desc,
+.app.menu-colapsado .sidebar .brand .logo-chip .logo-completo, .app.menu-colapsado .sidebar .brand-nombre, .app.menu-colapsado .sidebar .brand-desc,
 .app.menu-colapsado .sidebar .nav-texto, .app.menu-colapsado .sidebar .usuario .nombre, .app.menu-colapsado .sidebar .usuario-detalle { display: none; }
-.app.menu-colapsado .sidebar .logo-mini { display: block; }
+.app.menu-colapsado .sidebar .brand .logo-chip .logo-mini { display: block; }
 .app.menu-colapsado .sidebar nav { padding: 10px 8px; }
 .app.menu-colapsado .sidebar .seccion { margin: 12px 0 6px; height: 1px; background: rgba(255,255,255,.08); font-size: 0; }
 .app.menu-colapsado .nav-link { justify-content: center; padding: 10px 0; position: relative; }
@@ -516,7 +515,7 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .app.menu-colapsado .usuario-acciones .btn { padding: 6px; }
 @media (max-width: 900px) {
   .app.menu-colapsado .sidebar { width: 240px; }
-  .panel-sup .mi-turno.compacto, .ps-saldo, .ps-registros { flex: 1 1 100%; }
+  .panel-sup .ps-perfil, .ps-saldo, .ps-registros { flex: 1 1 100%; }
   .ps-acciones { order: -1; }
 }
 .tecla { font-family: inherit; font-size: 10.5px; color: var(--muted); border: 1px solid #cfd4da; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: #fff; margin-left: -6px; }
@@ -548,3 +547,15 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .cd-fuera { opacity: .3; cursor: not-allowed; }
 .cd-fuera:hover { outline: none !important; }
 .zoom-dia.fuera { opacity: .4; cursor: not-allowed; }
+
+/* Tarjeta del usuario (Mis vacaciones) */
+.pf-cab { display: flex; align-items: center; gap: 10px; }
+.pf-datos { min-width: 0; }
+.pf-nombre { font-weight: 600; color: var(--navy); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pf-puesto { font-size: 12px; color: var(--muted); }
+.pf-lista { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 8px 0 0; font-size: 12px; }
+.pf-lista dt { color: var(--muted); }
+.pf-lista dd { margin: 0; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-turno { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text); }
+.pf-turno svg { vertical-align: -2px; color: var(--primary); }
+.pf-turno .ps-bloque { margin-top: 4px; }

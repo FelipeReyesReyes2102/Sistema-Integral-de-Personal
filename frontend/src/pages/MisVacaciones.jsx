@@ -15,6 +15,7 @@ import {
 } from '../utils'
 import EventosDia from '../components/EventosDia'
 import MiTurno from '../components/MiTurno'
+import Avatar from '../components/Avatar'
 import DetalleConsulta from '../components/DetalleConsulta'
 
 // Color de cada periodo vacacional: el calendario pinta sus días con un tono claro de este color
@@ -200,27 +201,35 @@ export default function MisVacaciones({ usuarioId }) {
     setModal({ tipo, tipoPermiso })
   }
 
-  const cabecera = usuarioId && empleado && (
-    <div className="card" style={{ marginBottom: 12, padding: '12px 16px' }}>
-      <div className="fila">
-        <button className="icon-btn plain" onClick={() => navigate(-1)} title="Regresar"><ArrowLeft size={18} /></button>
-        <div>
-          <div style={{ fontWeight: 500, fontSize: 16 }}>{empleado.nombre}</div>
-          <div className="muted">
-            #{empleado.numero_empleado} · {empleado.puesto || ROLES[empleado.rol]} · ingreso {fmtFecha(empleado.fecha_ingreso, false)}
-            {` · ${empleado.antiguedad_anios} año(s)`}
-            {empleado.grupo_nombre && ` · ${empleado.grupo_nombre}`}{empleado.turno_nombre && ` · Turno ${empleado.turno_nombre}`}
-            {empleado.jefe_nombre && ` · Jefe: ${empleado.jefe_nombre}`}
-          </div>
+  // Tarjeta del usuario: foto, puesto, ingreso, antigüedad, nómina, jefe y turno
+  const perfil = empleado && (
+    <div className="card ps-perfil">
+      <div className="pf-cab">
+        {usuarioId && <button className="icon-btn plain" onClick={() => navigate(-1)} title="Regresar"><ArrowLeft size={16} /></button>}
+        <Avatar usuario={empleado} tam={48} />
+        <div className="pf-datos">
+          <div className="pf-nombre" title={empleado.nombre}>{empleado.nombre}</div>
+          <div className="pf-puesto">{[empleado.puesto || ROLES[empleado.rol], empleado.departamento].filter(Boolean).join(' · ')}</div>
         </div>
       </div>
+      <dl className="pf-lista">
+        <dt>Ingreso</dt>
+        <dd>
+          {fmtFecha(empleado.fecha_ingreso, false)}
+          <span className="muted"> · {empleado.antiguedad_anios > 0 ? `${empleado.antiguedad_anios} año(s)` : 'menos de 1 año'}</span>
+        </dd>
+        {empleado.numero_empleado && <><dt>Nómina</dt><dd>{empleado.numero_empleado}</dd></>}
+        {empleado.jefe_nombre && <><dt>Jefe</dt><dd>{empleado.jefe_nombre}</dd></>}
+        {empleado.grupo_nombre && <><dt>Grupo</dt><dd>{empleado.grupo_nombre}</dd></>}
+      </dl>
+      <MiTurno usuarioId={usuarioId} incrustado />
     </div>
   )
 
   // Franja superior compacta: turno, saldo, registros del año y nueva solicitud
   const panel = (
     <div className={`panel-sup ${tab === 'calendario' ? 'oculto-movil' : ''}`}>
-      <MiTurno usuarioId={usuarioId} compacto />
+      {perfil}
 
       <div className="card ps-saldo">
         <div className="ps-cab">
@@ -298,7 +307,6 @@ export default function MisVacaciones({ usuarioId }) {
         <button className={tab === 'resumen' ? 'activo' : ''} onClick={() => setTab('resumen')}>RESUMEN</button>
         <button className={tab === 'calendario' ? 'activo' : ''} onClick={() => setTab('calendario')}>CALENDARIO</button>
       </div>
-      {cabecera}
       {panel}
       {porVencer && (
         <div className={`alerta warn ${tab === 'calendario' ? 'oculto-movil' : ''}`} style={{ marginTop: 0, marginBottom: 12 }}>
