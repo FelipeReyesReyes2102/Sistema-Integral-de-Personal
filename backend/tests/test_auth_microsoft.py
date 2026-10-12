@@ -255,6 +255,46 @@ def test_graph_prellena_alta_con_jefe_y_foto():
     assert admin.get("/api/usuarios/microsoft/buscar?email=nuevo@empresa.com").json()["ya_registrado_id"] == nuevo["id"]
 
 
+def test_graph_registra_jefe_y_sugiere_es_jefe():
+    def graph(ruta):
+        if ruta.startswith("users/emp9@empresa.com"):
+            return httpx.Response(200, json={"id": "oid-emp9", "displayName": "Empleado Nueve", "mail": "emp9@empresa.com",
+                                             "jobTitle": "Analista", "accountEnabled": True})
+        if ruta.startswith("users/oid-emp9/manager"):
+            return httpx.Response(200, json={"id": "oid-jefe9", "displayName": "Jefa Nueve", "mail": "jefa9@empresa.com"})
+        if ruta.startswith("users/jefa9@empresa.com"):
+            return httpx.Response(200, json={"id": "oid-jefe9", "displayName": "Jefa Nueve", "mail": "jefa9@empresa.com",
+                                             "jobTitle": "Gerente", "department": "Finanzas", "accountEnabled": True})
+        if ruta.startswith("users/oid-jefe9/directReports"):
+            return httpx.Response(200, json={"value": [{"id": "oid-emp9"}]})
+        if "/directReports" in ruta:
+            return httpx.Response(200, json={"value": []})
+        return httpx.Response(404, json={"error": {"code": "Request_ResourceNotFound"}})
+    MS["graph"] = graph
+    admin = _admin()
+    d = admin.get("/api/usuarios/microsoft/buscar?email=emp9@empresa.com").json()
+    assert d["jefe"]["nombre"] == "Jefa Nueve" and d["jefe_id"] is None and d["jefe_registrado_id"] is None
+    assert d["tiene_reportes"] is False
+    # Sin nómina en Microsoft hay que indicarla
+    r = admin.post("/api/usuarios/microsoft/registrar-jefe", json={"email": "jefa9@empresa.com"})
+    assert r.status_code == 422 and "nómina" in r.json()["detail"]
+    r = admin.post("/api/usuarios/microsoft/registrar-jefe", json={"email": "jefa9@empresa.com", "numero_empleado": "J-9"})
+    assert r.status_code == 200, r.text
+    jefa = r.json()
+    assert jefa["es_jefe"] and jefa["rol"] == "oficina" and jefa["puesto"] == "Gerente" and jefa["microsoft_vinculado"]
+    # Ahora la búsqueda del empleado ya asigna a la jefa
+    d = admin.get("/api/usuarios/microsoft/buscar?email=emp9@empresa.com").json()
+    assert d["jefe_id"] == jefa["id"]
+    assert admin.get("/api/usuarios/microsoft/buscar?email=jefa9@empresa.com").json()["tiene_reportes"] is True
+    # Un usuario existente que no es jefe solo se marca como jefe
+    with SessionLocal() as db:
+        u = db.query(Usuario).filter(Usuario.email == "jefa9@empresa.com").one()
+        u.es_jefe = False
+        db.commit()
+    r = admin.post("/api/usuarios/microsoft/registrar-jefe", json={"email": "jefa9@empresa.com"})
+    assert r.status_code == 200 and r.json()["es_jefe"] and r.json()["id"] == jefa["id"]
+
+
 @pytest.mark.parametrize("respuesta,status,texto", [
     (httpx.Response(404, json={"error": {"code": "Request_ResourceNotFound"}}), 404, "No existe"),
     (httpx.Response(403, json={"error": {"code": "Authorization_RequestDenied"}}), 502, "User.Read.All"),

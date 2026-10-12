@@ -227,10 +227,18 @@ def buscar_empleado(email: str) -> dict:
     u = r.json()
     jefe = None
     try:
-        rm = _graph(f"users/{u['id']}/manager?$select=displayName,mail,userPrincipalName", token)
+        rm = _graph(f"users/{u['id']}/manager?$select=id,displayName,mail,userPrincipalName,jobTitle", token)
         if rm.status_code == 200:
             m = rm.json()
-            jefe = {"nombre": m.get("displayName"), "email": (m.get("mail") or m.get("userPrincipalName") or "").lower()}
+            jefe = {"nombre": m.get("displayName"), "email": (m.get("mail") or m.get("userPrincipalName") or "").lower(),
+                    "oid": m.get("id"), "puesto": m.get("jobTitle")}
+    except httpx.HTTPError:
+        pass
+    # Si tiene personas a cargo en Microsoft, se sugiere marcarlo como jefe
+    tiene_reportes = False
+    try:
+        rr = _graph(f"users/{u['id']}/directReports?$top=1&$select=id", token)
+        tiene_reportes = rr.status_code == 200 and bool(_json(rr).get("value"))
     except httpx.HTTPError:
         pass
     imagen = foto(token, f"users/{u['id']}")
@@ -245,6 +253,7 @@ def buscar_empleado(email: str) -> dict:
         "fecha_ingreso": contratacion,
         "cuenta_habilitada": u.get("accountEnabled", True),
         "jefe": jefe,
+        "tiene_reportes": tiene_reportes,
         "foto": f"data:{imagen[1]};base64,{base64.b64encode(imagen[0]).decode()}" if imagen else None,
     }
 

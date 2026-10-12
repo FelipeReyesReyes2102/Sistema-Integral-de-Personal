@@ -159,8 +159,16 @@ class EmpleadoMicrosoftOut(BaseModel):
     cuenta_habilitada: bool = True
     jefe: dict | None = None
     jefe_id: int | None = None          # jefe local que coincide con el manager de Microsoft
+    jefe_registrado_id: int | None = None  # el manager existe en SIP-O aunque aún no esté marcado como jefe
+    tiene_reportes: bool = False        # tiene personas a cargo en Microsoft: se sugiere marcarlo como jefe
     foto: str | None = None             # data URL
     ya_registrado_id: int | None = None
+
+
+class RegistrarJefeIn(BaseModel):
+    """Alta (o marcado como jefe) del jefe que Microsoft indica para un empleado."""
+    email: str
+    numero_empleado: str | None = None  # obligatorio solo si Microsoft no tiene el employeeId
 
 
 # ---------- Festivos / reglas ----------

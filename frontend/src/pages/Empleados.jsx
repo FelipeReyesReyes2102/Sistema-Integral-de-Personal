@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CalendarDays, Cloud, Copy, KeyRound, Pencil, Plus, Scale, Search, UserX } from 'lucide-react'
+import { CalendarDays, Cloud, Copy, KeyRound, Pencil, Plus, Scale, Search, UserPlus, UserX } from 'lucide-react'
 import { api } from '../api'
 import Avatar from '../components/Avatar'
 import Modal from '../components/Modal'
@@ -138,6 +138,8 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
   const [foto, setFoto] = useState(null)            // nueva foto (data URL) traída de Microsoft
   const [quitarFoto, setQuitarFoto] = useState(false)
   const [ms, setMs] = useState({ buscando: false, error: '', resultado: null })
+  const [registrando, setRegistrando] = useState(false)
+  const [temporalJefe, setTemporalJefe] = useState(null) // jefe recién registrado: muestra su contraseña temporal
   useEffect(() => { api('/jefes').then((js) => setJefes(js.filter((j) => j.id !== inicial.id))) }, [])
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
   const graph = estado?.microsoft_graph_configurado
@@ -158,11 +160,42 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
         numero_empleado: f.numero_empleado || r.numero_empleado || '',
         fecha_ingreso: r.fecha_ingreso || f.fecha_ingreso,
         jefe_id: r.jefe_id || f.jefe_id,
+        es_jefe: f.es_jefe || r.tiene_reportes,     // tiene personas a cargo en Microsoft
+        turno_id: f.turno_id || (f.rol !== 'planta' ? turnoOficina() : '') || '',
         microsoft_oid: r.oid,
       }))
       if (r.foto) { setFoto(r.foto); setQuitarFoto(false) }
     } catch (e) {
       setMs({ buscando: false, error: e.message, resultado: null })
+    }
+  }
+
+  // Turno por omisión para oficinas: el único turno activo de 8 horas, si solo hay uno
+  function turnoOficina() {
+    const t = turnos.filter((x) => x.activo !== false && x.horas_jornada === 8)
+    return t.length === 1 ? String(t[0].id) : ''
+  }
+
+  // Registra en SIP-O al jefe que indica Microsoft (o lo marca como jefe si ya existe) y lo asigna
+  async function registrarJefe(nomina) {
+    setRegistrando(true)
+    try {
+      const j = await api('/usuarios/microsoft/registrar-jefe', {
+        method: 'POST', body: { email: r.jefe.email, numero_empleado: nomina || null },
+      })
+      setJefes((js) => (js.some((x) => x.id === j.id) ? js : [...js, j].sort((a, b) => a.nombre.localeCompare(b.nombre))))
+      setForm((f) => ({ ...f, jefe_id: j.id }))
+      setMs((m) => ({ ...m, error: '', resultado: { ...m.resultado, jefe_id: j.id, jefe_registrado_id: j.id } }))
+      if (j.password_temporal) setTemporalJefe(j)
+    } catch (e) {
+      if (!nomina && e.message.includes('nómina')) {
+        const n = window.prompt(`${e.message}\n\nNúmero de nómina de ${r.jefe.nombre}:`)
+        if (n && n.trim()) return registrarJefe(n.trim())
+      } else {
+        setMs((m) => ({ ...m, error: e.message }))
+      }
+    } finally {
+      setRegistrando(false)
     }
   }
 
@@ -240,9 +273,17 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
               </div>
               <div style={{ fontSize: 12, marginTop: 4 }}>
                 {r.jefe
-                  ? <>Jefe en Microsoft: <b>{r.jefe.nombre}</b> {r.jefe_id ? '✓ asignado' : '(no está registrado aquí como jefe)'}</>
+                  ? <>Jefe en Microsoft: <b>{r.jefe.nombre}</b>{' '}
+                    {r.jefe_id ? '✓ asignado' : r.jefe_registrado_id ? '(registrado, pero no está marcado como jefe)' : '(aún no está registrado en SIP-O)'}</>
                   : 'Sin jefe en Microsoft'}
               </div>
+              {r.jefe && !r.jefe_id && r.jefe.email && (
+                <button className="btn btn-sm" type="button" style={{ marginTop: 6 }} onClick={() => registrarJefe()} disabled={registrando}>
+                  <UserPlus size={14} />{' '}
+                  {registrando ? 'Registrando…' : r.jefe_registrado_id ? `Marcar a ${r.jefe.nombre.split(' ')[0]} como jefe y asignarlo` : `Registrar a ${r.jefe.nombre.split(' ')[0]} como jefe desde Microsoft`}
+                </button>
+              )}
+              {r.tiene_reportes && <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Tiene personas a cargo en Microsoft: se marcó "Es jefe".</div>}
               {!r.cuenta_habilitada && <div className="alerta warn" style={{ margin: '6px 0 0' }}>La cuenta está deshabilitada en Microsoft.</div>}
               {r.ya_registrado_id && r.ya_registrado_id !== inicial.id && (
                 <div className="alerta warn" style={{ margin: '6px 0 0' }}>Este empleado ya está registrado en el sistema.</div>
@@ -286,9 +327,9 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
         <label className="checkbox" style={{ alignSelf: 'end' }}>
           <input type="checkbox" checked={form.es_jefe} onChange={set('es_jefe')} /> Es jefe (puede aprobar y ver a su equipo)
         </label>
-        <div className="campo">
+        <div className="campo" style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--muted)' }}>
           <span>Contraseña</span>
-          <span className="muted" style={{ fontSize: 12, lineHeight: 1.5 }}>
+          <span style={{ fontSize: 12, lineHeight: 1.5 }}>
             {inicial.id
               ? 'Para dar una nueva contraseña usa "Restablecer contraseña" en la lista de empleados.'
               : 'Al guardar se genera una contraseña temporal de 6 dígitos que el empleado deberá cambiar en su primer inicio de sesión.'}
@@ -313,6 +354,7 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
         </div>
         {error && <div className="full alerta error">{error}</div>}
       </div>
+      {temporalJefe && <PasswordTemporal usuario={temporalJefe} onClose={() => setTemporalJefe(null)} />}
     </Modal>
   )
 }

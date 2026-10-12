@@ -1,4 +1,5 @@
 import base64
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import func, or_, select
@@ -8,9 +9,9 @@ from sqlalchemy.orm import Session
 from .. import microsoft
 from ..config import settings
 from ..database import get_db
-from ..models import ROL_PLANTA, ROL_SUPERADMIN, PeriodoVacaciones, Usuario, tiene_correo_corporativo
+from ..models import ROL_OFICINA, ROL_PLANTA, ROL_SUPERADMIN, PeriodoVacaciones, Turno, Usuario, tiene_correo_corporativo
 from ..correo import EMAIL
-from ..schemas import AjustePeriodo, EmpleadoMicrosoftOut, PeriodoOut, UsuarioIn, UsuarioOut
+from ..schemas import AjustePeriodo, EmpleadoMicrosoftOut, PeriodoOut, RegistrarJefeIn, UsuarioIn, UsuarioOut
 from ..security import (
     ahora, asignar_password_temporal, auditar, get_current_user, hash_password, limpiar_sesiones_de,
     password_inutilizable, puede_usar_password, require_admin,
@@ -47,11 +48,83 @@ def buscar_en_microsoft(email: str, db: Session = Depends(get_db), _=Depends(req
     except microsoft.ErrorMicrosoft as e:
         raise HTTPException(e.status, e.mensaje)
     out = EmpleadoMicrosoftOut(**datos)
-    if datos.get("jefe") and datos["jefe"].get("email"):
-        jefe = db.scalar(select(Usuario).where(func.lower(Usuario.email) == datos["jefe"]["email"]))
-        out.jefe_id = jefe.id if jefe and puede_aprobar(jefe) else None
+    jefe = _jefe_local(db, datos.get("jefe"))
+    if jefe:
+        out.jefe_registrado_id = jefe.id
+        out.jefe_id = jefe.id if puede_aprobar(jefe) else None
     existente = db.scalar(select(Usuario).where(or_(Usuario.microsoft_oid == out.oid, func.lower(Usuario.email) == out.email)))
     out.ya_registrado_id = existente.id if existente else None
+    return out
+
+
+def _jefe_local(db: Session, jefe_ms: dict | None) -> Usuario | None:
+    """Usuario de SIP-O que corresponde al jefe (manager) indicado por Microsoft, por Object ID o correo."""
+    if not jefe_ms:
+        return None
+    condiciones = []
+    if jefe_ms.get("oid"):
+        condiciones.append(Usuario.microsoft_oid == jefe_ms["oid"])
+    if jefe_ms.get("email"):
+        condiciones.append(func.lower(Usuario.email) == jefe_ms["email"])
+    return db.scalars(select(Usuario).where(or_(*condiciones))).first() if condiciones else None
+
+
+def _turno_oficina(db: Session) -> int | None:
+    """Turno de oficina por omisión: el único turno activo de 8 horas, si solo hay uno."""
+    ids = db.scalars(select(Turno.id).where(Turno.activo.is_(True), Turno.horas_jornada == 8)).all()
+    return ids[0] if len(ids) == 1 else None
+
+
+@router.post("/usuarios/microsoft/registrar-jefe", response_model=UsuarioOut)
+def registrar_jefe(data: RegistrarJefeIn, request: Request, db: Session = Depends(get_db),
+                   admin: Usuario = Depends(require_admin)):
+    """Da de alta desde Microsoft al jefe de un empleado (como oficinas y marcado como jefe), o marca como jefe
+    a un usuario que ya existe. Si se crea, la respuesta trae su contraseña temporal (se muestra una sola vez)."""
+    if not settings.graph_configurado:
+        raise HTTPException(400, "La consulta a Microsoft no está configurada.")
+    email = data.email.strip().lower()
+    existente = db.scalar(select(Usuario).where(func.lower(Usuario.email) == email))
+    datos = None
+    if not existente:
+        try:
+            datos = microsoft.buscar_empleado(email)
+        except microsoft.ErrorMicrosoft as e:
+            raise HTTPException(e.status, e.mensaje)
+        existente = _jefe_local(db, {"oid": datos["oid"], "email": datos["email"]})
+    if existente:
+        if not existente.activo:
+            raise HTTPException(400, f"{existente.nombre} está registrado pero inactivo; actívalo primero.")
+        if existente.rol == ROL_SUPERADMIN and admin.rol != ROL_SUPERADMIN:
+            raise HTTPException(403, "Solo un super administrador puede modificar a otro super administrador.")
+        if not existente.es_jefe:
+            existente.es_jefe = True
+            auditar(db, "usuario_marcado_jefe", usuario_id=existente.id, actor_id=admin.id, request=request)
+            db.commit()
+        return usuario_out(existente)
+
+    nomina = (data.numero_empleado or datos.get("numero_empleado") or "").strip()
+    if not nomina:
+        raise HTTPException(422, f"Microsoft no tiene el número de nómina de {datos.get('nombre') or email}; "
+                                 "indícalo para registrarlo.")
+    jefe_de_jefe = _jefe_local(db, datos.get("jefe"))
+    u = Usuario(numero_empleado=nomina, nombre=datos.get("nombre") or email, email=datos["email"], rol=ROL_OFICINA,
+                fecha_ingreso=datos.get("fecha_ingreso") or date.today(), puesto=datos.get("puesto"),
+                departamento=datos.get("departamento"), es_jefe=True, activo=True, microsoft_oid=datos["oid"],
+                jefe_id=jefe_de_jefe.id if jefe_de_jefe and puede_aprobar(jefe_de_jefe) else None,
+                turno_id=_turno_oficina(db), password_hash=password_inutilizable())
+    if datos.get("foto"):
+        cabecera, contenido = datos["foto"].split(",", 1)
+        u.foto, u.foto_tipo = base64.b64decode(contenido), cabecera[5:].split(";")[0]
+    temporal = asignar_password_temporal(u) if puede_usar_password(u) else None
+    db.add(u)
+    _commit(db)
+    auditar(db, "usuario_creado", usuario_id=u.id, actor_id=admin.id, detalle=f"{u.email} · jefe desde Microsoft",
+            request=request)
+    db.commit()
+    sincronizar_periodos(db, u)
+    out = usuario_out(u)
+    if temporal:
+        out.password_temporal, out.password_temporal_expira = temporal, u.password_temporal_expira
     return out
 
 
