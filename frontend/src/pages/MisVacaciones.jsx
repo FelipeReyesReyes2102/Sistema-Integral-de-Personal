@@ -313,7 +313,8 @@ export default function MisVacaciones({ usuarioId }) {
         <YearCalendar anio={anio} onAnio={setAnio} datos={calendario} seleccion={seleccion}
           onSeleccion={soloLectura ? undefined : setSeleccion}
           foco={foco} onFoco={enfocar} onDia={(f) => setModal({ tipo: 'dia', fecha: f })}
-          franjas={franjas} />
+          franjas={franjas}
+          maxDias={periodoElegido && periodoElegido.dias_disponible > 0 ? periodoElegido.dias_disponible : null} />
       </div>
 
       <div className={`card lista-card ${tab === 'calendario' ? 'oculto-movil' : ''}`}>
@@ -455,6 +456,8 @@ function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, onLim
       </div>
     )
   }
+  const periodoSel = periodos.find((p) => p.id === periodoId)
+  const sinSaldo = !periodoSel
   const fin = seleccion.fin || seleccion.inicio
   const naturales = Math.round((parseISO(fin) - parseISO(seleccion.inicio)) / 864e5) + 1
   const unDia = naturales === 1
@@ -462,7 +465,9 @@ function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, onLim
     <div className="barra-sel con-seleccion">
       <b>{fmtFecha(seleccion.inicio)}{!unDia && ` → ${fmtFecha(fin)}`}</b>
       <span className="muted">
-        {!seleccion.fin ? 'Elige el último día…' : `${naturales} día(s) naturales`}
+        {!seleccion.fin
+          ? `Elige el último día…${periodoSel ? ` (máximo ${Math.floor(periodoSel.dias_disponible + 1e-6)} días laborales)` : ''}`
+          : `${naturales} día(s) naturales`}
         {calc && seleccion.fin && ` · ${calc.dias_habiles} laborales`}
       </span>
       {calc && seleccion.fin && calc.errores.length > 0 && (
@@ -470,7 +475,9 @@ function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, onLim
       )}
       <div className="espacio" />
       {selectorPeriodo}
-      <button className="btn btn-sm btn-primary" onClick={onVacaciones} disabled={!seleccion.fin}>
+      <button className="btn btn-sm btn-primary" onClick={onVacaciones}
+        disabled={!seleccion.fin || !calc || calc.errores.length > 0 || sinSaldo}
+        title={sinSaldo ? 'No tienes días de vacaciones disponibles' : calc?.errores[0]}>
         <TreePalm size={14} /> Solicitar vacaciones
       </button>
       <button className="btn btn-sm" onClick={onHomeOffice} disabled={!seleccion.fin}><Laptop size={14} /> Home office</button>

@@ -543,3 +543,8 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .zoom-chip.franja-chip { background: var(--franja); color: #fff; }
 .ley-franja i { background: color-mix(in srgb, var(--franja) 35%, #fff); border: 1px solid var(--franja); }
 .cd-pasado.cd-franja { opacity: .7; }
+
+/* Días fuera del saldo disponible mientras se elige el último día */
+.cd-fuera { opacity: .3; cursor: not-allowed; }
+.cd-fuera:hover { outline: none !important; }
+.zoom-dia.fuera { opacity: .4; cursor: not-allowed; }

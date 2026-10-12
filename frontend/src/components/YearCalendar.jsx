@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CalendarDays, ChevronLeft, ChevronRight, LayoutGrid } from 'lucide-react'
-import { CATEGORIAS, DIAS_SEMANA, ESTADOS, MESES, eventosPorFecha, estiloEvento, fmtFecha, hoyISO, toISO } from '../utils'
+import { CATEGORIAS, DIAS_SEMANA, ESTADOS, MESES, eventosPorFecha, estiloEvento, fmtFecha, hoyISO, parseISO, toISO } from '../utils'
 
 const PRIORIDAD = ['vacaciones', 'home_office', 'salida_intermedia', 'salida_temprana', 'llegada_tarde', 'consulta', 'consulta_medica']
 
@@ -11,8 +11,10 @@ const PRIORIDAD = ['vacaciones', 'home_office', 'salida_intermedia', 'salida_tem
  * - `foco`: muestra solo una categoría (se elige en la leyenda o en el panel de registros).
  * - Los días anteriores a hoy no se pueden seleccionar: solo se consultan (historial).
  * - `franjas`: [{desde, hasta, color, nombre}] fondo claro de cada periodo vacacional, para ver dónde cambia.
+ * - `maxDias`: días laborales disponibles; al elegir el segundo día no se puede pasar de ese límite.
  */
-export default function YearCalendar({ anio, onAnio, datos, seleccion, onSeleccion, onDia, foco, onFoco, franjas = [] }) {
+export default function YearCalendar({ anio, onAnio, datos, seleccion, onSeleccion, onDia, foco, onFoco, franjas = [],
+  maxDias = null }) {
   const [vista, setVista] = useState('anio')
   const [mes, setMes] = useState(new Date().getMonth())
   const [hover, setHover] = useState(null)
@@ -26,15 +28,41 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
   const anios = Array.from({ length: 7 }, (_, i) => new Date().getFullYear() - 4 + i)
 
   const pasado = (f) => f < hoy
+
+  // Límite de la selección: desde el primer día elegido, hasta donde alcanzan los días disponibles
+  const esLaboral = (f) => {
+    if (f.slice(0, 4) === String(anio)) return !noLab.has(f) && !festivos[f]
+    const dow = parseISO(f).getDay() // fuera del año cargado se aproxima con lunes a viernes
+    return dow !== 0 && dow !== 6
+  }
+  let limites = null
+  if (seleccionable && seleccion?.inicio && !seleccion.fin && maxDias !== null) {
+    const maximo = Math.max(0, Math.floor(maxDias + 1e-6))
+    const caminar = (paso) => {
+      const d = parseISO(seleccion.inicio)
+      let ultimo = seleccion.inicio
+      let n = 0
+      for (let i = 0; i < 500; i++) {
+        const f = toISO(d)
+        if (pasado(f)) break
+        if (esLaboral(f) && ++n > maximo) break
+        ultimo = f
+        d.setDate(d.getDate() + paso)
+      }
+      return ultimo
+    }
+    limites = [caminar(-1), caminar(1)]
+  }
+  const fuera = (f) => !!limites && (f < limites[0] || f > limites[1])
   const franjaDe = (f) => franjas.find((x) => f >= x.desde && f <= x.hasta)
   const franjasDelAnio = franjas.filter((x) => x.desde <= `${anio}-12-31` && x.hasta >= `${anio}-01-01`)
-  const hoverValido = hover && !pasado(hover) ? hover : null
+  const hoverValido = hover && !pasado(hover) && !fuera(hover) ? hover : null
   let [ri, rf] = [seleccion?.inicio, seleccion?.fin || (seleccion?.inicio && hoverValido) || seleccion?.inicio]
   if (ri && rf && rf < ri) [ri, rf] = [rf, ri]
   const enRango = (f) => ri && f >= ri && f <= rf
 
   function seleccionar(fecha) {
-    if (!seleccionable || pasado(fecha)) return
+    if (!seleccionable || pasado(fecha) || fuera(fecha)) return
     if (!seleccion?.inicio || seleccion.fin) return onSeleccion({ inicio: fecha, fin: null })
     if (fecha === seleccion.inicio) return onSeleccion({ inicio: fecha, fin: fecha })
     const [a, b] = fecha < seleccion.inicio ? [fecha, seleccion.inicio] : [seleccion.inicio, fecha]
@@ -88,6 +116,7 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
     if (f === ri || f === rf) clases.push('cd-rango-ext')
     if (evs.length || (seleccionable && !pasado(f))) clases.push('cd-clic')
     if (seleccionable && pasado(f) && !evs.length) clases.push('cd-pasado')
+    if (fuera(f) && !pasado(f)) clases.push('cd-fuera')
     if (foco && !evs.length && !(foco === 'festivo' && festivos[f])) clases.push('cd-atenuado')
     const fr = franjaDe(f)
     if (fr) clases.push('cd-franja')
@@ -169,6 +198,7 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
               const clases = ['zoom-dia']
               if (seleccionable && !pasado(f)) clases.push('clic')
               if (seleccionable && pasado(f)) clases.push('pasado')
+              if (fuera(f) && !pasado(f)) clases.push('fuera')
               if (noLab.has(f)) clases.push('nolab')
               if (f === hoy) clases.push('hoy')
               if (enRango(f)) clases.push(noLab.has(f) || festivos[f] ? 'rango-excluido' : 'rango')
