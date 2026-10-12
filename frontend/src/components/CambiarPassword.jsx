@@ -33,6 +33,7 @@ export default function CambiarPassword({ onClose }) {
           <label className="campo full">Contraseña actual
             <input type="password" value={actual} onChange={(e) => setActual(e.target.value)} />
           </label>
+          <div className="full muted" style={{ fontSize: 12 }}>Mínimo 8 caracteres, con letras y números.</div>
           <label className="campo">Nueva contraseña
             <input type="password" value={nueva} onChange={(e) => setNueva(e.target.value)} />
           </label>

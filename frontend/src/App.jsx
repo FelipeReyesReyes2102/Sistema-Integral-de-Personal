@@ -3,6 +3,7 @@ import { useAuth } from './auth'
 import { esAdmin } from './utils'
 import Layout, { esJefe } from './components/Layout'
 import Login from './pages/Login'
+import CambioObligatorio from './pages/CambioObligatorio'
 import MisVacaciones from './pages/MisVacaciones'
 import Solicitudes from './pages/Solicitudes'
 import MiEquipo from './pages/MiEquipo'
@@ -44,6 +45,8 @@ export default function App() {
       </Routes>
     )
   }
+  // Primer inicio de sesión con contraseña temporal: solo puede cambiarla
+  if (user.debe_cambiar_password && user.auth_method !== 'microsoft') return <CambioObligatorio />
   return (
     <Routes>
       <Route element={<Layout />}>

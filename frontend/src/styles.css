@@ -448,3 +448,12 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .mi-turno .mt-semanas { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 10px; }
 .mi-turno .mt-semanas div { display: flex; flex-direction: column; align-items: center; font-size: 11px; border: 1px solid var(--border); border-radius: 6px; padding: 4px 2px; }
 .mi-turno .mt-semanas span { color: var(--muted); }
+
+/* Reglas de contraseña (cambio obligatorio) */
+.login-reglas { list-style: none; padding: 0; margin: 2px 0 0; font-size: 12px; color: #9aa5b9; display: grid; gap: 3px; }
+.login-reglas li::before { content: '○ '; }
+.login-reglas li.ok { color: #7ddc8c; }
+.login-reglas li.ok::before { content: '✓ '; }
+/* Contraseña temporal */
+.pass-temporal { font-family: 'Courier New', monospace; font-size: 34px; letter-spacing: 8px; font-weight: 700; color: var(--navy);
+  background: var(--primary-light); border-radius: 10px; padding: 14px 20px; text-align: center; margin: 10px 0; }

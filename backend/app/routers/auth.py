@@ -15,7 +15,8 @@ from ..database import get_db
 from ..models import FlujoOAuth, Usuario
 from ..schemas import CambioPassword, LoginIn, MeOut
 from ..security import (
-    ahora, auditar, borrar_cookies, cerrar_sesion, crear_sesion, get_current_user, hash_password, permisos_de,
+    MAX_INTENTOS, MINUTOS_BLOQUEO, ahora, auditar, borrar_cookies, cerrar_sesion, crear_sesion, get_current_user,
+    hash_password, permisos_de,
     puede_usar_password, sesion_actual, verify_password,
 )
 from ..services import usuario_out
@@ -63,12 +64,25 @@ def login_password(data: LoginIn, request: Request, response: Response, db: Sess
         user = db.scalar(select(Usuario).where(func.lower(Usuario.email) == ident.lower())) or             db.scalar(select(Usuario).where(func.lower(Usuario.email_personal) == ident.lower()))
     else:             # número de nómina
         user = db.scalar(select(Usuario).where(func.lower(Usuario.numero_empleado) == ident.lower())) if ident else None
+    t = ahora()
+    if user and user.bloqueado_hasta and user.bloqueado_hasta > t:
+        minutos = max(1, int((user.bloqueado_hasta - t).total_seconds() // 60) + 1)
+        raise HTTPException(423, f"Usuario bloqueado por intentos fallidos. Intenta de nuevo en {minutos} minuto(s) "
+                                 "o pide al administrador que restablezca tu contraseña.")
     if not user or not user.activo or not verify_password(data.password, user.password_hash):
+        if user:
+            user.intentos_fallidos = (user.intentos_fallidos or 0) + 1
+            if user.intentos_fallidos >= MAX_INTENTOS:
+                user.bloqueado_hasta, user.intentos_fallidos = t + timedelta(minutes=MINUTOS_BLOQUEO), 0
+                auditar(db, "usuario_bloqueado", usuario_id=user.id, detalle=f"{MAX_INTENTOS} intentos fallidos", request=request)
         auditar(db, "login_fallido", usuario_id=user.id if user else None, detalle=f"password · {ident[:80]}", request=request)
         db.commit()
         raise HTTPException(401, "Usuario o contraseña incorrectos")
     if not puede_usar_password(user):
         raise HTTPException(403, "Tu usuario debe iniciar sesión con su cuenta de Microsoft.")
+    if user.debe_cambiar_password and user.password_temporal_expira and user.password_temporal_expira < t:
+        raise HTTPException(401, "Tu contraseña temporal venció. Pide al administrador una nueva.")
+    user.intentos_fallidos, user.bloqueado_hasta = 0, None
     crear_sesion(db, response, user, "password", request)
     auditar(db, "login", usuario_id=user.id, detalle="password", request=request)
     db.commit()
@@ -205,6 +219,11 @@ def cambiar_password(data: CambioPassword, request: Request, user: Usuario = Dep
         raise HTTPException(400, "Tu usuario entra con Microsoft; la contraseña se cambia en tu cuenta de Microsoft.")
     if not verify_password(data.actual, user.password_hash):
         raise HTTPException(400, "La contraseña actual no es correcta")
+    if data.nueva == data.actual:
+        raise HTTPException(422, "La contraseña nueva debe ser distinta de la actual")
     user.password_hash = hash_password(data.nueva)
-    auditar(db, "password_cambiada", usuario_id=user.id, actor_id=user.id, request=request)
+    era_temporal = user.debe_cambiar_password
+    user.debe_cambiar_password, user.password_temporal_expira = False, None
+    auditar(db, "password_cambiada", usuario_id=user.id, actor_id=user.id,
+            detalle="cambio de contraseña temporal" if era_temporal else None, request=request)
     db.commit()

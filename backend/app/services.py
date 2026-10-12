@@ -1,7 +1,7 @@
 """Servicios que combinan las reglas con la base de datos."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
@@ -137,6 +137,7 @@ def usuario_out(u: Usuario) -> UsuarioOut:
     out.jefe_nombre = u.jefe.nombre if u.jefe else None
     out.tiene_foto = u.foto_tipo is not None
     out.microsoft_vinculado = bool(u.microsoft_oid)
+    out.bloqueado = bool(u.bloqueado_hasta and u.bloqueado_hasta > datetime.now(timezone.utc).replace(tzinfo=None))
     out.antiguedad_anios = reglas.anios_cumplidos(u.fecha_ingreso, date.today())
     db = object_session(u)
     if db is not None and (u.es_jefe or es_admin(u)):

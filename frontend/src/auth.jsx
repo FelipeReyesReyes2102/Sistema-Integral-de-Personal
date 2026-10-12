@@ -21,6 +21,13 @@ export function AuthProvider({ children }) {
     return usuario
   }, [])
 
+  // Vuelve a leer al usuario (p. ej. después de cambiar la contraseña temporal)
+  const recargar = useCallback(async () => {
+    const u = await api('/auth/me')
+    setUser(u)
+    return u
+  }, [])
+
   const loginMicrosoft = useCallback((siguiente = '/') => {
     window.location.href = `/api/auth/microsoft/login?next=${encodeURIComponent(siguiente)}`
   }, [])
@@ -36,7 +43,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, cargando, login, loginMicrosoft, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, cargando, login, loginMicrosoft, logout, recargar }}>{children}</AuthContext.Provider>
   )
 }
 

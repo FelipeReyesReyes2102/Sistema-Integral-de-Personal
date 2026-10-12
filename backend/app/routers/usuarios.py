@@ -12,7 +12,8 @@ from ..models import ROL_PLANTA, ROL_SUPERADMIN, PeriodoVacaciones, Usuario, tie
 from ..correo import EMAIL
 from ..schemas import AjustePeriodo, EmpleadoMicrosoftOut, PeriodoOut, UsuarioIn, UsuarioOut
 from ..security import (
-    auditar, get_current_user, hash_password, limpiar_sesiones_de, password_inutilizable, require_admin,
+    ahora, asignar_password_temporal, auditar, get_current_user, hash_password, limpiar_sesiones_de,
+    password_inutilizable, puede_usar_password, require_admin,
 )
 from ..services import empleado_visible, puede_aprobar, saldo_periodo, sincronizar_periodos, usuario_out
 
@@ -70,19 +71,45 @@ def obtener(usuario_id: int, db: Session = Depends(get_db), user: Usuario = Depe
 
 @router.post("/usuarios", response_model=UsuarioOut, status_code=201)
 def crear(data: UsuarioIn, request: Request, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin)):
-    if not data.password and not settings.microsoft_configurado:
-        raise HTTPException(400, "La contraseña es obligatoria mientras el inicio con Microsoft no esté configurado")
     _proteger_superadmin(db, admin, None, data)
     _validar_jefe(db, data.jefe_id, None)
     valores = _limpiar(data)
-    u = Usuario(**valores, password_hash=hash_password(data.password) if data.password else password_inutilizable())
+    u = Usuario(**valores, password_hash=password_inutilizable())
+    temporal = None
+    if data.password:  # contraseña indicada por el administrador: también es temporal
+        u.password_hash, u.debe_cambiar_password = hash_password(data.password), True
+    elif puede_usar_password(u):
+        temporal = asignar_password_temporal(u)  # 6 dígitos aleatorios; se cambia al primer inicio de sesión
     _aplicar_foto(u, data)
     db.add(u)
     _commit(db)
     auditar(db, "usuario_creado", usuario_id=u.id, actor_id=admin.id, detalle=f"{u.email or u.email_personal or u.numero_empleado} · {u.rol}", request=request)
     db.commit()
     sincronizar_periodos(db, u)
-    return usuario_out(u)
+    out = usuario_out(u)
+    if temporal:
+        out.password_temporal, out.password_temporal_expira = temporal, u.password_temporal_expira
+    return out
+
+
+@router.post("/usuarios/{usuario_id}/password-temporal", response_model=UsuarioOut)
+def restablecer_password(usuario_id: int, request: Request, db: Session = Depends(get_db),
+                         admin: Usuario = Depends(require_admin)):
+    """Genera una nueva contraseña temporal de 6 dígitos (y desbloquea al usuario). Se muestra una sola vez."""
+    u = db.get(Usuario, usuario_id)
+    if not u:
+        raise HTTPException(404, "Usuario no encontrado")
+    if u.rol == ROL_SUPERADMIN and admin.rol != ROL_SUPERADMIN:
+        raise HTTPException(403, "Solo un super administrador puede restablecer la contraseña de otro super administrador.")
+    if u.id == admin.id:
+        raise HTTPException(400, "Para tu propia contraseña usa la opción Contraseña del menú.")
+    temporal = asignar_password_temporal(u)
+    limpiar_sesiones_de(db, u.id)
+    auditar(db, "password_restablecida", usuario_id=u.id, actor_id=admin.id, request=request)
+    db.commit()
+    out = usuario_out(u)
+    out.password_temporal, out.password_temporal_expira = temporal, u.password_temporal_expira
+    return out
 
 
 @router.put("/usuarios/{usuario_id}", response_model=UsuarioOut)
@@ -99,8 +126,9 @@ def editar(usuario_id: int, data: UsuarioIn, request: Request, db: Session = Dep
         valores.pop("microsoft_oid", None)  # no desvincular por omisión
     for k, v in valores.items():
         setattr(u, k, v)
-    if data.password:
-        u.password_hash = hash_password(data.password)
+    if data.password:  # contraseña indicada por el administrador: se debe cambiar al entrar
+        u.password_hash, u.debe_cambiar_password = hash_password(data.password), True
+        u.password_temporal_expira = None
     _aplicar_foto(u, data)
     if estaba_activo and not u.activo:
         limpiar_sesiones_de(db, u.id)

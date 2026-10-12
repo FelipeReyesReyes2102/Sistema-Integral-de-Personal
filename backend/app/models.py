@@ -128,6 +128,12 @@ class Usuario(Base):
     creado: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     actualizado: Mapped[datetime | None] = mapped_column(DateTime, onupdate=func.now())
     ultimo_acceso: Mapped[datetime | None] = mapped_column(DateTime)
+    # Contraseña temporal (6 dígitos) que se debe cambiar en el primer inicio de sesión
+    debe_cambiar_password: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    password_temporal_expira: Mapped[datetime | None] = mapped_column(DateTime)
+    # Protección contra intentos de adivinar la contraseña
+    intentos_fallidos: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    bloqueado_hasta: Mapped[datetime | None] = mapped_column(DateTime)
 
     turno: Mapped[Turno | None] = relationship()
     grupo: Mapped[Grupo | None] = relationship(back_populates="miembros")

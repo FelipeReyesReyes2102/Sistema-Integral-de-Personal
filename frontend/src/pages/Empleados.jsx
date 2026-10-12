@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CalendarDays, Cloud, Pencil, Plus, Scale, Search, UserX } from 'lucide-react'
+import { CalendarDays, Cloud, Copy, KeyRound, Pencil, Plus, Scale, Search, UserX } from 'lucide-react'
 import { api } from '../api'
 import Avatar from '../components/Avatar'
 import Modal from '../components/Modal'
@@ -22,6 +22,17 @@ export default function Empleados() {
   const [filtros, setFiltros] = useState({ q: '', rol: '', grupo_id: '' })
   const [editar, setEditar] = useState(null)
   const [saldos, setSaldos] = useState(null)
+  const [temporal, setTemporal] = useState(null) // usuario con contraseña temporal recién generada
+
+  async function restablecer(u) {
+    if (!window.confirm(`¿Generar una nueva contraseña temporal para ${u.nombre}? La actual dejará de funcionar y se cerrarán sus sesiones.`)) return
+    try {
+      setTemporal(await api(`/usuarios/${u.id}/password-temporal`, { method: 'POST' }))
+      cargar()
+    } catch (e) {
+      alert(e.message)
+    }
+  }
   const [estado, setEstado] = useState({})  // qué está configurado de Microsoft (sin credenciales)
 
   const cargar = () => api('/usuarios', { query: filtros }).then(setLista).catch((e) => alert(e.message))
@@ -91,10 +102,17 @@ export default function Empleados() {
                 <td>{u.antiguedad_anios} año(s)</td>
                 <td>{u.grupo_nombre || '—'}</td>
                 <td>{u.turno_nombre || '—'}</td>
-                <td>{u.activo ? 'Activo' : 'Inactivo'}</td>
+                <td>
+                  {u.activo ? 'Activo' : 'Inactivo'}
+                  {u.bloqueado && <div><span className="pill rechazado">Bloqueado</span></div>}
+                  {!u.bloqueado && u.debe_cambiar_password && <div><span className="pill solicitado" title="Aún no cambia su contraseña temporal">Contraseña temporal</span></div>}
+                </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   <button className="icon-btn" title="Vacaciones y permisos" onClick={() => navigate(`/empleados/${u.id}/vacaciones`)}><CalendarDays size={16} /></button>{' '}
                   <button className="icon-btn" title="Saldos y ajustes" onClick={() => setSaldos(u)}><Scale size={16} /></button>{' '}
+                  {(soySuper || u.rol !== 'superadmin') && u.activo && (
+                    <><button className="icon-btn" title="Restablecer contraseña (temporal de 6 dígitos)" onClick={() => restablecer(u)}><KeyRound size={16} /></button>{' '}</>
+                  )}
                   {(soySuper || u.rol !== 'superadmin') && <>
                   <button className="icon-btn" title="Editar" onClick={() => setEditar({ ...u, password: '', email: u.email ?? '', email_personal: u.email_personal ?? '', turno_id: u.turno_id ?? '', grupo_id: u.grupo_id ?? '', jefe_id: u.jefe_id ?? '' })}><Pencil size={16} /></button>{' '}
                   {u.activo && <button className="icon-btn rojo" title="Desactivar" onClick={() => desactivar(u)}><UserX size={16} /></button>}
@@ -106,7 +124,8 @@ export default function Empleados() {
         </table>
       </div>
       {editar && <FormEmpleado inicial={editar} turnos={turnos} grupos={grupos} estado={estado} soySuper={soySuper} onClose={() => setEditar(null)}
-        onSaved={() => { setEditar(null); cargar() }} />}
+        onSaved={(creado) => { setEditar(null); cargar(); if (creado?.password_temporal) setTemporal(creado) }} />}
+      {temporal && <PasswordTemporal usuario={temporal} onClose={() => setTemporal(null)} />}
       {saldos && <Saldos usuario={saldos} onClose={() => setSaldos(null)} />}
     </div>
   )
@@ -156,15 +175,18 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
       jefe_id: form.jefe_id ? Number(form.jefe_id) : null,
       email: form.rol === 'planta' ? null : (form.email || '').trim() || null,
       email_personal: (form.email_personal || '').trim() || null,
-      password: form.password || null,
+      password: null,
       microsoft_oid: form.microsoft_oid || null,
       foto: foto || null,
       quitar_foto: quitarFoto,
     }
     try {
-      if (inicial.id) await api(`/usuarios/${inicial.id}`, { method: 'PUT', body })
-      else await api('/usuarios', { method: 'POST', body })
-      onSaved()
+      if (inicial.id) {
+        await api(`/usuarios/${inicial.id}`, { method: 'PUT', body })
+        onSaved()
+      } else {
+        onSaved(await api('/usuarios', { method: 'POST', body }))
+      }
     } catch (e) {
       setError(e.message)
     }
@@ -264,11 +286,14 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
         <label className="checkbox" style={{ alignSelf: 'end' }}>
           <input type="checkbox" checked={form.es_jefe} onChange={set('es_jefe')} /> Es jefe (puede aprobar y ver a su equipo)
         </label>
-        <label className="campo">
-          {inicial.id ? 'Nueva contraseña (opcional)' : msLogin ? 'Contraseña (opcional)' : 'Contraseña'}
-          <input type="password" value={form.password} onChange={set('password')} autoComplete="new-password" />
-          {msLogin && <span className="muted" style={{ fontSize: 11 }}>Sin contraseña, el empleado solo podrá entrar con Microsoft.</span>}
-        </label>
+        <div className="campo">
+          <span>Contraseña</span>
+          <span className="muted" style={{ fontSize: 12, lineHeight: 1.5 }}>
+            {inicial.id
+              ? 'Para dar una nueva contraseña usa "Restablecer contraseña" en la lista de empleados.'
+              : 'Al guardar se genera una contraseña temporal de 6 dígitos que el empleado deberá cambiar en su primer inicio de sesión.'}
+          </span>
+        </div>
         <div className="campo">
           <span>Foto</span>
           <div className="persona">
@@ -288,6 +313,27 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
         </div>
         {error && <div className="full alerta error">{error}</div>}
       </div>
+    </Modal>
+  )
+}
+
+function PasswordTemporal({ usuario, onClose }) {
+  const [copiado, setCopiado] = useState(false)
+  const acceso = [usuario.numero_empleado && `nómina ${usuario.numero_empleado}`, usuario.email, usuario.email_personal].filter(Boolean).join(' · ')
+  return (
+    <Modal titulo="Contraseña temporal" onClose={onClose} pie={<button className="btn btn-primary" onClick={onClose}>Listo</button>}>
+      <p style={{ marginTop: 0 }}>Entrega esta contraseña a <b>{usuario.nombre}</b>. <b>Solo se muestra esta vez.</b></p>
+      <div className="pass-temporal">{usuario.password_temporal}</div>
+      <div className="fila" style={{ justifyContent: 'center', marginBottom: 10 }}>
+        <button className="btn btn-sm" onClick={() => { navigator.clipboard?.writeText(usuario.password_temporal); setCopiado(true) }}>
+          <Copy size={14} /> {copiado ? 'Copiada' : 'Copiar'}
+        </button>
+      </div>
+      <ul className="muted" style={{ fontSize: 13, lineHeight: 1.7, paddingLeft: 18, margin: 0 }}>
+        <li>Puede entrar con: {acceso}.</li>
+        <li>Al entrar deberá crear su propia contraseña (8 caracteres o más, con letras y números).</li>
+        <li>Vence el {usuario.password_temporal_expira ? new Date(`${usuario.password_temporal_expira}Z`).toLocaleString('es-MX') : '—'}; después habrá que restablecerla.</li>
+      </ul>
     </Modal>
   )
 }

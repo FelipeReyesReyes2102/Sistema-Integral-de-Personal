@@ -32,6 +32,25 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
+HORAS_PASSWORD_TEMPORAL = 72
+MAX_INTENTOS = 5
+MINUTOS_BLOQUEO = 15
+# Rutas permitidas mientras el usuario no cambie su contraseña temporal
+RUTAS_CAMBIO_OBLIGATORIO = {"/api/auth/me", "/api/auth/cambiar-password", "/api/auth/logout", "/api/auth/config"}
+
+
+def asignar_password_temporal(usuario: Usuario) -> str:
+    """Genera una contraseña aleatoria de 6 dígitos que se debe cambiar al entrar. Devuelve el valor en claro
+    (solo para mostrarlo una vez al administrador)."""
+    temporal = f"{secrets.randbelow(1_000_000):06d}"
+    usuario.password_hash = hash_password(temporal)
+    usuario.debe_cambiar_password = True
+    usuario.password_temporal_expira = ahora() + timedelta(hours=HORAS_PASSWORD_TEMPORAL)
+    usuario.intentos_fallidos = 0
+    usuario.bloqueado_hasta = None
+    return temporal
+
+
 def password_inutilizable() -> str:
     """Hash imposible de adivinar para usuarios que solo entran con Microsoft."""
     return "!" + secrets.token_hex(32)
@@ -125,6 +144,9 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Usuario
         db.delete(sesion)
         db.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Tu usuario está inactivo")
+    if (user.debe_cambiar_password and sesion.metodo == "password"
+            and request.url.path not in RUTAS_CAMBIO_OBLIGATORIO):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Debes cambiar tu contraseña temporal antes de continuar.")
     t = ahora()
     if (t - sesion.ultimo_uso).total_seconds() > 300:  # no escribir en cada petición
         sesion.ultimo_uso = t

@@ -1,7 +1,7 @@
 from datetime import date, datetime, time
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Rol = Literal["superadmin", "admin", "oficina", "planta", "medico"]
 TipoPermiso = Literal["llegada_tarde", "salida_temprana", "salida_intermedia", "consulta_medica", "home_office"]
@@ -23,7 +23,14 @@ class LoginIn(BaseModel):
 
 class CambioPassword(BaseModel):
     actual: str
-    nueva: str = Field(min_length=6)
+    nueva: str = Field(min_length=8, max_length=128)
+
+    @field_validator("nueva")
+    @classmethod
+    def _segura(cls, v: str) -> str:
+        if not any(c.isalpha() for c in v) or not any(c.isdigit() for c in v):
+            raise ValueError("La contraseña debe tener al menos 8 caracteres e incluir letras y números")
+        return v
 
 
 # ---------- Turnos / Grupos ----------
@@ -97,6 +104,11 @@ class UsuarioOut(UsuarioBase, ORM):
     tiene_foto: bool = False
     microsoft_vinculado: bool = False
     ultimo_acceso: datetime | None = None
+    debe_cambiar_password: bool = False
+    bloqueado: bool = False
+    # Solo se llena al crear el usuario o al restablecer su contraseña: se muestra una sola vez
+    password_temporal: str | None = None
+    password_temporal_expira: datetime | None = None
 
 
 class MeOut(UsuarioOut):
