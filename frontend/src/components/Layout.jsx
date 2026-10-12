@@ -75,6 +75,10 @@ export default function Layout() {
             <img className="logo-completo" src="/logo-otek.png" alt="O-tek" />
             <img className="logo-mini" src="/favicon.png" alt="O-tek" />
           </div>
+          <button className="menu-toggle oculto-movil" onClick={() => setColapsado(!colapsado)}
+            title={colapsado ? 'Expandir menú' : 'Encoger menú'} aria-label={colapsado ? 'Expandir menú' : 'Encoger menú'}>
+            {colapsado ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          </button>
           <div className="brand-nombre">SIP-O</div>
           <div className="brand-desc">Sistema Integral de Personal</div>
         </div>
@@ -128,10 +132,6 @@ export default function Layout() {
 
       <div className="main">
         <header className="topbar">
-          <button className="icon-btn plain oculto-movil" onClick={() => setColapsado(!colapsado)}
-            title={colapsado ? 'Expandir menú' : 'Encoger menú'} aria-label={colapsado ? 'Expandir menú' : 'Encoger menú'}>
-            {colapsado ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}
-          </button>
           <h1>{titulo}</h1>
           <span className="chip oculto-movil">{ROLES[user.rol]}{user.es_jefe && !esAdmin ? ' · Jefe' : ''}</span>
         </header>

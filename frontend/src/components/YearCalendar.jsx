@@ -14,7 +14,7 @@ const PRIORIDAD = ['vacaciones', 'home_office', 'salida_intermedia', 'salida_tem
  * - `maxDias`: días laborales disponibles; al elegir el segundo día no se puede pasar de ese límite.
  */
 export default function YearCalendar({ anio, onAnio, datos, seleccion, onSeleccion, onDia, foco, onFoco, franjas = [],
-  maxDias = null }) {
+  maxDias = null, compacto = false }) {
   const [vista, setVista] = useState('anio')
   const [mes, setMes] = useState(new Date().getMonth())
   const [hover, setHover] = useState(null)
@@ -163,9 +163,9 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
   )
 
   return (
-    <div onMouseLeave={() => setHover(null)}>
+    <div className="yc" onMouseLeave={() => setHover(null)}>
       {nav}
-      {seleccionable && (
+      {seleccionable && !compacto && (
         <div className="cal-tip">
           Clic en un evento para ver sus detalles · clic en días libres (de hoy en adelante) para seleccionar un rango · clic en el nombre del mes para ampliarlo
         </div>
@@ -227,7 +227,7 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
         )
       })()}
 
-      <div className="cal-leyenda">
+      {!compacto && <div className="cal-leyenda">
         {Object.entries(CATEGORIAS).filter(([k]) => k !== 'consulta_medica').map(([k, c]) => (
           <button key={k} type="button" className={`ley-chip ${foco === k ? 'activo' : ''} ${foco && foco !== k ? 'apagado' : ''}`}
             onClick={() => onFoco?.(foco === k ? null : k)} disabled={!onFoco}>
@@ -245,7 +245,7 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
           <i style={estiloEvento('vacaciones', 'solicitado')}>P</i> Pendiente
           <i style={estiloEvento('vacaciones', 'borrador')}>B</i> Borrador
         </span>
-      </div>
+      </div>}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, Ban, ChevronDown, Clock, Eye, Laptop, MousePointerClick, Pencil, Send, Stethoscope, Trash2, TreePalm, X,
+  ArrowLeft, Ban, Clock, Eye, Laptop, MousePointerClick, Pencil, Send, Stethoscope, Trash2, TreePalm, X,
 } from 'lucide-react'
 import { api } from '../api'
 import { useAuth } from '../auth'
@@ -10,7 +10,7 @@ import PermisoModal from '../components/PermisoModal'
 import VacacionesModal from '../components/VacacionesModal'
 import YearCalendar from '../components/YearCalendar'
 import {
-  CATEGORIAS, esAdmin as esAdminFn, ESTADOS, ROLES, TIPOS_NOMINA, TIPOS_PERMISO, TIPOS_PERMISO_SOLICITABLES, eventosPorFecha, fmtFecha, hhmm, num,
+  CATEGORIAS, esAdmin as esAdminFn, ESTADOS, ROLES, TIPOS_NOMINA, TIPOS_PERMISO, TIPOS_PERMISO_SOLICITABLES, eventosPorFecha, estiloEvento, fmtFecha, hhmm, num,
   parseISO, toISO,
 } from '../utils'
 import EventosDia from '../components/EventosDia'
@@ -35,15 +35,12 @@ export default function MisVacaciones({ usuarioId }) {
   const [consultas, setConsultas] = useState([])
   const [anio, setAnio] = useState(new Date().getFullYear())
   const [calendario, setCalendario] = useState(null)
-  const [filtroEstado, setFiltroEstado] = useState('')
-  const [filtroCat, setFiltroCat] = useState('')
   const [tab, setTab] = useState('resumen')
-  const [menuNueva, setMenuNueva] = useState(false)
-  const [modal, setModal] = useState(null) // {tipo: 'vac'|'perm'|'ver', item, tipoPermiso, inicial}
+  const [modal, setModal] = useState(null) // {tipo: 'vac'|'perm'|'ver'|'dia'|'consulta', item, tipoPermiso, inicial}
+  const [lista, setLista] = useState(null) // categoría de Registros cuya lista de solicitudes está abierta ('todas' = todas)
   const [seleccion, setSeleccion] = useState(null) // {inicio, fin} elegido en el calendario
   const [selCalc, setSelCalc] = useState(null)
   const [periodoSolicitud, setPeriodoSolicitud] = useState(null) // periodo del que se toman los días seleccionados
-  const [foco, setFoco] = useState(null) // categoría resaltada en el calendario
   const [error, setError] = useState('')
   const navigate = useNavigate()
   const esAdmin = esAdminFn(user)
@@ -106,6 +103,7 @@ export default function MisVacaciones({ usuarioId }) {
     }
     return out
   }, [periodos, empleado?.fecha_ingreso])
+  const franjasDelAnio = franjas.filter((x) => x.desde <= `${anio}-12-31` && x.hasta >= `${anio}-01-01`)
 
   // Vista previa de días laborales del rango seleccionado en el calendario
   useEffect(() => {
@@ -126,11 +124,11 @@ export default function MisVacaciones({ usuarioId }) {
 
   // Esc cancela la selección de días (si no hay una ventana abierta)
   useEffect(() => {
-    if (!seleccion || modal) return
+    if (!seleccion || modal || lista) return
     const alPresionar = (e) => { if (e.key === 'Escape') setSeleccion(null) }
     window.addEventListener('keydown', alPresionar)
     return () => window.removeEventListener('keydown', alPresionar)
-  }, [seleccion, modal])
+  }, [seleccion, modal, lista])
 
   const refrescar = () => {
     setModal(null)
@@ -157,16 +155,6 @@ export default function MisVacaciones({ usuarioId }) {
   const porVencer = vigentesConSaldo.length > 1 ? vigentesConSaldo[vigentesConSaldo.length - 1] : null
   const diasParaVencer = porVencer ? Math.ceil((parseISO(porVencer.fecha_vencimiento) - new Date()) / 864e5) : null
 
-  const items = useMemo(() => {
-    const vs = vacaciones.map((v) => ({ ...v, cat: 'vacaciones', orden: v.fecha_inicio }))
-    const ps = permisos.map((p) => ({ ...p, cat: p.tipo, orden: p.fecha }))
-    const cs = consultas.map((c) => ({ ...c, cat: 'consulta', orden: `${c.fecha}T${c.hora_inicio}` }))
-    return [...vs, ...ps, ...cs]
-      .filter((i) => !filtroEstado || i.estado === filtroEstado)
-      .filter((i) => !filtroCat || (filtroCat === 'permisos' ? !['vacaciones', 'consulta'].includes(i.cat) : i.cat === filtroCat))
-      .sort((a, b) => b.orden.localeCompare(a.orden))
-  }, [vacaciones, permisos, consultas, filtroEstado, filtroCat])
-
   const eventos = useMemo(() => eventosPorFecha(calendario), [calendario])
   const registros = useMemo(() => {
     const r = Object.fromEntries(Object.keys(CATEGORIAS).map((k) => [k, { dias: 0, aprobados: 0, pendientes: 0, horas: 0 }]))
@@ -188,20 +176,9 @@ export default function MisVacaciones({ usuarioId }) {
     return r
   }, [eventos, permisos, calendario, anio])
 
-  function enfocar(cat) {
-    const nuevo = foco === cat ? null : cat
-    setFoco(nuevo)
-    setFiltroCat(nuevo && nuevo !== 'festivo' ? nuevo : '')
-  }
-
   const pct = (h) => (periodo && periodo.horas_total > 0 ? `${Math.max(0, (h / periodo.horas_total) * 100)}%` : '0%')
 
-  function nueva(tipo, tipoPermiso) {
-    setMenuNueva(false)
-    setModal({ tipo, tipoPermiso })
-  }
-
-  // Tarjeta del usuario: foto, puesto, ingreso, antigüedad, nómina, jefe y turno
+  // Tarjeta del usuario: foto, tipo de usuario, puesto, ingreso, antigüedad, nómina, jefe y turno
   const perfil = empleado && (
     <div className="card ps-perfil">
       <div className="pf-cab">
@@ -209,7 +186,8 @@ export default function MisVacaciones({ usuarioId }) {
         <Avatar usuario={empleado} tam={48} />
         <div className="pf-datos">
           <div className="pf-nombre" title={empleado.nombre}>{empleado.nombre}</div>
-          <div className="pf-puesto">{[empleado.puesto || ROLES[empleado.rol], empleado.departamento].filter(Boolean).join(' · ')}</div>
+          <div className="pf-puesto">{[empleado.puesto, empleado.departamento].filter(Boolean).join(' · ')}</div>
+          <span className="chip pf-rol">{ROLES[empleado.rol]}{empleado.es_jefe && !esAdminFn(empleado) ? ' · Jefe' : ''}</span>
         </div>
       </div>
       <dl className="pf-lista">
@@ -226,7 +204,7 @@ export default function MisVacaciones({ usuarioId }) {
     </div>
   )
 
-  // Franja superior compacta: turno, saldo, registros del año y nueva solicitud
+  // Franja superior: usuario, saldo y registros del año
   const panel = (
     <div className={`panel-sup ${tab === 'calendario' ? 'oculto-movil' : ''}`}>
       {perfil}
@@ -276,45 +254,28 @@ export default function MisVacaciones({ usuarioId }) {
         ) : (
           <div className="ps-pie" style={{ marginTop: 6 }}>Aún no tienes días: se generan al cumplir cada año de servicio.</div>
         )}
+        {porVencer && (
+          <div className="ps-bloque vencido" title="Después de 18 meses los días no usados se pierden">
+            {num(porVencer.dias_disponible)} d del {porVencer.nombre} vencen el {fmtFecha(porVencer.fecha_vencimiento, false)}
+            {diasParaVencer !== null && ` (en ${diasParaVencer} días)`}
+          </div>
+        )}
       </div>
 
       <div className="card ps-registros">
-        <PanelRegistros anio={anio} registros={registros} foco={foco} onFoco={enfocar} />
+        <PanelRegistros anio={anio} registros={registros} franjas={franjasDelAnio} onAbrir={setLista} />
       </div>
-
-      {!soloLectura && (
-        <div className="ps-acciones dropdown">
-          <button className="btn btn-primary" onClick={() => setMenuNueva(!menuNueva)}>
-            Nueva solicitud <ChevronDown size={16} />
-          </button>
-          {menuNueva && (
-            <div className="dropdown-menu derecha">
-              <button onClick={() => nueva('vac')}><TreePalm size={16} /> Vacaciones</button>
-              <button onClick={() => nueva('perm', 'llegada_tarde')}><Clock size={16} /> Llegada tarde</button>
-              <button onClick={() => nueva('perm', 'salida_temprana')}><Clock size={16} /> Salida temprana</button>
-              <button onClick={() => nueva('perm', 'salida_intermedia')}><Clock size={16} /> Salida durante la jornada</button>
-              <button onClick={() => nueva('perm', 'home_office')}><Laptop size={16} /> Home office</button>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 
   return (
-    <>
+    <div className="vac-pagina">
       <div className="tabs">
         <button className={tab === 'resumen' ? 'activo' : ''} onClick={() => setTab('resumen')}>RESUMEN</button>
         <button className={tab === 'calendario' ? 'activo' : ''} onClick={() => setTab('calendario')}>CALENDARIO</button>
       </div>
       {panel}
-      {porVencer && (
-        <div className={`alerta warn ${tab === 'calendario' ? 'oculto-movil' : ''}`} style={{ marginTop: 0, marginBottom: 12 }}>
-          <b>{num(porVencer.dias_disponible)} día(s)</b> del {porVencer.nombre} vencen el{' '}
-          <b>{fmtFecha(porVencer.fecha_vencimiento, false)}</b>
-          {diasParaVencer !== null && ` (en ${diasParaVencer} días)`}. Después de 18 meses se pierden; úsalos primero.
-        </div>
-      )}
+      {error && <div className="alerta error">{error}</div>}
 
       <div className={`card cal-card ${tab === 'resumen' ? 'oculto-movil' : ''}`}>
         {!soloLectura && (
@@ -324,77 +285,21 @@ export default function MisVacaciones({ usuarioId }) {
             onPermiso={() => setModal({ tipo: 'perm', fechaInicial: seleccion.inicio })}
             onHomeOffice={() => setModal({ tipo: 'perm', tipoPermiso: 'home_office', fechaInicial: seleccion.inicio, fechaFinInicial: seleccion.fin || seleccion.inicio })} />
         )}
-        <YearCalendar anio={anio} onAnio={setAnio} datos={calendario} seleccion={seleccion}
+        <YearCalendar anio={anio} onAnio={setAnio} datos={calendario} seleccion={seleccion} compacto
           onSeleccion={soloLectura ? undefined : setSeleccion}
-          foco={foco} onFoco={enfocar} onDia={(f) => setModal({ tipo: 'dia', fecha: f })}
+          onDia={(f) => setModal({ tipo: 'dia', fecha: f })}
           franjas={franjas}
           maxDias={periodoElegido && periodoElegido.dias_disponible > 0 ? periodoElegido.dias_disponible : null} />
       </div>
 
-      <div className={`card lista-card ${tab === 'calendario' ? 'oculto-movil' : ''}`}>
-        <div className="lista-cab">
-          <b>{usuarioId ? 'Solicitudes' : 'Mis solicitudes'}</b>
-          <div className="espacio" />
-          <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>
-            <option value="">Cualquier estado</option>
-            {Object.entries(ESTADOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-          <select value={filtroCat} onChange={(e) => setFiltroCat(e.target.value)}>
-            <option value="">Cualquier categoría</option>
-            <option value="vacaciones">Vacaciones</option>
-            <option value="permisos">Todos los permisos</option>
-            {Object.entries(TIPOS_PERMISO_SOLICITABLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            <option value="consulta">Consultas médicas</option>
-          </select>
-        </div>
-        {error && <div className="alerta error">{error}</div>}
-        <div className="lista-sol">
-          {items.length === 0 && <div className="muted" style={{ padding: 20, textAlign: 'center' }}>No hay solicitudes.</div>}
-          {items.map((i) => (
-            <div className="item-sol" key={`${i.cat === 'vacaciones' ? 'v' : 'p'}${i.id}`}>
-              <div className="info">
-                <div className="titulo">
-                  <i className="punto" style={{ background: CATEGORIAS[i.cat]?.color }} />
-                  {i.cat === 'vacaciones' ? 'Vacaciones' : i.cat === 'consulta'
-                    ? <span className="fila" style={{ gap: 6 }}><Stethoscope size={16} color="#00796b" /> Consulta médica</span>
-                    : TIPOS_PERMISO[i.tipo]}
-                </div>
-                <div className="detalle">
-                  {i.cat === 'vacaciones'
-                    ? `${fmtFecha(i.fecha_inicio)} - ${fmtFecha(i.fecha_fin)} (${i.dias_habiles} d) · ${i.periodo_nombre}`
-                    : i.cat === 'consulta'
-                      ? `${fmtFecha(i.fecha)} ${hhmm(i.hora_inicio)}${i.hora_fin ? ` - ${hhmm(i.hora_fin)}` : ''} · Atendió: ${i.medico_nombre || 'Servicio médico'}`
-                      : i.tipo === 'home_office'
-                        ? `${fmtFecha(i.fecha)} - ${fmtFecha(i.fecha_fin || i.fecha)} (${i.dias ?? '—'} d laborales)`
-                        : `${fmtFecha(i.fecha)} ${hhmm(i.hora_inicio)} - ${hhmm(i.hora_fin)} (${num(i.horas)} h)`}
-                </div>
-                {i.aprobador_nombre && (
-                  <div className="detalle muted" style={{ marginTop: 2, fontSize: 12 }}>
-                    {i.estado === 'validado' || i.estado === 'rechazado' ? 'Revisó' : 'Aprueba'}: {i.revisado_por_nombre || i.aprobador_nombre}
-                  </div>
-                )}
-                {i.estado === 'rechazado' && i.motivo_rechazo && (
-                  <div className="detalle" style={{ color: 'var(--danger)' }}>Motivo: {i.motivo_rechazo}</div>
-                )}
-              </div>
-              <div className="acciones">
-                {i.cat === 'consulta' ? (
-                  <>
-                    <span className="pill consulta">Servicio médico</span>
-                    <button className="icon-btn" title="Ver lo que registró el médico" onClick={() => setModal({ tipo: 'consulta', item: i })}><Eye size={16} /></button>
-                  </>
-                ) : (<>
-                <span className={`pill ${i.estado}`}>{ESTADOS[i.estado]}</span>
-                <Acciones item={i} esAdmin={esAdmin} soloLectura={soloLectura} onVer={() => setModal({ tipo: 'ver', item: i })}
-                  onEditar={() => setModal({ tipo: i.cat === 'vacaciones' ? 'vac' : 'perm', item: i })}
-                  accion={accion} />
-                </>)}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
+      {lista && (
+        <ListaSolicitudes categoria={lista} anio={anio} vacaciones={vacaciones} permisos={permisos} consultas={consultas}
+          festivos={calendario?.festivos || []} esAdmin={esAdmin} soloLectura={soloLectura} accion={accion}
+          onVer={(i) => setModal({ tipo: 'ver', item: i })}
+          onEditar={(i) => setModal({ tipo: i.cat === 'vacaciones' ? 'vac' : 'perm', item: i })}
+          onConsulta={(i) => setModal({ tipo: 'consulta', item: i })}
+          onClose={() => setLista(null)} />
+      )}
       {modal?.tipo === 'vac' && (
         <VacacionesModal periodos={periodos} usuarioId={usuarioId} empleado={empleado} solicitud={modal.item}
           inicial={modal.inicial}
@@ -416,15 +321,14 @@ export default function MisVacaciones({ usuarioId }) {
         <DetalleConsulta consultaId={modal.item.detalle_clinico ? modal.item.id : null} resumen={modal.item}
           onClose={() => setModal(null)} />
       )}
-    </>
+    </div>
   )
 }
 
-/** Registros del año por categoría; al hacer clic se resaltan en el calendario y se filtra la lista. */
-function PanelRegistros({ anio, registros, foco, onFoco }) {
+/** Registros del año por categoría (clic: abre sus solicitudes) y leyenda de periodos y estados del calendario. */
+function PanelRegistros({ anio, registros, franjas, onAbrir }) {
   const texto = (k, r) => {
-    if (k === 'vacaciones') return `${r.dias} día(s)${r.pendientes ? ` · ${r.pendientes} pendiente(s)` : ''}`
-    if (k === 'home_office') return `${r.dias} día(s)${r.pendientes ? ` · ${r.pendientes} pendiente(s)` : ''}`
+    if (k === 'vacaciones' || k === 'home_office') return `${r.dias} día(s)${r.pendientes ? ` · ${r.pendientes} pend.` : ''}`
     if (k === 'consulta') return `${r.dias} consulta(s)`
     if (k === 'festivo') return `${r.dias} día(s)`
     return `${r.dias} · ${num(r.horas)} h`
@@ -433,18 +337,128 @@ function PanelRegistros({ anio, registros, foco, onFoco }) {
     <div className="registros">
       <div className="registros-cab">
         <b>Registros {anio}</b>
-        <span className="muted">Clic para resaltarlos en el calendario</span>
-        {foco && <button type="button" className="btn btn-sm" onClick={() => onFoco(foco)}>Mostrar todo</button>}
+        <span className="muted">Clic para ver las solicitudes</span>
+        <button type="button" className="btn btn-sm" onClick={() => onAbrir('todas')}>Ver todas</button>
       </div>
       {Object.entries(CATEGORIAS).filter(([k]) => k !== 'consulta_medica').map(([k, c]) => (
-        <button key={k} type="button" className={`registro ${foco === k ? 'activo' : ''}`} onClick={() => onFoco(k)}
-          style={foco === k ? { borderColor: c.color, background: `${c.color}12` } : undefined}>
+        <button key={k} type="button" className="registro" onClick={() => onAbrir(k)}>
           <i style={{ background: c.color }} />
           <span>{c.label}</span>
           <b>{texto(k, registros[k])}</b>
         </button>
       ))}
+      <div className="registros-leyenda">
+        {franjas.map((x) => (
+          <span key={x.desde} className="ley-franja" style={{ '--franja': x.color }}
+            title={`Del ${fmtFecha(x.desde, false)}${x.hasta < '9999' ? ` al ${fmtFecha(x.hasta, false)}` : ' en adelante'}`}>
+            <i /> {x.nombre}
+          </span>
+        ))}
+        <span className="ley-estados">
+          <i style={estiloEvento('vacaciones', 'validado')}>A</i> Aprobado
+          <i style={estiloEvento('vacaciones', 'solicitado')}>P</i> Pendiente
+          <i style={estiloEvento('vacaciones', 'borrador')}>B</i> Borrador
+        </span>
+      </div>
     </div>
+  )
+}
+
+/** Ventana con las solicitudes de una categoría de Registros (o todas), con filtros y acciones. */
+function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, festivos, esAdmin, soloLectura, accion,
+  onVer, onEditar, onConsulta, onClose }) {
+  const [estado, setEstado] = useState('')
+  const [cat, setCat] = useState(categoria === 'todas' ? '' : categoria)
+  const [soloAnio, setSoloAnio] = useState(true)
+
+  const items = useMemo(() => {
+    const vs = vacaciones.map((v) => ({ ...v, cat: 'vacaciones', orden: v.fecha_inicio, fin: v.fecha_fin }))
+    const ps = permisos.map((p) => ({ ...p, cat: p.tipo, orden: p.fecha, fin: p.fecha_fin || p.fecha }))
+    const cs = consultas.map((c) => ({ ...c, cat: 'consulta', orden: `${c.fecha}T${c.hora_inicio}`, fin: c.fecha }))
+    return [...vs, ...ps, ...cs]
+      .filter((i) => !estado || i.estado === estado)
+      .filter((i) => !cat || (cat === 'permisos' ? !['vacaciones', 'consulta'].includes(i.cat) : i.cat === cat))
+      .filter((i) => !soloAnio || (i.orden.slice(0, 4) <= String(anio) && i.fin.slice(0, 4) >= String(anio)))
+      .sort((a, b) => b.orden.localeCompare(a.orden))
+  }, [vacaciones, permisos, consultas, estado, cat, soloAnio, anio])
+
+  if (cat === 'festivo') {
+    return (
+      <Modal titulo={`Días festivos ${anio}`} onClose={onClose} pie={<button className="btn" onClick={onClose}>Cerrar</button>}>
+        <table className="tabla">
+          <tbody>
+            {festivos.length === 0 && <tr><td className="muted">Sin festivos registrados.</td></tr>}
+            {festivos.map((f) => <tr key={f.fecha}><td style={{ width: 130 }}>{fmtFecha(f.fecha)}</td><td>{f.nombre}</td></tr>)}
+          </tbody>
+        </table>
+      </Modal>
+    )
+  }
+
+  const titulo = cat ? (CATEGORIAS[cat]?.label || 'Permisos') : 'Todas las solicitudes'
+  return (
+    <Modal ancho titulo={titulo} onClose={onClose} pie={<button className="btn" onClick={onClose}>Cerrar</button>}>
+      <div className="lista-cab">
+        <select value={cat} onChange={(e) => setCat(e.target.value)}>
+          <option value="">Cualquier categoría</option>
+          <option value="vacaciones">Vacaciones</option>
+          <option value="permisos">Todos los permisos</option>
+          {Object.entries(TIPOS_PERMISO_SOLICITABLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          <option value="consulta">Consultas médicas</option>
+        </select>
+        <select value={estado} onChange={(e) => setEstado(e.target.value)}>
+          <option value="">Cualquier estado</option>
+          {Object.entries(ESTADOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+        <label className="checkbox"><input type="checkbox" checked={soloAnio} onChange={(e) => setSoloAnio(e.target.checked)} /> Solo {anio}</label>
+      </div>
+      <div className="lista-sol">
+        {items.length === 0 && <div className="muted" style={{ padding: 20, textAlign: 'center' }}>No hay solicitudes.</div>}
+        {items.map((i) => (
+          <div className="item-sol" key={`${i.cat === 'vacaciones' ? 'v' : i.cat === 'consulta' ? 'c' : 'p'}${i.id}`}>
+            <div className="info">
+              <div className="titulo">
+                <i className="punto" style={{ background: CATEGORIAS[i.cat]?.color }} />
+                {i.cat === 'vacaciones' ? 'Vacaciones' : i.cat === 'consulta'
+                  ? <span className="fila" style={{ gap: 6 }}><Stethoscope size={16} color="#00796b" /> Consulta médica</span>
+                  : TIPOS_PERMISO[i.tipo]}
+              </div>
+              <div className="detalle">
+                {i.cat === 'vacaciones'
+                  ? `${fmtFecha(i.fecha_inicio)} - ${fmtFecha(i.fecha_fin)} (${i.dias_habiles} d) · ${i.periodo_nombre}`
+                  : i.cat === 'consulta'
+                    ? `${fmtFecha(i.fecha)} ${hhmm(i.hora_inicio)}${i.hora_fin ? ` - ${hhmm(i.hora_fin)}` : ''} · Atendió: ${i.medico_nombre || 'Servicio médico'}`
+                    : i.tipo === 'home_office'
+                      ? `${fmtFecha(i.fecha)} - ${fmtFecha(i.fecha_fin || i.fecha)} (${i.dias ?? '—'} d laborales)`
+                      : `${fmtFecha(i.fecha)} ${hhmm(i.hora_inicio)} - ${hhmm(i.hora_fin)} (${num(i.horas)} h)`}
+              </div>
+              {i.aprobador_nombre && (
+                <div className="detalle muted" style={{ marginTop: 2, fontSize: 12 }}>
+                  {i.estado === 'validado' || i.estado === 'rechazado' ? 'Revisó' : 'Aprueba'}: {i.revisado_por_nombre || i.aprobador_nombre}
+                </div>
+              )}
+              {i.estado === 'rechazado' && i.motivo_rechazo && (
+                <div className="detalle" style={{ color: 'var(--danger)' }}>Motivo: {i.motivo_rechazo}</div>
+              )}
+            </div>
+            <div className="acciones">
+              {i.cat === 'consulta' ? (
+                <>
+                  <span className="pill consulta">Servicio médico</span>
+                  <button className="icon-btn" title="Ver lo que registró el médico" onClick={() => onConsulta(i)}><Eye size={16} /></button>
+                </>
+              ) : (
+                <>
+                  <span className={`pill ${i.estado}`}>{ESTADOS[i.estado]}</span>
+                  <Acciones item={i} esAdmin={esAdmin} soloLectura={soloLectura} onVer={() => onVer(i)} onEditar={() => onEditar(i)}
+                    accion={accion} />
+                </>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Modal>
   )
 }
 
