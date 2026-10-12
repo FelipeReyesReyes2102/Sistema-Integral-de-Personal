@@ -140,24 +140,45 @@ def _enviar_smtp(cfg, remitente, destinatarios, asunto, cuerpo_html, cuerpo_text
 def _enviar_graph(remitente, destinatarios, asunto, cuerpo_html):
     if not settings.graph_configurado and not settings.microsoft_configurado:
         raise ErrorCorreo("Configura primero la conexión con Microsoft (Configuración → Conexión con Microsoft).")
-    try:
-        token = microsoft.token_aplicacion()
-        with microsoft._cliente() as c:
-            r = c.post(f"{settings.microsoft_graph_url}/users/{remitente}/sendMail",
-                       headers={"Authorization": f"Bearer {token}"},
-                       json={"message": {"subject": asunto, "body": {"contentType": "HTML", "content": cuerpo_html},
-                                         "toRecipients": [{"emailAddress": {"address": d}} for d in destinatarios]},
-                             "saveToSentItems": False})
-    except microsoft.ErrorMicrosoft as e:
-        raise ErrorCorreo(e.mensaje)
-    except httpx.HTTPError as e:
-        raise ErrorCorreo(f"No se pudo contactar a Microsoft ({type(e).__name__}).")
+    mensaje = {"message": {"subject": asunto, "body": {"contentType": "HTML", "content": cuerpo_html},
+                           "toRecipients": [{"emailAddress": {"address": d}} for d in destinatarios]},
+               "saveToSentItems": False}
+    for intento in range(2):
+        try:
+            token = microsoft.token_aplicacion()
+            with microsoft._cliente() as c:
+                r = c.post(f"{settings.microsoft_graph_url}/users/{remitente}/sendMail",
+                           headers={"Authorization": f"Bearer {token}"}, json=mensaje)
+        except microsoft.ErrorMicrosoft as e:
+            raise ErrorCorreo(e.mensaje)
+        except httpx.HTTPError as e:
+            raise ErrorCorreo(f"No se pudo contactar a Microsoft ({type(e).__name__}).")
+        if r.status_code != 403 or intento:
+            break
+        # El token en caché pudo emitirse antes de conceder Mail.Send: se descarta y se pide uno nuevo
+        microsoft._token_app.update(valor=None, expira=0)
     if r.status_code == 403:
-        raise ErrorCorreo("Microsoft negó el envío: falta el permiso de aplicación Mail.Send con consentimiento de administrador.")
+        detalle = _error_graph(r)
+        if "Mail.Send" in microsoft.roles_token(token):
+            raise ErrorCorreo("Microsoft negó el envío desde el buzón " f"{remitente} aunque la aplicación tiene Mail.Send "
+                              "(posible directiva de acceso de Exchange que limita los buzones permitidos)." + detalle)
+        raise ErrorCorreo("Microsoft negó el envío: falta el permiso de aplicación Mail.Send con consentimiento de "
+                          "administrador." + detalle)
     if r.status_code == 404:
         raise ErrorCorreo(f"No existe el buzón remitente {remitente} en Microsoft 365.")
     if r.status_code not in (200, 202):
         raise ErrorCorreo(f"Microsoft Graph respondió HTTP {r.status_code} al enviar el correo.")
+
+
+
+def _error_graph(r: httpx.Response) -> str:
+    """Código y mensaje de error que devuelve Graph (sin datos sensibles), para mostrarlos al administrador."""
+    try:
+        e = r.json().get("error", {})
+    except ValueError:
+        return ""
+    codigo, texto = str(e.get("code", ""))[:60], str(e.get("message", ""))[:200]
+    return f" Detalle de Microsoft: {codigo}: {texto}" if codigo or texto else ""
 
 
 # ---------------- Avisos a caseta ----------------

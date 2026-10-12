@@ -10,6 +10,7 @@ Nunca se registran tokens ni secretos en los logs.
 import base64
 import hashlib
 import hmac
+import json
 import logging
 import secrets
 import time
@@ -170,6 +171,17 @@ def token_aplicacion() -> str:
     j = r.json()
     _token_app.update(valor=j["access_token"], expira=time.time() + int(j.get("expires_in", 3600)))
     return _token_app["valor"]
+
+
+
+def roles_token(token: str) -> list[str]:
+    """Permisos de aplicación (claim "roles") de un token de Graph. Solo lee la carga útil, no valida la firma:
+    se usa únicamente para dar un mensaje de diagnóstico."""
+    try:
+        carga = token.split(".")[1]
+        return list(json.loads(base64.urlsafe_b64decode(carga + "=" * (-len(carga) % 4))).get("roles") or [])
+    except (IndexError, ValueError, AttributeError):
+        return []
 
 
 def _graph(ruta: str, token: str) -> httpx.Response:

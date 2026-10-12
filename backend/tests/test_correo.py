@@ -165,3 +165,28 @@ def test_envio_por_microsoft_365(monkeypatch):
     admin.put("/api/admin/correo", json={**CONFIG, "metodo": "graph", "remitente": "otro@o-tek.com"})
     r = admin.post("/api/admin/correo/prueba", json={}).json()
     assert r["ok"] is False and "Mail.Send" in r["error"]
+
+
+def test_graph_renueva_token_en_cache_sin_mail_send(monkeypatch):
+    """Si el token en caché se emitió antes del consentimiento, un 403 provoca pedir un token nuevo y reintentar."""
+    for k, v in dict(microsoft_auth_enabled=True, microsoft_graph_enabled=True, microsoft_tenant_id="t",
+                     microsoft_client_id="c", microsoft_client_secret="s",
+                     microsoft_authority_host="https://login.test", microsoft_graph_url="https://graph.test/v1.0").items():
+        monkeypatch.setattr(settings, k, v)
+    llamadas = []
+
+    def manejador(req: httpx.Request):
+        if req.url.path.endswith("/oauth2/v2.0/token"):
+            return httpx.Response(200, json={"access_token": "nuevo", "expires_in": 3600})
+        if req.url.path.endswith("/sendMail"):
+            llamadas.append(req.headers["Authorization"])
+            if req.headers["Authorization"] == "Bearer viejo":
+                return httpx.Response(403, json={"error": {"code": "ErrorAccessDenied", "message": "Access is denied."}})
+            return httpx.Response(202)
+        return httpx.Response(404)
+    microsoft.transporte = httpx.MockTransport(manejador)
+    microsoft._token_app.update(valor="viejo", expira=9e12)
+    admin = entrar("admin@empresa.com", "Admin123")
+    admin.put("/api/admin/correo", json={**CONFIG, "metodo": "graph"})
+    assert admin.post("/api/admin/correo/prueba", json={}).json()["ok"] is True
+    assert llamadas == ["Bearer viejo", "Bearer nuevo"]
