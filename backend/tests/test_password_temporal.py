@@ -74,6 +74,14 @@ def test_bloqueo_por_intentos_y_restablecer():
     assert len(nueva) == 6 and entrar("T-200", nueva)[1].status_code == 200
 
 
+def test_me_reemite_cookie_csrf_perdida():
+    c = admin()
+    csrf = c.cookies["sip_csrf"]
+    c.cookies.delete("sip_csrf")
+    r = c.get("/api/auth/me")
+    assert r.status_code == 200 and r.cookies.get("sip_csrf") == csrf
+
+
 def test_temporal_vencida_y_oficinas():
     adm = admin()
     u = alta(adm, "T-300", rol="oficina")

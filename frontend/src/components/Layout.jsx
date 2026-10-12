@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  CalendarDays, ClipboardCheck, Clock, Home, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PartyPopper, Settings, Users,
-  UsersRound, X,
+  CalendarDays, ClipboardCheck, Clock, Home, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
+  PartyPopper, Settings, Users, UsersRound, X,
 } from 'lucide-react'
 import { api } from '../api'
 import { useAuth } from '../auth'
@@ -26,12 +26,18 @@ const TITULOS = {
 
 export const esJefe = (u) => u?.es_jefe || esAdminFn(u)
 
+// Preferencia del menú lateral encogido (solo en este navegador)
+const leerColapsado = () => {
+  try { return localStorage.getItem('sip-menu-colapsado') === '1' } catch { return false }
+}
+
 export default function Layout() {
   const { user, logout } = useAuth()
   const { pathname } = useLocation()
   const [pendientes, setPendientes] = useState({ total: 0, todas: 0 })
   const [menu, setMenu] = useState(false)
   const [pwd, setPwd] = useState(false)
+  const [colapsado, setColapsado] = useState(leerColapsado)
   const esAdmin = esAdminFn(user)
   const jefe = esJefe(user)
 
@@ -48,21 +54,27 @@ export default function Layout() {
   }, [jefe])
 
   useEffect(() => setMenu(false), [pathname])
+  useEffect(() => {
+    try { localStorage.setItem('sip-menu-colapsado', colapsado ? '1' : '0') } catch { /* sin almacenamiento */ }
+  }, [colapsado])
 
   const titulo = TITULOS[pathname] || (pathname.includes('/vacaciones') ? 'Vacaciones del colaborador' : '')
   const badge = (n) => n > 0 && <span className="badge">{n}</span>
   const link = (to, Icon, texto, extra) => (
-    <NavLink to={to} end className="nav-link">
-      <Icon size={18} /> {texto} {extra}
+    <NavLink to={to} end className="nav-link" title={colapsado ? texto : undefined}>
+      <Icon size={18} /> <span className="nav-texto">{texto}</span> {extra}
     </NavLink>
   )
 
   return (
-    <div className="app">
+    <div className={`app ${colapsado ? 'menu-colapsado' : ''}`}>
       {menu && <div className="overlay" style={{ zIndex: 35 }} onClick={() => setMenu(false)} />}
       <aside className={`sidebar ${menu ? 'abierto' : ''}`}>
         <div className="brand">
-          <div className="logo-chip"><img src="/logo-otek.png" alt="O-tek" /></div>
+          <div className="logo-chip">
+            <img className="logo-completo" src="/logo-otek.png" alt="O-tek" />
+            <img className="logo-mini" src="/favicon.png" alt="O-tek" />
+          </div>
           <div className="brand-nombre">SIP-O</div>
           <div className="brand-desc">Sistema Integral de Personal</div>
         </div>
@@ -95,25 +107,31 @@ export default function Layout() {
           )}
         </nav>
         <div className="usuario">
-          <div className="fila" style={{ gap: 10, flexWrap: 'nowrap' }}>
+          <div className="fila" style={{ gap: 10, flexWrap: 'nowrap' }} title={colapsado ? `${user.nombre} · ${ROLES[user.rol]}` : undefined}>
             <Avatar usuario={user} tam={36} />
             <div className="nombre">{user.nombre}</div>
           </div>
-          <div className="muted">
+          <div className="muted usuario-detalle">
             {ROLES[user.rol]}{user.es_jefe && !esAdmin ? ' · Jefe' : ''}
             {user.jefe_nombre && <div>Reporta a: {user.jefe_nombre}</div>}
           </div>
-          <div className="fila" style={{ marginTop: 8 }}>
+          <div className="fila usuario-acciones" style={{ marginTop: 8 }}>
             {user.puede_usar_password && user.auth_method !== 'microsoft' && (
-              <button className="btn btn-sm" onClick={() => setPwd(true)}><KeyRound size={14} /> Contraseña</button>
+              <button className="btn btn-sm" onClick={() => setPwd(true)} title="Cambiar contraseña">
+                <KeyRound size={14} /> <span className="nav-texto">Contraseña</span>
+              </button>
             )}
-            <button className="btn btn-sm" onClick={logout}><LogOut size={14} /> Salir</button>
+            <button className="btn btn-sm" onClick={logout} title="Salir"><LogOut size={14} /> <span className="nav-texto">Salir</span></button>
           </div>
         </div>
       </aside>
 
       <div className="main">
         <header className="topbar">
+          <button className="icon-btn plain oculto-movil" onClick={() => setColapsado(!colapsado)}
+            title={colapsado ? 'Expandir menú' : 'Encoger menú'} aria-label={colapsado ? 'Expandir menú' : 'Encoger menú'}>
+            {colapsado ? <PanelLeftOpen size={19} /> : <PanelLeftClose size={19} />}
+          </button>
           <h1>{titulo}</h1>
           <span className="chip oculto-movil">{ROLES[user.rol]}{user.es_jefe && !esAdmin ? ' · Jefe' : ''}</span>
         </header>

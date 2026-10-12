@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import { esAdmin, fmtFecha, num } from '../utils'
+import { useAuth } from '../auth'
+import { esAdmin, fmtFecha, num, parseISO } from '../utils'
 import FormularioOtek, { Campo } from './FormularioOtek'
 import SelectorJefe from './SelectorJefe'
 
@@ -22,6 +23,7 @@ export default function VacacionesModal({ periodos, usuarioId, empleado, solicit
   const [guardando, setGuardando] = useState(false)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
   const requiereJefe = !esAdmin(empleado)
+  const { user } = useAuth()
 
   // Días a disfrutar: se calculan en cuanto hay fechas, excluyendo fines de semana/descansos y festivos
   useEffect(() => {
@@ -75,83 +77,83 @@ export default function VacacionesModal({ periodos, usuarioId, empleado, solicit
   const nDias = calc?.dias_habiles ?? dias?.dias_habiles
   const nHoras = calc?.horas ?? dias?.horas
   const excluidos = dias?.excluidos || []
-  const resumenExcluidos = excluidos.length
-    ? `No se cuentan: ${excluidos.map((e) => `${fmtFecha(e.fecha)} (${e.motivo.replace('Festivo: ', '')})`).join(', ')}.`
-    : 'Todos los días del rango son laborales.'
   const restante = calc ? (calc.horas_disponible - calc.horas) / hd : null
   const datosValidos = calc && calc.errores.length === 0 && (!requiereJefe || form.aprobador_id)
 
+  // El periodo solo se elige cuando quedan días del periodo anterior y faltan 6 meses o menos para que se pierdan
+  const conSaldo = vigentes.filter((p) => p.horas_disponible > 0)
+  const anterior = conSaldo.length > 1 ? conSaldo[conSaldo.length - 1] : null
+  const limite = new Date()
+  limite.setMonth(limite.getMonth() + 6)
+  const porVencer = anterior && parseISO(anterior.fecha_vencimiento) <= limite ? anterior : null
+  const mostrarPeriodo = !!porVencer || (solicitud && conSaldo.length > 1)
+  const paraOtro = empleado && user && empleado.id !== user.id
+
   return (
-    <FormularioOtek titulo="SOLICITUD DE VACACIONES" onClose={onClose} onFirma={setFirma} enviando={guardando}
+    <FormularioOtek titulo="Solicitud de vacaciones" subtitulo={paraOtro ? `Para: ${empleado.nombre}` : null}
+      onClose={onClose} onFirma={setFirma} enviando={guardando}
       enviarDeshabilitado={!datosValidos || !firma} onEnviar={() => guardar(true)}
       pieExtra={
         <button className="btn btn-sm" disabled={!datosValidos || guardando} onClick={() => guardar(false)}>Guardar borrador</button>
       }>
       {vigentes.length === 0 && (
-        <div className="alerta warn full">
-          Aún no tienes periodos de vacaciones disponibles: se generan al cumplir cada año de servicio
-          {empleado?.fecha_ingreso ? ` (fecha de ingreso ${fmtFecha(empleado.fecha_ingreso, false)})` : ''}.
+        <div className="alerta warn full" style={{ margin: 0 }}>
+          Aún no tienes días de vacaciones: se generan al cumplir cada año de servicio.
         </div>
       )}
 
-      <Campo label="Nombre de Solicitante" requerido>
-        <input value={empleado?.nombre || ''} readOnly />
-      </Campo>
-      <Campo label="Fecha Ingreso" requerido>
-        <input value={empleado?.fecha_ingreso ? fmtFecha(empleado.fecha_ingreso, false) : ''} readOnly />
-      </Campo>
+      {mostrarPeriodo && (
+        <Campo label="Periodo" full
+          ayuda={porVencer ? `Te quedan ${num(porVencer.dias_disponible)} día(s) del ${porVencer.nombre}; vencen el ${fmtFecha(porVencer.fecha_vencimiento, false)}.` : null}>
+          <select value={form.periodo_id} onChange={set('periodo_id')}>
+            {vigentes.map((p) => (
+              <option key={p.id} value={p.id}>{p.nombre} · {num(p.dias_disponible)} día(s) · vence {fmtFecha(p.fecha_vencimiento, false)}</option>
+            ))}
+          </select>
+        </Campo>
+      )}
 
-      <Campo label="Periodo al que corresponden los días a tomar"
-        ayuda={periodo ? `Vence el ${fmtFecha(periodo.fecha_vencimiento, false)}; después de 18 meses los días no usados se pierden.` : null}>
-        <select value={form.periodo_id} onChange={set('periodo_id')}>
-          {vigentes.map((p) => (
-            <option key={p.id} value={p.id}>{p.nombre} (año {p.numero} · vence {fmtFecha(p.fecha_vencimiento, false)})</option>
-          ))}
-        </select>
-      </Campo>
-      <Campo label="Días totales generados en el periodo">
-        <input value={periodo ? `${num(periodo.dias_total)} días${hd === 12 ? ' (de 12 h)' : ''}` : ''} readOnly />
-      </Campo>
-
-      <Campo label="Desde (primer día de vacaciones)" requerido>
+      <Campo label="Desde" requerido>
         <input type="date" value={form.fecha_inicio} onChange={set('fecha_inicio')} />
       </Campo>
-      <Campo label="Hasta (último día de vacaciones)" requerido>
+      <Campo label="Hasta" requerido>
         <input type="date" value={form.fecha_fin} min={form.fecha_inicio} onChange={set('fecha_fin')} />
       </Campo>
 
-      <Campo label="Número de días a disfrutar"
-        ayuda={dias?.error || (nDias !== undefined
-          ? resumenExcluidos
-          : 'Se calcula automáticamente con las fechas: no cuentan fines de semana, descansos ni festivos.')}>
-        <input value={nDias !== undefined ? `${nDias} día${nDias === 1 ? '' : 's'} laborable${nDias === 1 ? '' : 's'} (${num(nHoras)} h)` : ''}
-          readOnly placeholder="Elige las fechas" />
-      </Campo>
-      <Campo label="Saldo de días del periodo indicado"
-        ayuda={calc && restante !== null ? `Después de esta solicitud te quedarán ${num(restante)} días.` : null}>
-        <input value={calc ? `${num(calc.dias_disponible)} días` : periodo ? `${num(periodo.dias_disponible)} días` : ''} readOnly />
-      </Campo>
+      <div className="fo-resumen full">
+        {dias?.error ? <span className="texto-error">{dias.error}</span> : nDias !== undefined ? (
+          <>
+            <div><b>{nDias}</b> día{nDias === 1 ? '' : 's'} laborable{nDias === 1 ? '' : 's'} <span className="muted">({num(nHoras)} h)</span></div>
+            {calc && (
+              <div className="muted">
+                Saldo {num(calc.dias_disponible)} d{restante !== null && <> · te quedarán <b>{num(restante)} d</b></>}
+              </div>
+            )}
+          </>
+        ) : <span className="muted">Elige las fechas; no cuentan fines de semana, descansos ni festivos.</span>}
+        {excluidos.length > 0 && (
+          <div className="fo-ayuda" style={{ flexBasis: '100%' }}>
+            No se cuentan: {excluidos.map((e) => `${fmtFecha(e.fecha)} (${e.motivo.replace('Festivo: ', '')})`).join(', ')}.
+          </div>
+        )}
+      </div>
 
-      <Campo label="Correo Jefe Directo" requerido={requiereJefe}>
+      <Campo label="Jefe que aprueba" requerido={requiereJefe} full>
         <SelectorJefe empleado={empleado} value={form.aprobador_id}
           onChange={(v) => setForm((f) => ({ ...f, aprobador_id: v }))} />
       </Campo>
-      <Campo label="Comentario (opcional)">
+      <Campo label="Comentario (opcional)" full>
         <input value={form.comentario} onChange={set('comentario')} />
       </Campo>
 
-      <div className="full">
-        {periodo && (
-          <div className="fo-ayuda" style={{ marginBottom: 6 }}>
-            {periodo.bloque_cumplido
-              ? `Ya cumpliste tu bloque de ${periodo.minimo_dias} días seguidos en este periodo.`
-              : `Al menos una vez en el periodo debes tomar ${periodo.minimo_dias} días seguidos.`}
-          </div>
+      <div className="full fo-mensajes">
+        {periodo && !periodo.bloque_cumplido && (
+          <div className="fo-ayuda">Al menos una vez en el periodo debes tomar {periodo.minimo_dias} días seguidos.</div>
         )}
         {calc?.errores.map((e) => <div key={e} className="alerta error">{e}</div>)}
         {calc?.advertencias.map((e) => <div key={e} className="alerta warn">{e}</div>)}
         {error && <div className="alerta error">{error}</div>}
-        {datosValidos && !firma && <div className="fo-ayuda">Firma en el recuadro inferior para poder enviar la solicitud.</div>}
+        {datosValidos && !firma && <div className="fo-ayuda">Firma en el recuadro de la derecha para enviar.</div>}
       </div>
     </FormularioOtek>
   )

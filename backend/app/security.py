@@ -100,11 +100,19 @@ def crear_sesion(db: Session, response: Response, usuario: Usuario, metodo: str,
     return sesion
 
 
+def _opciones_cookie() -> dict:
+    return dict(max_age=settings.session_hours * 3600, secure=settings.session_cookie_secure,
+                samesite=settings.session_cookie_samesite, path="/")
+
+
 def poner_cookies(response: Response, token: str, csrf: str):
-    edad = settings.session_hours * 3600
-    comun = dict(max_age=edad, secure=settings.session_cookie_secure, samesite=settings.session_cookie_samesite, path="/")
-    response.set_cookie(settings.session_cookie_name, token, httponly=True, **comun)
-    response.set_cookie(settings.csrf_cookie_name, csrf, httponly=False, **comun)
+    response.set_cookie(settings.session_cookie_name, token, httponly=True, **_opciones_cookie())
+    poner_cookie_csrf(response, csrf)
+
+
+def poner_cookie_csrf(response: Response, csrf: str):
+    """La cookie CSRF la lee el frontend para enviarla en la cabecera X-CSRF-Token (no es HttpOnly)."""
+    response.set_cookie(settings.csrf_cookie_name, csrf, httponly=False, **_opciones_cookie())
 
 
 def borrar_cookies(response: Response):

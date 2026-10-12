@@ -154,165 +154,95 @@ export default function MisVacaciones({ usuarioId }) {
     setModal({ tipo, tipoPermiso })
   }
 
-  const resumen = (
-    <div className={tab === 'calendario' ? 'oculto-movil' : ''}>
-      {usuarioId && empleado && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="fila">
-            <button className="icon-btn plain" onClick={() => navigate(-1)} title="Regresar"><ArrowLeft size={18} /></button>
-            <div>
-              <div style={{ fontWeight: 500, fontSize: 16 }}>{empleado.nombre}</div>
-              <div className="muted">
-                #{empleado.numero_empleado} · {empleado.puesto || ROLES[empleado.rol]} · ingreso {fmtFecha(empleado.fecha_ingreso, false)}
-                {` · ${empleado.antiguedad_anios} año(s)`}
-                {empleado.grupo_nombre && ` · ${empleado.grupo_nombre}`}{empleado.turno_nombre && ` · Turno ${empleado.turno_nombre}`}
-                {empleado.jefe_nombre && ` · Jefe: ${empleado.jefe_nombre}`}
-              </div>
-            </div>
+  const cabecera = usuarioId && empleado && (
+    <div className="card" style={{ marginBottom: 12, padding: '12px 16px' }}>
+      <div className="fila">
+        <button className="icon-btn plain" onClick={() => navigate(-1)} title="Regresar"><ArrowLeft size={18} /></button>
+        <div>
+          <div style={{ fontWeight: 500, fontSize: 16 }}>{empleado.nombre}</div>
+          <div className="muted">
+            #{empleado.numero_empleado} · {empleado.puesto || ROLES[empleado.rol]} · ingreso {fmtFecha(empleado.fecha_ingreso, false)}
+            {` · ${empleado.antiguedad_anios} año(s)`}
+            {empleado.grupo_nombre && ` · ${empleado.grupo_nombre}`}{empleado.turno_nombre && ` · Turno ${empleado.turno_nombre}`}
+            {empleado.jefe_nombre && ` · Jefe: ${empleado.jefe_nombre}`}
           </div>
         </div>
-      )}
+      </div>
+    </div>
+  )
 
-      <MiTurno usuarioId={usuarioId} />
-      {porVencer && (
-        <div className="alerta warn" style={{ marginTop: 0, marginBottom: 12 }}>
-          <b>{num(porVencer.dias_disponible)} día(s)</b> del {porVencer.nombre} vencen el{' '}
-          <b>{fmtFecha(porVencer.fecha_vencimiento, false)}</b>
-          {diasParaVencer !== null && ` (en ${diasParaVencer} días)`}. Después de 18 meses se pierden; úsalos primero.
+  // Franja superior compacta: turno, saldo, registros del año y nueva solicitud
+  const panel = (
+    <div className={`panel-sup ${tab === 'calendario' ? 'oculto-movil' : ''}`}>
+      <MiTurno usuarioId={usuarioId} compacto />
+
+      <div className="card ps-saldo">
+        <div className="ps-cab">
+          <span className="ps-titulo">Vacaciones</span>
+          {periodos.length > 1 ? (
+            <select className="ps-select" value={periodoSel ?? ''} onChange={(e) => setPeriodoSel(Number(e.target.value))}>
+              {periodos.map((p) => <option key={p.id} value={p.id}>{p.nombre}{!p.vigente ? ' (vencido)' : ''}</option>)}
+            </select>
+          ) : periodo && <span className="muted">{periodo.nombre}</span>}
         </div>
-      )}
-      <div className="card resumen-card">
-        <select style={{ width: 'auto', minWidth: 180 }} value={periodoSel ?? ''} onChange={(e) => setPeriodoSel(Number(e.target.value))}>
-          {periodos.length === 0 && <option value="">Sin periodos</option>}
-          {periodos.map((p) => <option key={p.id} value={p.id}>{p.nombre}{!p.vigente ? ' (vencido)' : ''}</option>)}
-        </select>
         {periodo ? (
           <>
-            <div className="grande">{num(periodo.dias_disponible)} días</div>
-            <div className="sub">Vacaciones disponibles</div>
-            {!periodo.vigente && (
-              <div className="alerta error" style={{ marginBottom: 0 }}>
-                Este periodo venció el {fmtFecha(periodo.fecha_vencimiento, false)} (18 meses).
-                {periodo.dias_perdidos > 0 ? ` Se perdieron ${num(periodo.dias_perdidos)} día(s) no utilizados.` : ' No se perdieron días.'}
-              </div>
-            )}
-            <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-              {num(periodo.dias_total)} días máximo · {num(periodo.horas_total)} h ·
-              {esPlanta ? ' días de 12 h' : ' días de 8 h'} · vence {fmtFecha(periodo.fecha_vencimiento, false)}
-            </div>
-            <div className="barra" title="Disponible / Borrador / Solicitado / Validado">
+            <div className="ps-numero"><b>{num(periodo.dias_disponible)}</b> días disponibles</div>
+            <div className="barra delgada"
+              title={`Disponible ${num(periodo.dias_disponible)} d · Borrador ${num(periodo.dias_borrador)} d · Solicitado ${num(periodo.dias_solicitado)} d · Validado ${num(periodo.dias_validado)} d`}>
               <div className="c-disp" style={{ width: pct(periodo.horas_disponible) }} />
               <div className="c-borr" style={{ width: pct(periodo.horas_borrador) }} />
               <div className="c-soli" style={{ width: pct(periodo.horas_solicitado) }} />
               <div className="c-vali" style={{ width: pct(periodo.horas_validado) }} />
               <div style={{ width: pct(periodo.horas_perdidas), background: 'var(--danger)' }} />
             </div>
-            <div className="leyenda gris-box">
-              <span><i className="punto c-disp" />Disponible</span><b>{num(periodo.dias_disponible)} d</b>
-              <span><i className="punto c-borr" />Borrador</span><b>{num(periodo.dias_borrador)} d</b>
-              <span><i className="punto c-soli" />Solicitado</span><b>{num(periodo.dias_solicitado)} d</b>
-              <span><i className="punto c-vali" />Validado</span><b>{num(periodo.dias_validado)} d</b>
-              {periodo.dias_perdidos > 0 && (
-                <><span style={{ color: 'var(--danger)' }}><i className="punto" style={{ background: 'var(--danger)' }} />Perdidos (vencido)</span>
-                  <b style={{ color: 'var(--danger)' }}>{num(periodo.dias_perdidos)} d</b></>
-              )}
+            <div className="ps-pie">
+              {num(periodo.dias_total)} d{esPlanta ? ' de 12 h' : ''}
+              {periodo.dias_solicitado > 0 && ` · ${num(periodo.dias_solicitado)} solicitado(s)`}
+              {periodo.dias_validado > 0 && ` · ${num(periodo.dias_validado)} tomado(s)`}
+              {` · vence ${fmtFecha(periodo.fecha_vencimiento, false)}`}
             </div>
-            {periodo.vigente && (
-              <div className={`alerta ${periodo.bloque_cumplido ? 'ok' : 'warn'}`} style={{ marginBottom: 0 }}>
+            {periodo.vigente ? (
+              <div className={`ps-bloque ${periodo.bloque_cumplido ? 'ok' : ''}`}>
                 {periodo.bloque_cumplido
-                  ? `✓ Ya tomaste (o solicitaste) tu bloque de ${periodo.minimo_dias} días seguidos en este periodo.`
-                  : `Pendiente: al menos una vez en este periodo debes tomar ${periodo.minimo_dias} días seguidos.`}
+                  ? `✓ Bloque de ${periodo.minimo_dias} días seguidos cumplido`
+                  : `Pendiente: un bloque de ${periodo.minimo_dias} días seguidos`}
+              </div>
+            ) : (
+              <div className="ps-bloque vencido">
+                Venció el {fmtFecha(periodo.fecha_vencimiento, false)}
+                {periodo.dias_perdidos > 0 ? `; se perdieron ${num(periodo.dias_perdidos)} día(s)` : ''}
               </div>
             )}
             {periodo.ajuste_horas !== 0 && (
-              <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-                Ajuste: {num(periodo.ajuste_horas)} h {periodo.nota_ajuste && `(${periodo.nota_ajuste})`}
-              </div>
+              <div className="ps-pie">Ajuste: {num(periodo.ajuste_horas)} h {periodo.nota_ajuste && `(${periodo.nota_ajuste})`}</div>
             )}
           </>
         ) : (
-          <div className="alerta warn" style={{ marginTop: 12 }}>
-            Aún no tienes periodos de vacaciones. Se generan al cumplir cada año de servicio.
-          </div>
+          <div className="ps-pie" style={{ marginTop: 6 }}>Aún no tienes días: se generan al cumplir cada año de servicio.</div>
         )}
+      </div>
+
+      <div className="card ps-registros">
         <PanelRegistros anio={anio} registros={registros} foco={foco} onFoco={enfocar} />
       </div>
 
-      <div className="filtros">
-        <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>
-          <option value="">Cualquier estado</option>
-          {Object.entries(ESTADOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        <select value={filtroCat} onChange={(e) => setFiltroCat(e.target.value)}>
-          <option value="">Cualquier categoría</option>
-          <option value="vacaciones">Vacaciones</option>
-          <option value="permisos">Todos los permisos</option>
-          {Object.entries(TIPOS_PERMISO_SOLICITABLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          <option value="consulta">Consultas médicas</option>
-        </select>
-      </div>
-
-      {!soloLectura && <div style={{ marginTop: 12 }} className="dropdown">
-        <button className="btn btn-primary" onClick={() => setMenuNueva(!menuNueva)}>
-          Nueva solicitud <ChevronDown size={16} />
-        </button>
-        {menuNueva && (
-          <div className="dropdown-menu">
-            <button onClick={() => nueva('vac')}><TreePalm size={16} /> Vacaciones</button>
-            <button onClick={() => nueva('perm', 'llegada_tarde')}><Clock size={16} /> Llegada tarde</button>
-            <button onClick={() => nueva('perm', 'salida_temprana')}><Clock size={16} /> Salida temprana</button>
-            <button onClick={() => nueva('perm', 'salida_intermedia')}><Clock size={16} /> Salida durante la jornada</button>
-            <button onClick={() => nueva('perm', 'home_office')}><Laptop size={16} /> Home office</button>
-          </div>
-        )}
-      </div>}
-
-      {error && <div className="alerta error">{error}</div>}
-      <div className="lista-sol">
-        {items.length === 0 && <div className="muted" style={{ padding: 20, textAlign: 'center' }}>No hay solicitudes.</div>}
-        {items.map((i) => (
-          <div className="item-sol" key={`${i.cat === 'vacaciones' ? 'v' : 'p'}${i.id}`}>
-            <div className="info">
-              <div className="titulo">
-                <i className="punto" style={{ background: CATEGORIAS[i.cat]?.color }} />
-                {i.cat === 'vacaciones' ? 'Vacaciones' : i.cat === 'consulta'
-                  ? <span className="fila" style={{ gap: 6 }}><Stethoscope size={16} color="#00796b" /> Consulta médica</span>
-                  : TIPOS_PERMISO[i.tipo]}
-              </div>
-              <div className="detalle">
-                {i.cat === 'vacaciones'
-                  ? `${fmtFecha(i.fecha_inicio)} - ${fmtFecha(i.fecha_fin)} (${i.dias_habiles} d) · ${i.periodo_nombre}`
-                  : i.cat === 'consulta'
-                    ? `${fmtFecha(i.fecha)} ${hhmm(i.hora_inicio)}${i.hora_fin ? ` - ${hhmm(i.hora_fin)}` : ''} · Atendió: ${i.medico_nombre || 'Servicio médico'}`
-                    : i.tipo === 'home_office'
-                      ? `${fmtFecha(i.fecha)} - ${fmtFecha(i.fecha_fin || i.fecha)} (${i.dias ?? '—'} d laborales)`
-                      : `${fmtFecha(i.fecha)} ${hhmm(i.hora_inicio)} - ${hhmm(i.hora_fin)} (${num(i.horas)} h)`}
-              </div>
-              {i.aprobador_nombre && (
-                <div className="detalle muted" style={{ marginTop: 2, fontSize: 12 }}>
-                  {i.estado === 'validado' || i.estado === 'rechazado' ? 'Revisó' : 'Aprueba'}: {i.revisado_por_nombre || i.aprobador_nombre}
-                </div>
-              )}
-              {i.estado === 'rechazado' && i.motivo_rechazo && (
-                <div className="detalle" style={{ color: 'var(--danger)' }}>Motivo: {i.motivo_rechazo}</div>
-              )}
+      {!soloLectura && (
+        <div className="ps-acciones dropdown">
+          <button className="btn btn-primary" onClick={() => setMenuNueva(!menuNueva)}>
+            Nueva solicitud <ChevronDown size={16} />
+          </button>
+          {menuNueva && (
+            <div className="dropdown-menu derecha">
+              <button onClick={() => nueva('vac')}><TreePalm size={16} /> Vacaciones</button>
+              <button onClick={() => nueva('perm', 'llegada_tarde')}><Clock size={16} /> Llegada tarde</button>
+              <button onClick={() => nueva('perm', 'salida_temprana')}><Clock size={16} /> Salida temprana</button>
+              <button onClick={() => nueva('perm', 'salida_intermedia')}><Clock size={16} /> Salida durante la jornada</button>
+              <button onClick={() => nueva('perm', 'home_office')}><Laptop size={16} /> Home office</button>
             </div>
-            <div className="acciones">
-              {i.cat === 'consulta' ? (
-                <>
-                  <span className="pill consulta">Servicio médico</span>
-                  <button className="icon-btn" title="Ver lo que registró el médico" onClick={() => setModal({ tipo: 'consulta', item: i })}><Eye size={16} /></button>
-                </>
-              ) : (<>
-              <span className={`pill ${i.estado}`}>{ESTADOS[i.estado]}</span>
-              <Acciones item={i} esAdmin={esAdmin} soloLectura={soloLectura} onVer={() => setModal({ tipo: 'ver', item: i })}
-                onEditar={() => setModal({ tipo: i.cat === 'vacaciones' ? 'vac' : 'perm', item: i })}
-                accion={accion} />
-              </>)}
-            </div>
-          </div>
-        ))}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   )
 
@@ -322,18 +252,89 @@ export default function MisVacaciones({ usuarioId }) {
         <button className={tab === 'resumen' ? 'activo' : ''} onClick={() => setTab('resumen')}>RESUMEN</button>
         <button className={tab === 'calendario' ? 'activo' : ''} onClick={() => setTab('calendario')}>CALENDARIO</button>
       </div>
-      <div className="vac-layout">
-        {resumen}
-        <div className={`card ${tab === 'resumen' ? 'oculto-movil' : ''}`}>
-          {!soloLectura && (
-            <BarraSeleccion seleccion={seleccion} calc={selCalc} onLimpiar={() => setSeleccion(null)}
-              onVacaciones={() => setModal({ tipo: 'vac', inicial: { fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin || seleccion.inicio } })}
-              onPermiso={() => setModal({ tipo: 'perm', fechaInicial: seleccion.inicio })}
-              onHomeOffice={() => setModal({ tipo: 'perm', tipoPermiso: 'home_office', fechaInicial: seleccion.inicio, fechaFinInicial: seleccion.fin || seleccion.inicio })} />
-          )}
-          <YearCalendar anio={anio} onAnio={setAnio} datos={calendario} seleccion={seleccion}
-            onSeleccion={soloLectura ? undefined : setSeleccion}
-            foco={foco} onFoco={enfocar} onDia={(f) => setModal({ tipo: 'dia', fecha: f })} />
+      {cabecera}
+      {panel}
+      {porVencer && (
+        <div className={`alerta warn ${tab === 'calendario' ? 'oculto-movil' : ''}`} style={{ marginTop: 0, marginBottom: 12 }}>
+          <b>{num(porVencer.dias_disponible)} día(s)</b> del {porVencer.nombre} vencen el{' '}
+          <b>{fmtFecha(porVencer.fecha_vencimiento, false)}</b>
+          {diasParaVencer !== null && ` (en ${diasParaVencer} días)`}. Después de 18 meses se pierden; úsalos primero.
+        </div>
+      )}
+
+      <div className={`card cal-card ${tab === 'resumen' ? 'oculto-movil' : ''}`}>
+        {!soloLectura && (
+          <BarraSeleccion seleccion={seleccion} calc={selCalc} onLimpiar={() => setSeleccion(null)}
+            onVacaciones={() => setModal({ tipo: 'vac', inicial: { fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin || seleccion.inicio } })}
+            onPermiso={() => setModal({ tipo: 'perm', fechaInicial: seleccion.inicio })}
+            onHomeOffice={() => setModal({ tipo: 'perm', tipoPermiso: 'home_office', fechaInicial: seleccion.inicio, fechaFinInicial: seleccion.fin || seleccion.inicio })} />
+        )}
+        <YearCalendar anio={anio} onAnio={setAnio} datos={calendario} seleccion={seleccion}
+          onSeleccion={soloLectura ? undefined : setSeleccion}
+          foco={foco} onFoco={enfocar} onDia={(f) => setModal({ tipo: 'dia', fecha: f })} />
+      </div>
+
+      <div className={`card lista-card ${tab === 'calendario' ? 'oculto-movil' : ''}`}>
+        <div className="lista-cab">
+          <b>{usuarioId ? 'Solicitudes' : 'Mis solicitudes'}</b>
+          <div className="espacio" />
+          <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>
+            <option value="">Cualquier estado</option>
+            {Object.entries(ESTADOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <select value={filtroCat} onChange={(e) => setFiltroCat(e.target.value)}>
+            <option value="">Cualquier categoría</option>
+            <option value="vacaciones">Vacaciones</option>
+            <option value="permisos">Todos los permisos</option>
+            {Object.entries(TIPOS_PERMISO_SOLICITABLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            <option value="consulta">Consultas médicas</option>
+          </select>
+        </div>
+        {error && <div className="alerta error">{error}</div>}
+        <div className="lista-sol">
+          {items.length === 0 && <div className="muted" style={{ padding: 20, textAlign: 'center' }}>No hay solicitudes.</div>}
+          {items.map((i) => (
+            <div className="item-sol" key={`${i.cat === 'vacaciones' ? 'v' : 'p'}${i.id}`}>
+              <div className="info">
+                <div className="titulo">
+                  <i className="punto" style={{ background: CATEGORIAS[i.cat]?.color }} />
+                  {i.cat === 'vacaciones' ? 'Vacaciones' : i.cat === 'consulta'
+                    ? <span className="fila" style={{ gap: 6 }}><Stethoscope size={16} color="#00796b" /> Consulta médica</span>
+                    : TIPOS_PERMISO[i.tipo]}
+                </div>
+                <div className="detalle">
+                  {i.cat === 'vacaciones'
+                    ? `${fmtFecha(i.fecha_inicio)} - ${fmtFecha(i.fecha_fin)} (${i.dias_habiles} d) · ${i.periodo_nombre}`
+                    : i.cat === 'consulta'
+                      ? `${fmtFecha(i.fecha)} ${hhmm(i.hora_inicio)}${i.hora_fin ? ` - ${hhmm(i.hora_fin)}` : ''} · Atendió: ${i.medico_nombre || 'Servicio médico'}`
+                      : i.tipo === 'home_office'
+                        ? `${fmtFecha(i.fecha)} - ${fmtFecha(i.fecha_fin || i.fecha)} (${i.dias ?? '—'} d laborales)`
+                        : `${fmtFecha(i.fecha)} ${hhmm(i.hora_inicio)} - ${hhmm(i.hora_fin)} (${num(i.horas)} h)`}
+                </div>
+                {i.aprobador_nombre && (
+                  <div className="detalle muted" style={{ marginTop: 2, fontSize: 12 }}>
+                    {i.estado === 'validado' || i.estado === 'rechazado' ? 'Revisó' : 'Aprueba'}: {i.revisado_por_nombre || i.aprobador_nombre}
+                  </div>
+                )}
+                {i.estado === 'rechazado' && i.motivo_rechazo && (
+                  <div className="detalle" style={{ color: 'var(--danger)' }}>Motivo: {i.motivo_rechazo}</div>
+                )}
+              </div>
+              <div className="acciones">
+                {i.cat === 'consulta' ? (
+                  <>
+                    <span className="pill consulta">Servicio médico</span>
+                    <button className="icon-btn" title="Ver lo que registró el médico" onClick={() => setModal({ tipo: 'consulta', item: i })}><Eye size={16} /></button>
+                  </>
+                ) : (<>
+                <span className={`pill ${i.estado}`}>{ESTADOS[i.estado]}</span>
+                <Acciones item={i} esAdmin={esAdmin} soloLectura={soloLectura} onVer={() => setModal({ tipo: 'ver', item: i })}
+                  onEditar={() => setModal({ tipo: i.cat === 'vacaciones' ? 'vac' : 'perm', item: i })}
+                  accion={accion} />
+                </>)}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -375,7 +376,8 @@ function PanelRegistros({ anio, registros, foco, onFoco }) {
     <div className="registros">
       <div className="registros-cab">
         <b>Registros {anio}</b>
-        <span className="muted">Clic para verlos en el calendario</span>
+        <span className="muted">Clic para resaltarlos en el calendario</span>
+        {foco && <button type="button" className="btn btn-sm" onClick={() => onFoco(foco)}>Mostrar todo</button>}
       </div>
       {Object.entries(CATEGORIAS).filter(([k]) => k !== 'consulta_medica').map(([k, c]) => (
         <button key={k} type="button" className={`registro ${foco === k ? 'activo' : ''}`} onClick={() => onFoco(k)}
@@ -385,7 +387,6 @@ function PanelRegistros({ anio, registros, foco, onFoco }) {
           <b>{texto(k, registros[k])}</b>
         </button>
       ))}
-      {foco && <button type="button" className="btn btn-sm" onClick={() => onFoco(foco)} style={{ marginTop: 6 }}>Mostrar todo</button>}
     </div>
   )
 }

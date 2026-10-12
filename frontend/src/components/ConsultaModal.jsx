@@ -68,7 +68,7 @@ export default function ConsultaModal({ consulta, onClose, onSaved }) {
   }
 
   return (
-    <FormularioOtek titulo="CONSULTA MÉDICA" onClose={onClose} sinFirma textoEnviar="Guardar consulta"
+    <FormularioOtek titulo="Consulta médica" onClose={onClose} sinFirma textoEnviar="Guardar consulta"
       onEnviar={guardar} enviarDeshabilitado={!listo} enviando={guardando}>
       <Campo label="Tipo de usuario">
         <select value={tipo} onChange={(e) => { setTipo(e.target.value); setForm({ ...form, paciente_id: '' }) }}>

@@ -15,6 +15,7 @@ from ..database import get_db
 from ..models import FlujoOAuth, Usuario
 from ..schemas import CambioPassword, LoginIn, MeOut
 from ..security import (
+    poner_cookie_csrf,
     MAX_INTENTOS, MINUTOS_BLOQUEO, ahora, auditar, borrar_cookies, cerrar_sesion, crear_sesion, get_current_user,
     hash_password, permisos_de,
     puede_usar_password, sesion_actual, verify_password,
@@ -193,8 +194,13 @@ def microsoft_callback(request: Request, code: str | None = None, state: str | N
 
 # ---------------- Sesión ----------------
 @router.get("/me", response_model=MeOut)
-def me(request: Request, user: Usuario = Depends(get_current_user)):
-    return me_out(user, getattr(request.state, "sesion", None) and request.state.sesion.metodo)
+def me(request: Request, response: Response, user: Usuario = Depends(get_current_user)):
+    sesion = getattr(request.state, "sesion", None)
+    # Si el navegador perdió la cookie CSRF pero la sesión sigue válida, se vuelve a emitir para no dejar
+    # al usuario sin poder guardar nada ("Token CSRF inválido") hasta que cierre sesión.
+    if sesion and request.cookies.get(settings.csrf_cookie_name) != sesion.csrf:
+        poner_cookie_csrf(response, sesion.csrf)
+    return me_out(user, sesion and sesion.metodo)
 
 
 @router.post("/logout")

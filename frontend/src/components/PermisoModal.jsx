@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { useAuth } from '../auth'
 import { esAdmin, TIPOS_NOMINA, TIPOS_PERMISO_SOLICITABLES, fmtFecha, hhmm, horasEntre, hoyISO, num } from '../utils'
 import FormularioOtek, { Campo } from './FormularioOtek'
 import SelectorJefe from './SelectorJefe'
@@ -38,6 +39,7 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
   const [firma, setFirma] = useState(null)
   const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
+  const { user } = useAuth()
 
   useEffect(() => {
     api('/departamentos').then(setDepartamentos).catch(() => {})
@@ -87,82 +89,71 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
   const deptos = form.departamento && !departamentos.includes(form.departamento)
     ? [form.departamento, ...departamentos] : departamentos
 
+  const paraOtro = usuario && user && usuario.id !== user.id
+  const titulo = TITULOS[form.tipo] || 'PERMISO DE SALIDA O INGRESO'
+
   return (
-    <FormularioOtek titulo={TITULOS[form.tipo] || 'PERMISOS DE SALIDA O INGRESO'} onClose={onClose} onFirma={setFirma} enviando={guardando}
+    <FormularioOtek titulo={titulo.charAt(0) + titulo.slice(1).toLowerCase()} subtitulo={paraOtro ? `Para: ${usuario.nombre}` : null}
+      onClose={onClose} onFirma={setFirma} enviando={guardando}
       enviarDeshabilitado={!completo || !firma} onEnviar={() => guardar(true)}
       pieExtra={
         <button className="btn btn-sm" disabled={!form.tipo || (!esHO && (!form.hora_inicio || !form.hora_fin)) || guardando}
           onClick={() => guardar(false)}>Guardar borrador</button>
       }>
-      <Campo label="Nombre de Solicitante" requerido>
-        <input value={usuario?.nombre || ''} readOnly />
-      </Campo>
-      <Campo label="Número de Nómina">
-        <input value={usuario?.numero_empleado || ''} readOnly />
-      </Campo>
-
-      <Campo label="Fecha" requerido>
-        <input value={fmtFecha(permiso?.creado?.slice(0, 10) || hoyISO(), false)} readOnly />
-      </Campo>
-      <Campo label="Correo Jefe Directo" requerido={requiereJefe}>
-        <SelectorJefe empleado={usuario} value={form.aprobador_id}
-          onChange={(v) => setForm((f) => ({ ...f, aprobador_id: v }))} />
-      </Campo>
-
-      <Campo label="Departamento" requerido>
-        <select value={form.departamento} onChange={set('departamento')}>
-          <option value="">Buscar elementos</option>
-          {deptos.map((d) => <option key={d} value={d}>{d}</option>)}
-        </select>
-      </Campo>
-      <Campo label={esHO ? 'Desde' : 'Fecha del Permiso'} requerido>
-        <input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value, fecha_fin: form.fecha_fin < e.target.value ? e.target.value : form.fecha_fin })} />
-      </Campo>
-
-      <Campo label={esHO ? 'Motivo / actividades a realizar' : 'Motivo'} requerido>
-        <input value={form.motivo} onChange={set('motivo')}
- />
-      </Campo>
-      <Campo label="Selecciona la opción que corresponda" requerido>
+      <Campo label="Tipo de permiso" requerido full>
         <select value={form.tipo} onChange={set('tipo')}>
-          <option value="">Buscar elementos</option>
+          <option value="">Selecciona…</option>
           {Object.entries(TIPOS_PERMISO_SOLICITABLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
       </Campo>
 
+      <Campo label={esHO ? 'Desde' : 'Fecha'} requerido>
+        <input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value, fecha_fin: form.fecha_fin < e.target.value ? e.target.value : form.fecha_fin })} />
+      </Campo>
       {esHO ? (
-        <>
-          <Campo label="Hasta" requerido ayuda={naturales > 0 ? `${naturales} día(s) naturales; solo cuentan tus días laborales.` : null}>
-            <input type="date" value={form.fecha_fin} min={form.fecha} onChange={set('fecha_fin')} />
-          </Campo>
-          <div className="fo-ayuda" style={{ alignSelf: 'center' }}>
-            El home office no descuenta vacaciones ni horas; requiere la aprobación de tu jefe.
-          </div>
-        </>
+        <Campo label="Hasta" requerido ayuda={naturales > 0 ? `${naturales} día(s) naturales; solo cuentan tus días laborales.` : null}>
+          <input type="date" value={form.fecha_fin} min={form.fecha} onChange={set('fecha_fin')} />
+        </Campo>
       ) : (
-        <>
-          <Campo label="Selecciona como será considerado el tiempo en nómina" requerido>
-            <select value={form.tipo_nomina} onChange={set('tipo_nomina')}>
-              <option value="">Buscar elementos</option>
-              {Object.entries(TIPOS_NOMINA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
-          </Campo>
-          <Campo label="Horario del permiso" requerido
-            ayuda={turno ? `Tu turno: ${turno.nombre} (${hhmm(turno.hora_entrada)} - ${hhmm(turno.hora_salida)})` : null}>
-            <div className="fo-horas">
-              <input type="time" value={form.hora_inicio} onChange={set('hora_inicio')} title={etiquetas[0]} aria-label={etiquetas[0]} />
-              <span>a</span>
-              <input type="time" value={form.hora_fin} onChange={set('hora_fin')} title={etiquetas[1]} aria-label={etiquetas[1]} />
-              <b>{form.hora_inicio && form.hora_fin ? `${num(horas)} h` : ''}</b>
-            </div>
-          </Campo>
-        </>
+        <Campo label="Horario" requerido
+          ayuda={turno ? `Tu turno: ${hhmm(turno.hora_entrada)} - ${hhmm(turno.hora_salida)}` : null}>
+          <div className="fo-horas">
+            <input type="time" value={form.hora_inicio} onChange={set('hora_inicio')} title={etiquetas[0]} aria-label={etiquetas[0]} />
+            <span>a</span>
+            <input type="time" value={form.hora_fin} onChange={set('hora_fin')} title={etiquetas[1]} aria-label={etiquetas[1]} />
+            <b>{form.hora_inicio && form.hora_fin ? `${num(horas)} h` : ''}</b>
+          </div>
+        </Campo>
       )}
 
-      <div className="full">
+      <Campo label="Departamento" requerido full={esHO}>
+        <select value={form.departamento} onChange={set('departamento')}>
+          <option value="">Selecciona…</option>
+          {deptos.map((d) => <option key={d} value={d}>{d}</option>)}
+        </select>
+      </Campo>
+      {!esHO && (
+        <Campo label="Tiempo en nómina" requerido>
+          <select value={form.tipo_nomina} onChange={set('tipo_nomina')}>
+            <option value="">Selecciona…</option>
+            {Object.entries(TIPOS_NOMINA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </Campo>
+      )}
+
+      <Campo label={esHO ? 'Actividades a realizar' : 'Motivo'} requerido full>
+        <input value={form.motivo} onChange={set('motivo')} />
+      </Campo>
+      <Campo label="Jefe que aprueba" requerido={requiereJefe} full>
+        <SelectorJefe empleado={usuario} value={form.aprobador_id}
+          onChange={(v) => setForm((f) => ({ ...f, aprobador_id: v }))} />
+      </Campo>
+
+      <div className="full fo-mensajes">
+        {esHO && <div className="fo-ayuda">El home office no descuenta vacaciones ni horas; requiere la aprobación de tu jefe.</div>}
         {form.tipo && !esHO && <div className="fo-ayuda">{etiquetas[0]} → {etiquetas[1]}.</div>}
         {error && <div className="alerta error">{error}</div>}
-        {completo && !firma && <div className="fo-ayuda">Firma en el recuadro inferior para poder enviar el permiso.</div>}
+        {completo && !firma && <div className="fo-ayuda">Firma en el recuadro de la derecha para enviar.</div>}
       </div>
     </FormularioOtek>
   )

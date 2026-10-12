@@ -69,9 +69,9 @@ export default function FirmaPad({ onChange }) {
 
   return (
     <div className="firma">
-      <button type="button" className="firma-borrar" onClick={borrar} title="Borrar firma"><Eraser size={30} /></button>
       <canvas ref={canvasRef} className="firma-area" onPointerDown={inicio} onPointerMove={mover}
         onPointerUp={fin} onPointerLeave={fin} aria-label="Área para firmar" />
+      <button type="button" className="firma-borrar" onClick={borrar} title="Borrar firma"><Eraser size={14} /> Borrar</button>
     </div>
   )
 }

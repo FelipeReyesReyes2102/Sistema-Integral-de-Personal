@@ -18,10 +18,10 @@ export default function SelectorJefe({ empleado, value, onChange }) {
 
   return (
     <select value={value || ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
-      <option value="">Buscar elementos</option>
+      <option value="">Selecciona…</option>
       {jefes.map((j) => (
         <option key={j.id} value={j.id}>
-          {j.email} — {j.nombre}{j.id === empleado?.jefe_id ? ' (jefe directo)' : ''}
+          {j.nombre}{j.id === empleado?.jefe_id ? ' (jefe directo)' : ''} · {j.email}
         </option>
       ))}
     </select>

@@ -6,7 +6,7 @@ import { fmtFecha } from '../utils'
 const horario = (t) => (t ? `${t.hora_entrada} - ${t.hora_salida}` : '')
 
 /** Tarjeta "Mi turno": turno actual, de la próxima semana y siguientes (con rotación). */
-export default function MiTurno({ usuarioId }) {
+export default function MiTurno({ usuarioId, compacto = false }) {
   const [d, setD] = useState(null)
   useEffect(() => {
     api('/turnos/mi-turno', { query: usuarioId ? { usuario_id: usuarioId } : undefined }).then(setD).catch(() => setD(null))
@@ -15,6 +15,24 @@ export default function MiTurno({ usuarioId }) {
   if (!d || !d.actual) return null
   const sig = d.siguiente_semana?.turno
   const cambia = d.rotacion_activa && sig && sig.id !== d.actual.id
+
+  if (compacto) {
+    return (
+      <div className="card mi-turno compacto">
+        <div className="ps-cab">
+          <span className="ps-titulo"><Clock size={14} /> {usuarioId ? 'Turno' : 'Mi turno'}</span>
+          {d.grupo && <span className="chip">{d.grupo}</span>}
+        </div>
+        <div className="mt-turno">{d.actual.nombre}</div>
+        <div className="ps-pie">{horario(d.actual)}</div>
+        {d.rotacion_activa && sig && (
+          <div className={`ps-bloque ${cambia ? '' : 'ok'}`} title={d.semanas.map((s) => `${fmtFecha(s.desde)}: ${s.turno?.nombre || '—'}`).join(' · ')}>
+            <RefreshCw size={11} /> Próx. semana: <b>{sig.nombre}</b>{cambia ? ' (cambio)' : ''}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="card mi-turno" style={{ marginBottom: 14 }}>
