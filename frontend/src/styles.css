@@ -535,3 +535,11 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .sel-periodo:hover { border-color: var(--c); }
 .sel-periodo.activo { background: var(--c); border-color: var(--c); color: #fff; font-weight: 600; }
 .sel-periodo.activo i { background: #fff; }
+
+/* Fondo claro de cada periodo vacacional en el calendario */
+.cd-franja:not(.cd-festivo) { background: color-mix(in srgb, var(--franja) 20%, #fff); }
+.cd-franja-inicio { box-shadow: inset 3px 0 0 var(--franja); font-weight: 700; }
+.zoom-dia.franja { background: color-mix(in srgb, var(--franja) 13%, #fff); }
+.zoom-chip.franja-chip { background: var(--franja); color: #fff; }
+.ley-franja i { background: color-mix(in srgb, var(--franja) 35%, #fff); border: 1px solid var(--franja); }
+.cd-pasado.cd-franja { opacity: .7; }

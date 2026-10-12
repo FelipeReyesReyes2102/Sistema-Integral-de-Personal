@@ -11,15 +11,18 @@ import VacacionesModal from '../components/VacacionesModal'
 import YearCalendar from '../components/YearCalendar'
 import {
   CATEGORIAS, esAdmin as esAdminFn, ESTADOS, ROLES, TIPOS_NOMINA, TIPOS_PERMISO, TIPOS_PERMISO_SOLICITABLES, eventosPorFecha, fmtFecha, hhmm, num,
-  parseISO,
+  parseISO, toISO,
 } from '../utils'
 import EventosDia from '../components/EventosDia'
 import MiTurno from '../components/MiTurno'
 import DetalleConsulta from '../components/DetalleConsulta'
 
-// Color con el que se pinta en el calendario la selección de cada periodo vacacional
-const COLORES_PERIODO = ['#2e7d32', '#6a1b9a', '#00838f', '#c2185b', '#ef6c00', '#1565c0']
+// Color de cada periodo vacacional: el calendario pinta sus días con un tono claro de este color
+const COLORES_PERIODO = ['#f9a825', '#7e57c2', '#00897b', '#d81b60', '#0288d1', '#ef6c00']
 export const colorPeriodo = (p) => (p ? COLORES_PERIODO[(p.numero - 1) % COLORES_PERIODO.length] : COLORES_PERIODO[0])
+
+const unAnioDespues = (iso) => toISO(new Date(Number(iso.slice(0, 4)) + 1, Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10))))
+const diaAnterior = (iso) => { const d = parseISO(iso); d.setDate(d.getDate() - 1); return toISO(d) }
 
 export default function MisVacaciones({ usuarioId }) {
   const { user } = useAuth()
@@ -79,6 +82,23 @@ export default function MisVacaciones({ usuarioId }) {
     setPeriodoSolicitud((id) => (periodosConSaldo.some((p) => p.id === id) ? id : periodosConSaldo[0]?.id ?? null))
   }, [periodosConSaldo])
   const periodoElegido = periodos.find((p) => p.id === periodoSolicitud)
+
+  // Tramos del calendario que corresponden a cada periodo (de un aniversario al siguiente), más el próximo
+  const franjas = useMemo(() => {
+    const orden = [...periodos].sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio))
+    const out = orden.map((p, i) => ({
+      desde: p.fecha_inicio,
+      hasta: diaAnterior(orden[i + 1]?.fecha_inicio || unAnioDespues(p.fecha_inicio)),
+      color: colorPeriodo(p), nombre: p.nombre,
+    }))
+    const ultimo = orden[orden.length - 1]
+    const inicioProximo = ultimo ? unAnioDespues(ultimo.fecha_inicio) : empleado?.fecha_ingreso && unAnioDespues(empleado.fecha_ingreso)
+    if (inicioProximo) {
+      out.push({ desde: inicioProximo, hasta: '9999-12-31', color: colorPeriodo({ numero: (ultimo?.numero || 0) + 1 }),
+        nombre: `Periodo ${inicioProximo.slice(0, 4)} (próximo)` })
+    }
+    return out
+  }, [periodos, empleado?.fecha_ingreso])
 
   // Vista previa de días laborales del rango seleccionado en el calendario
   useEffect(() => {
@@ -282,7 +302,7 @@ export default function MisVacaciones({ usuarioId }) {
         </div>
       )}
 
-      <div className={`card cal-card ${tab === 'resumen' ? 'oculto-movil' : ''}`} style={{ '--sel': colorPeriodo(periodoElegido) }}>
+      <div className={`card cal-card ${tab === 'resumen' ? 'oculto-movil' : ''}`}>
         {!soloLectura && (
           <BarraSeleccion seleccion={seleccion} calc={selCalc} onLimpiar={() => setSeleccion(null)}
             periodos={periodosConSaldo} periodoId={periodoSolicitud} onPeriodo={setPeriodoSolicitud}
@@ -293,7 +313,7 @@ export default function MisVacaciones({ usuarioId }) {
         <YearCalendar anio={anio} onAnio={setAnio} datos={calendario} seleccion={seleccion}
           onSeleccion={soloLectura ? undefined : setSeleccion}
           foco={foco} onFoco={enfocar} onDia={(f) => setModal({ tipo: 'dia', fecha: f })}
-          colorSeleccion={colorPeriodo(periodoElegido)} />
+          franjas={franjas} />
       </div>
 
       <div className={`card lista-card ${tab === 'calendario' ? 'oculto-movil' : ''}`}>

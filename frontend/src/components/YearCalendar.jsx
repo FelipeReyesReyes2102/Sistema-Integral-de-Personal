@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CalendarDays, ChevronLeft, ChevronRight, LayoutGrid } from 'lucide-react'
-import { CATEGORIAS, DIAS_SEMANA, ESTADOS, MESES, eventosPorFecha, estiloEvento, hoyISO, toISO } from '../utils'
+import { CATEGORIAS, DIAS_SEMANA, ESTADOS, MESES, eventosPorFecha, estiloEvento, fmtFecha, hoyISO, toISO } from '../utils'
 
 const PRIORIDAD = ['vacaciones', 'home_office', 'salida_intermedia', 'salida_temprana', 'llegada_tarde', 'consulta', 'consulta_medica']
 
@@ -10,9 +10,9 @@ const PRIORIDAD = ['vacaciones', 'home_office', 'salida_intermedia', 'salida_tem
  * - Clic en un día libre: selecciona el rango para una nueva solicitud (`onSeleccion`).
  * - `foco`: muestra solo una categoría (se elige en la leyenda o en el panel de registros).
  * - Los días anteriores a hoy no se pueden seleccionar: solo se consultan (historial).
- * - `colorSeleccion`: color del rango seleccionado (p. ej. el del periodo vacacional elegido).
+ * - `franjas`: [{desde, hasta, color, nombre}] fondo claro de cada periodo vacacional, para ver dónde cambia.
  */
-export default function YearCalendar({ anio, onAnio, datos, seleccion, onSeleccion, onDia, foco, onFoco, colorSeleccion }) {
+export default function YearCalendar({ anio, onAnio, datos, seleccion, onSeleccion, onDia, foco, onFoco, franjas = [] }) {
   const [vista, setVista] = useState('anio')
   const [mes, setMes] = useState(new Date().getMonth())
   const [hover, setHover] = useState(null)
@@ -26,6 +26,8 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
   const anios = Array.from({ length: 7 }, (_, i) => new Date().getFullYear() - 4 + i)
 
   const pasado = (f) => f < hoy
+  const franjaDe = (f) => franjas.find((x) => f >= x.desde && f <= x.hasta)
+  const franjasDelAnio = franjas.filter((x) => x.desde <= `${anio}-12-31` && x.hasta >= `${anio}-01-01`)
   const hoverValido = hover && !pasado(hover) ? hover : null
   let [ri, rf] = [seleccion?.inicio, seleccion?.fin || (seleccion?.inicio && hoverValido) || seleccion?.inicio]
   if (ri && rf && rf < ri) [ri, rf] = [rf, ri]
@@ -87,9 +89,13 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
     if (evs.length || (seleccionable && !pasado(f))) clases.push('cd-clic')
     if (seleccionable && pasado(f) && !evs.length) clases.push('cd-pasado')
     if (foco && !evs.length && !(foco === 'festivo' && festivos[f])) clases.push('cd-atenuado')
-    const estilo = p && !enRango(f) ? estiloEvento(p.cat, p.estado) : undefined
+    const fr = franjaDe(f)
+    if (fr) clases.push('cd-franja')
+    if (fr && fr.desde === f) clases.push('cd-franja-inicio')
+    const estilo = p && !enRango(f) ? estiloEvento(p.cat, p.estado) : fr ? { '--franja': fr.color } : undefined
     return (
-      <button key={f} type="button" className={clases.join(' ')} style={estilo} title={titulo(f, evs)}
+      <button key={f} type="button" className={clases.join(' ')} style={estilo}
+        title={[fr && (fr.desde === f ? `Inicia el ${fr.nombre}` : fr.nombre), titulo(f, evs)].filter(Boolean).join('\n')}
         onClick={() => clicDia(f)} onMouseEnter={() => setHover(f)}>
         {Number(f.slice(8))}
         {evs.length > 1 && (
@@ -128,7 +134,7 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
   )
 
   return (
-    <div onMouseLeave={() => setHover(null)} style={colorSeleccion ? { '--sel': colorSeleccion } : undefined}>
+    <div onMouseLeave={() => setHover(null)}>
       {nav}
       {seleccionable && (
         <div className="cal-tip">
@@ -167,9 +173,13 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
               if (f === hoy) clases.push('hoy')
               if (enRango(f)) clases.push(noLab.has(f) || festivos[f] ? 'rango-excluido' : 'rango')
               if (f === ri || f === rf) clases.push('rango-ext')
+              const fr = franjaDe(f)
+              if (fr) clases.push('franja')
               return (
-                <div key={f} className={clases.join(' ')} onClick={() => seleccionar(f)} onMouseEnter={() => setHover(f)}>
+                <div key={f} className={clases.join(' ')} onClick={() => seleccionar(f)} onMouseEnter={() => setHover(f)}
+                  style={fr ? { '--franja': fr.color } : undefined} title={fr?.nombre}>
                   <span className="zoom-num">{Number(f.slice(8))}</span>
+                  {fr && fr.desde === f && <span className="zoom-chip franja-chip">Inicia {fr.nombre}</span>}
                   {festivos[f] && <span className="zoom-chip rojo">{festivos[f]}</span>}
                   {noLab.has(f) && !evs.length && <span className="zoom-chip gris">Descanso</span>}
                   {evs.map((e, i) => (
@@ -193,6 +203,12 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
             onClick={() => onFoco?.(foco === k ? null : k)} disabled={!onFoco}>
             <i style={{ background: c.color }} /> {c.label}
           </button>
+        ))}
+        {franjasDelAnio.map((x) => (
+          <span key={x.desde} className="ley-chip estatico ley-franja" style={{ '--franja': x.color }}
+            title={`Del ${fmtFecha(x.desde, false)}${x.hasta < '9999' ? ` al ${fmtFecha(x.hasta, false)}` : ' en adelante'}`}>
+            <i /> {x.nombre}
+          </span>
         ))}
         <span className="ley-estados">
           <i style={estiloEvento('vacaciones', 'validado')}>A</i> Aprobado
