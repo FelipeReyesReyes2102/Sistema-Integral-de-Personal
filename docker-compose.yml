@@ -1,0 +1,15 @@
+# Opcional: levanta PostgreSQL si tienes Docker instalado.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: vacaciones
+      POSTGRES_PASSWORD: vacaciones
+      POSTGRES_DB: vacaciones
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
