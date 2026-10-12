@@ -23,7 +23,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    actualizar_esquema(engine)
+    # En producción las migraciones se ejecutan aparte (python -m app.migrar); en desarrollo, al iniciar.
+    if os.environ.get("SIP_MIGRAR_AL_INICIAR", "1") == "1":
+        actualizar_esquema(engine)
     _refrescar_config(forzar=True)
     tarea = None
     if os.environ.get("SIP_TAREAS", "1") == "1":  # SIP_TAREAS=0 para desactivarlas (p. ej. en workers extra)

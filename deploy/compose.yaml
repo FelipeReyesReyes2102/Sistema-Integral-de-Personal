@@ -1,0 +1,91 @@
+# Despliegue de SIP-O · Sistema Integral de Personal
+#
+# Uso (desde la carpeta deploy/ de la versión):
+#   docker compose -p sip-o --env-file despliegue.env -f compose.yaml <comando>
+#
+# despliegue.env (NO contiene secretos) define:
+#   SIP_VERSION=<sha corto del commit>      -> etiqueta de las imágenes
+#   SIP_SECRETS_DIR=/home/jose/sip-o-secrets -> carpeta 700 con app.env y db.env (600)
+#   SIP_PUERTO=8085                          -> puerto en 127.0.0.1 para el Nginx del servidor
+#
+# Nota Docker Snap: NO se usa security_opt no-new-privileges (AppArmor de snap.docker.dockerd
+# lo bloquea con "exec ... operation not permitted"); en su lugar: usuarios sin root, cap_drop
+# y sistema de archivos de solo lectura en api y web.
+
+name: sip-o
+
+x-logs: &logs
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    env_file:
+      - ${SIP_SECRETS_DIR:?define SIP_SECRETS_DIR}/db.env   # POSTGRES_PASSWORD
+    environment:
+      POSTGRES_DB: sip_o
+      POSTGRES_USER: sip_o
+      TZ: America/Mexico_City
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [sip]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sip_o -d sip_o -h 127.0.0.1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    logging: *logs
+    # Sin "ports": la base nunca se publica en el host.
+
+  api:
+    image: sip-o-api:${SIP_VERSION:?define SIP_VERSION}
+    build:
+      context: ../backend
+    restart: unless-stopped
+    env_file:
+      - ${SIP_SECRETS_DIR}/app.env      # DATABASE_URL, SECRET_KEY, URLs públicas
+    environment:
+      SIP_MIGRAR_AL_INICIAR: "0"        # migraciones: docker compose run --rm api python -m app.migrar
+      SESSION_COOKIE_SECURE: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [sip]
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    logging: *logs
+
+  web:
+    image: sip-o-web:${SIP_VERSION}
+    build:
+      context: ../frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${SIP_PUERTO:-8085}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [sip]
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    logging: *logs
+
+networks:
+  sip:
+    name: sip-o_red
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
+
+volumes:
+  pgdata:
+    name: sip-o_pgdata

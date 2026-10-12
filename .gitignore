@@ -5,3 +5,6 @@ __pycache__/
 frontend/node_modules/
 frontend/dist/
 *.db
+
+# Despliegue: configuración local de la versión (sin secretos, pero propia de cada servidor)
+deploy/despliegue.env
