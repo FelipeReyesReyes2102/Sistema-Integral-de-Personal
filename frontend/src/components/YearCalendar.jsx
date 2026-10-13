@@ -6,8 +6,9 @@ const PRIORIDAD = ['vacaciones', 'home_office', 'salida_intermedia', 'salida_tem
 
 /**
  * Calendario interactivo.
- * - Clic en un día con eventos: abre sus detalles (`onDia`).
- * - Clic en un día libre: selecciona el rango para una nueva solicitud (`onSeleccion`).
+ * - Clic izquierdo: selecciona el rango para una nueva solicitud (`onSeleccion`). Si el día no se puede
+ *   seleccionar (pasado, fuera del saldo o solo consulta) y tiene eventos, abre sus detalles.
+ * - Clic derecho: abre la ventana del día con sus eventos y cumpleaños (`onDia`).
  * - `foco`: muestra solo una categoría (se elige en la leyenda o en el panel de registros).
  * - Los días anteriores a hoy no se pueden seleccionar: solo se consultan (historial).
  * - `franjas`: [{desde, hasta, color, nombre}] fondo claro de cada periodo vacacional, para ver dónde cambia.
@@ -71,13 +72,17 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
     onSeleccion({ inicio: a, fin: b })
   }
 
+  const conInfo = (f) => eventosDe(f).length > 0 || !!festivos[f] || !!cumples[f]
+
   function clicDia(fecha) {
-    const evs = eventosDe(fecha)
-    if ((evs.length || (festivos[fecha] && foco === 'festivo')) && onDia && !(seleccion?.inicio && !seleccion.fin)) {
-      onDia(fecha)
-    } else {
-      seleccionar(fecha)
-    }
+    if (seleccionable && !pasado(fecha) && !fuera(fecha)) return seleccionar(fecha)
+    if (onDia && conInfo(fecha)) onDia(fecha)
+  }
+
+  function verDia(e, fecha) {
+    if (!onDia) return
+    e.preventDefault() // reemplaza el menú contextual del navegador
+    onDia(fecha)
   }
 
   function diasDelMes(m) {
@@ -118,7 +123,7 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
     if (cumples[f]) clases.push('cd-cumple')
     if (enRango(f)) clases.push(noLab.has(f) || festivos[f] ? 'cd-rango-excluido' : 'cd-rango')
     if (f === ri || f === rf) clases.push('cd-rango-ext')
-    if (evs.length || (seleccionable && !pasado(f))) clases.push('cd-clic')
+    if (conInfo(f) || (seleccionable && !pasado(f))) clases.push('cd-clic')
     if (seleccionable && pasado(f) && !evs.length) clases.push('cd-pasado')
     if (fuera(f) && !pasado(f)) clases.push('cd-fuera')
     if (foco && !evs.length && !(foco === 'festivo' && festivos[f])) clases.push('cd-atenuado')
@@ -129,7 +134,7 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
     return (
       <button key={f} type="button" className={clases.join(' ')} style={estilo}
         title={[fr && (fr.desde === f ? `Inicia el ${fr.nombre}` : fr.nombre), titulo(f, evs)].filter(Boolean).join('\n')}
-        onClick={() => clicDia(f)} onMouseEnter={() => setHover(f)}>
+        onClick={() => clicDia(f)} onContextMenu={(e) => verDia(e, f)} onMouseEnter={() => setHover(f)}>
         {Number(f.slice(8))}
         {evs.length > 1 && (
           <span className="cd-puntos">
@@ -171,7 +176,7 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
       {nav}
       {seleccionable && !compacto && (
         <div className="cal-tip">
-          Clic en un evento para ver sus detalles · clic en días libres (de hoy en adelante) para seleccionar un rango · clic en el nombre del mes para ampliarlo
+          Clic izquierdo: seleccionar días para una solicitud · clic derecho: ver eventos y cumpleaños del día · clic en el nombre del mes para ampliarlo
         </div>
       )}
 
@@ -210,7 +215,8 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
               const fr = franjaDe(f)
               if (fr) clases.push('franja')
               return (
-                <div key={f} className={clases.join(' ')} onClick={() => seleccionar(f)} onMouseEnter={() => setHover(f)}
+                <div key={f} className={clases.join(' ')} onClick={() => clicDia(f)} onContextMenu={(e) => verDia(e, f)}
+                  onMouseEnter={() => setHover(f)}
                   style={fr ? { '--franja': fr.color } : undefined} title={fr?.nombre}>
                   <span className="zoom-num">{Number(f.slice(8))}</span>
                   {fr && fr.desde === f && <span className="zoom-chip franja-chip">Inicia {fr.nombre}</span>}

@@ -3,6 +3,7 @@ import { Lock } from 'lucide-react'
 import { api } from '../api'
 import { CATEGORIAS, ESTADOS, RESULTADOS_CONSULTA, TIPOS_NOMINA, TIPOS_PERMISO, fmtFecha, hhmm, num } from '../utils'
 import Modal from './Modal'
+import Avatar from './Avatar'
 
 function Fila({ k, v }) {
   if (v === undefined || v === null || v === '') return null
@@ -91,10 +92,17 @@ export default function EventosDia({ fecha, eventos, festivo, descanso, persona,
       )}
       {cumpleanos.length > 0 && (
         <div className="ev-cumples">
-          {cumpleanos.map((c) => <div key={c.usuario_id}>🎂 Cumpleaños de <b>{c.nombre}</b>{c.puesto ? <span className="muted"> · {c.puesto}</span> : null}</div>)}
+          <div className="ev-cumples-tit">🎂 Cumpleaños</div>
+          {cumpleanos.map((c) => (
+            <div key={c.usuario_id} className="ev-cumple">
+              <Avatar usuario={{ id: c.usuario_id, nombre: c.nombre, tiene_foto: c.tiene_foto }} tam={34} />
+              <div><b>{c.nombre}</b>{c.puesto && <div className="muted" style={{ fontSize: 12 }}>{c.puesto}</div>}</div>
+            </div>
+          ))}
         </div>
       )}
-      {eventos.length === 0 && <div className="muted">No hay eventos registrados este día.</div>}
+      {eventos.length > 0 && <div className="ev-subtit">{eventos.length} evento(s) registrado(s)</div>}
+      {eventos.length === 0 && !cumpleanos.length && !festivo && <div className="muted">No hay eventos registrados este día.</div>}
       <div className="ev-lista">
         {eventos.map((e, i) => <Evento key={`${e.cat}-${e.id}-${i}`} e={e} />)}
       </div>

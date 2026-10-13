@@ -533,7 +533,9 @@ function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, hayGe
   if (!seleccion) {
     return (
       <div className="barra-sel vacia">
-        <MousePointerClick size={16} /> Selecciona en el calendario el primer y el último día para pedir vacaciones, home office o un permiso.
+        <MousePointerClick size={16} />
+        <span><b>Clic izquierdo</b>: elige el primer y el último día para pedir vacaciones, home office o un permiso ·{' '}
+          <b>clic derecho</b>: ver los eventos y cumpleaños del día.</span>
         <div className="espacio" />
         {selectorPeriodo}
       </div>
