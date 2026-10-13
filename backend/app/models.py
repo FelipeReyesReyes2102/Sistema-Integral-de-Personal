@@ -113,6 +113,7 @@ class Usuario(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     rol: Mapped[str] = mapped_column(String(20), default=ROL_OFICINA)
     fecha_ingreso: Mapped[date] = mapped_column(Date)
+    fecha_nacimiento: Mapped[date | None] = mapped_column(Date)  # en el calendario solo se muestra día y mes
     puesto: Mapped[str | None] = mapped_column(String(120))
     departamento: Mapped[str | None] = mapped_column(String(120))
     turno_id: Mapped[int | None] = mapped_column(ForeignKey("turnos.id", ondelete="SET NULL"))

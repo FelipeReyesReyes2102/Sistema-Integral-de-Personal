@@ -60,6 +60,17 @@ def _consultas(db: Session, u: Usuario, desde: date, hasta: date, con_detalle: b
              "hora_fin": c.hora_fin.strftime("%H:%M") if c.hora_fin else None} for c in db.scalars(q)]
 
 
+def _cumpleanos(db: Session, anio: int, yo: int) -> list[dict]:
+    """Cumpleaños del personal activo en el año indicado. Solo día y mes (nunca el año de nacimiento ni la edad)."""
+    res = []
+    for u in db.scalars(select(Usuario).where(Usuario.activo.is_(True), Usuario.fecha_nacimiento.is_not(None))):
+        n = u.fecha_nacimiento
+        dia = 28 if (n.month, n.day) == (2, 29) and monthrange(anio, 2)[1] == 28 else n.day
+        res.append({"fecha": date(anio, n.month, dia).isoformat(), "nombre": u.nombre, "usuario_id": u.id,
+                    "tiene_foto": u.foto_tipo is not None, "puesto": u.puesto, "propio": u.id == yo})
+    return sorted(res, key=lambda c: (c["fecha"], c["nombre"]))
+
+
 @router.get("/calendario")
 def calendario(anio: int, usuario_id: int | None = None, db: Session = Depends(get_db),
                user: Usuario = Depends(get_current_user)):
@@ -82,6 +93,7 @@ def calendario(anio: int, usuario_id: int | None = None, db: Session = Depends(g
         "vacaciones": _dias_vacaciones(db, u, desde, hasta),
         "permisos": _permisos_por_dia(db, u, desde, hasta),
         "consultas": _consultas(db, u, desde, hasta, detalle_clinico),
+        "cumpleanos": _cumpleanos(db, anio, u.id),
     }
 
 

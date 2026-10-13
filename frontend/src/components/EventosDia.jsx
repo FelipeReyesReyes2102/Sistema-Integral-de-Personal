@@ -79,7 +79,7 @@ function Evento({ e }) {
 }
 
 /** Ventana con todos los eventos de un día y sus especificaciones. */
-export default function EventosDia({ fecha, eventos, festivo, descanso, persona, onClose, pie }) {
+export default function EventosDia({ fecha, eventos, festivo, descanso, persona, onClose, pie, cumpleanos = [] }) {
   return (
     <Modal titulo={`${persona ? `${persona} · ` : ''}${fmtFecha(fecha)}`} onClose={onClose}
       pie={<>{pie}<button className="btn" onClick={onClose}>Cerrar</button></>}>
@@ -87,6 +87,11 @@ export default function EventosDia({ fecha, eventos, festivo, descanso, persona,
         <div className="fila" style={{ gap: 8, marginBottom: 10 }}>
           {festivo && <span className="pill rechazado">Festivo: {festivo}</span>}
           {descanso && <span className="pill borrador">Día de descanso</span>}
+        </div>
+      )}
+      {cumpleanos.length > 0 && (
+        <div className="ev-cumples">
+          {cumpleanos.map((c) => <div key={c.usuario_id}>🎂 Cumpleaños de <b>{c.nombre}</b>{c.puesto ? <span className="muted"> · {c.puesto}</span> : null}</div>)}
         </div>
       )}
       {eventos.length === 0 && <div className="muted">No hay eventos registrados este día.</div>}

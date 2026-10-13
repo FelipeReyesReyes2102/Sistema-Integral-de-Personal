@@ -8,7 +8,7 @@ import { ROLES, esSuperAdmin, fmtFecha, num } from '../utils'
 import { useAuth } from '../auth'
 
 const VACIO = {
-  numero_empleado: '', nombre: '', email: '', email_personal: '', rol: 'oficina', fecha_ingreso: '', puesto: '', departamento: '',
+  numero_empleado: '', nombre: '', email: '', email_personal: '', rol: 'oficina', fecha_ingreso: '', fecha_nacimiento: '', puesto: '', departamento: '',
   turno_id: '', grupo_id: '', jefe_id: '', es_jefe: false, activo: true, password: '', microsoft_oid: '', dias_disponibles: '',
 }
 
@@ -220,6 +220,7 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
       jefe_id: form.jefe_id ? Number(form.jefe_id) : null,
       email: form.rol === 'planta' ? null : (form.email || '').trim() || null,
       email_personal: (form.email_personal || '').trim() || null,
+      fecha_nacimiento: form.fecha_nacimiento || null,
       password: null,
       microsoft_oid: form.microsoft_oid || null,
       foto: foto || null,
@@ -318,6 +319,10 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
         </label>
         <label className="campo full">Nombre completo<input value={form.nombre} onChange={set('nombre')} /></label>
         <label className="campo">Fecha de ingreso<input type="date" value={form.fecha_ingreso || ''} onChange={set('fecha_ingreso')} /></label>
+        <label className="campo">Fecha de nacimiento (cumpleaños)
+          <input type="date" value={form.fecha_nacimiento || ''} onChange={set('fecha_nacimiento')} />
+          <span className="muted" style={{ fontSize: 11 }}>En el calendario todos ven solo el día y el mes, nunca el año.</span>
+        </label>
         <label className="campo">Días de vacaciones disponibles (opcional)
           <input type="number" min="0" step="0.5" value={form.dias_disponibles ?? ''} onChange={set('dias_disponibles')}
             placeholder={saldoActual ? `Actualmente ${num(saldoActual.total)}` : 'Ej. 18'} />

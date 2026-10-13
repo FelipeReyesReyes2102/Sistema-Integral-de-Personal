@@ -10,7 +10,7 @@ import PermisoModal from '../components/PermisoModal'
 import VacacionesModal from '../components/VacacionesModal'
 import YearCalendar from '../components/YearCalendar'
 import {
-  CATEGORIAS, esAdmin as esAdminFn, ESTADOS, ROLES, TIPOS_NOMINA, TIPOS_PERMISO, TIPOS_PERMISO_SOLICITABLES, eventosPorFecha, estiloEvento, fmtFecha, hhmm, num,
+  CATEGORIAS, esAdmin as esAdminFn, ESTADOS, ROLES, TIPOS_NOMINA, TIPOS_PERMISO, TIPOS_PERMISO_SOLICITABLES, diaMes, eventosPorFecha, estiloEvento, fmtFecha, hhmm, hoyISO, num,
   parseISO, toISO,
 } from '../utils'
 import EventosDia from '../components/EventosDia'
@@ -182,6 +182,7 @@ export default function MisVacaciones({ usuarioId }) {
       }
     }
     r.festivo.dias = (calendario?.festivos || []).length
+    r.cumpleanos.dias = (calendario?.cumpleanos || []).length
     return r
   }, [eventos, permisos, calendario, anio])
 
@@ -205,6 +206,7 @@ export default function MisVacaciones({ usuarioId }) {
           {fmtFecha(empleado.fecha_ingreso, false)}
           <span className="muted"> · {empleado.antiguedad_anios > 0 ? `${empleado.antiguedad_anios} año(s)` : 'menos de 1 año'}</span>
         </dd>
+        {empleado.fecha_nacimiento && <><dt>Cumpleaños</dt><dd>{diaMes(empleado.fecha_nacimiento)}</dd></>}
         {empleado.numero_empleado && <><dt>Nómina</dt><dd>{empleado.numero_empleado}</dd></>}
         {empleado.jefe_nombre && <><dt>Jefe</dt><dd>{empleado.jefe_nombre}</dd></>}
         {empleado.grupo_nombre && <><dt>Grupo</dt><dd>{empleado.grupo_nombre}</dd></>}
@@ -318,7 +320,7 @@ export default function MisVacaciones({ usuarioId }) {
 
       {lista && (
         <ListaSolicitudes categoria={lista} anio={anio} vacaciones={vacaciones} permisos={permisos} consultas={consultas}
-          festivos={calendario?.festivos || []} esAdmin={esAdmin} soloLectura={soloLectura} accion={accion}
+          festivos={calendario?.festivos || []} cumpleanos={calendario?.cumpleanos || []} esAdmin={esAdmin} soloLectura={soloLectura} accion={accion}
           onVer={(i) => setModal({ tipo: 'ver', item: i })}
           onEditar={(i) => setModal({ tipo: i.cat === 'vacaciones' ? 'vac' : 'perm', item: i })}
           onConsulta={(i) => setModal({ tipo: 'consulta', item: i })}
@@ -339,7 +341,8 @@ export default function MisVacaciones({ usuarioId }) {
         <EventosDia fecha={modal.fecha} eventos={eventos[modal.fecha] || []}
           festivo={(calendario?.festivos || []).find((x) => x.fecha === modal.fecha)?.nombre}
           descanso={(calendario?.no_laborables || []).includes(modal.fecha)}
-          persona={usuarioId ? empleado?.nombre : null} onClose={() => setModal(null)} />
+          persona={usuarioId ? empleado?.nombre : null} onClose={() => setModal(null)}
+          cumpleanos={(calendario?.cumpleanos || []).filter((c) => c.fecha === modal.fecha)} />
       )}
       {modal?.tipo === 'consulta' && (
         <DetalleConsulta consultaId={modal.item.detalle_clinico ? modal.item.id : null} resumen={modal.item}
@@ -355,6 +358,7 @@ function PanelRegistros({ anio, registros, franjas, onAbrir }) {
     if (k === 'vacaciones' || k === 'home_office') return `${r.dias} día(s)${r.pendientes ? ` · ${r.pendientes} pend.` : ''}`
     if (k === 'consulta') return `${r.dias} consulta(s)`
     if (k === 'festivo') return `${r.dias} día(s)`
+    if (k === 'cumpleanos') return `${r.dias} persona(s)`
     return `${r.dias} · ${num(r.horas)} h`
   }
   return (
@@ -389,7 +393,7 @@ function PanelRegistros({ anio, registros, franjas, onAbrir }) {
 }
 
 /** Ventana con las solicitudes de una categoría de Registros (o todas), con filtros y acciones. */
-function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, festivos, esAdmin, soloLectura, accion,
+function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, festivos, cumpleanos, esAdmin, soloLectura, accion,
   onVer, onEditar, onConsulta, onClose }) {
   const [estado, setEstado] = useState('')
   const [cat, setCat] = useState(categoria === 'todas' ? '' : categoria)
@@ -405,6 +409,25 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
       .filter((i) => !soloAnio || (i.orden.slice(0, 4) <= String(anio) && i.fin.slice(0, 4) >= String(anio)))
       .sort((a, b) => b.orden.localeCompare(a.orden))
   }, [vacaciones, permisos, consultas, estado, cat, soloAnio, anio])
+
+  if (cat === 'cumpleanos') {
+    const hoy = hoyISO()
+    const proximo = cumpleanos.find((c) => c.fecha >= hoy)
+    return (
+      <Modal titulo={`Cumpleaños ${anio}`} onClose={onClose} pie={<button className="btn" onClick={onClose}>Cerrar</button>}>
+        {cumpleanos.length === 0 && <div className="muted">Aún no hay fechas de cumpleaños registradas.</div>}
+        <div className="lista-cumples">
+          {cumpleanos.map((c) => (
+            <div key={c.usuario_id} className={`cumple-fila ${c.fecha === hoy ? 'hoy' : ''} ${c === proximo && c.fecha !== hoy ? 'proximo' : ''}`}>
+              <Avatar usuario={{ id: c.usuario_id, nombre: c.nombre, tiene_foto: c.tiene_foto }} tam={30} />
+              <div className="cf-datos"><b>{c.nombre}</b>{c.puesto && <span className="muted"> · {c.puesto}</span>}</div>
+              <span className="cf-fecha">{c.fecha === hoy ? '🎂 ¡Hoy!' : diaMes(c.fecha)}</span>
+            </div>
+          ))}
+        </div>
+      </Modal>
+    )
+  }
 
   if (cat === 'festivo') {
     return (

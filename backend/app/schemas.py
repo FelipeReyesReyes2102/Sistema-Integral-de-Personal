@@ -77,6 +77,7 @@ class UsuarioBase(BaseModel):
     email_personal: str | None = None
     rol: Rol = "oficina"
     fecha_ingreso: date
+    fecha_nacimiento: date | None = None
     puesto: str | None = None
     departamento: str | None = None
     turno_id: int | None = None

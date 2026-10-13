@@ -22,6 +22,8 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
   const hoy = hoyISO()
 
   const festivos = Object.fromEntries((datos?.festivos || []).map((f) => [f.fecha, f.nombre]))
+  const cumples = {}
+  for (const c of datos?.cumpleanos || []) (cumples[c.fecha] ||= []).push(c)
   const noLab = new Set(datos?.no_laborables || [])
   const todos = eventosPorFecha(datos)
   const eventosDe = (f) => (todos[f] || []).filter((e) => !foco || foco === e.cat || (foco === 'consulta' && e.cat === 'consulta_medica'))
@@ -99,6 +101,7 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
 
   const principal = (evs) => [...evs].sort((a, b) => PRIORIDAD.indexOf(a.cat) - PRIORIDAD.indexOf(b.cat))[0]
   const titulo = (f, evs) => [
+    cumples[f] && `🎂 Cumpleaños: ${cumples[f].map((c) => c.nombre).join(', ')}`,
     festivos[f] && `Festivo: ${festivos[f]}`,
     noLab.has(f) && 'Día de descanso',
     ...evs.map((e) => `${CATEGORIAS[e.cat]?.label}${e.estado && e.estado !== 'registrada' ? ` · ${ESTADOS[e.estado]}` : ''}${e.hora_inicio && e.cat !== 'home_office' ? ` · ${e.hora_inicio}` : ''}`),
@@ -112,6 +115,7 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
     if (noLab.has(f)) clases.push('cd-descanso')
     if (festivos[f]) clases.push('cd-festivo')
     if (f === hoy) clases.push('cd-hoy')
+    if (cumples[f]) clases.push('cd-cumple')
     if (enRango(f)) clases.push(noLab.has(f) || festivos[f] ? 'cd-rango-excluido' : 'cd-rango')
     if (f === ri || f === rf) clases.push('cd-rango-ext')
     if (evs.length || (seleccionable && !pasado(f))) clases.push('cd-clic')
@@ -211,6 +215,7 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
                   <span className="zoom-num">{Number(f.slice(8))}</span>
                   {fr && fr.desde === f && <span className="zoom-chip franja-chip">Inicia {fr.nombre}</span>}
                   {festivos[f] && <span className="zoom-chip rojo">{festivos[f]}</span>}
+                  {(cumples[f] || []).map((c) => <span key={c.usuario_id} className="zoom-chip cumple" title="Cumpleaños">🎂 {c.nombre}</span>)}
                   {noLab.has(f) && !evs.length && <span className="zoom-chip gris">Descanso</span>}
                   {evs.map((e, i) => (
                     <button key={i} type="button" className="zoom-chip evento" style={estiloEvento(e.cat, e.estado)}

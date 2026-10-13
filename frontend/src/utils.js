@@ -46,6 +46,7 @@ export const CATEGORIAS = {
   consulta: { label: 'Consulta médica', color: '#00897b' },
   consulta_medica: { label: 'Consulta médica (permiso)', color: '#00897b' },
   festivo: { label: 'Festivo', color: '#e53935' },
+  cumpleanos: { label: 'Cumpleaños', color: '#ec407a' },
 }
 
 /** Estilo de un evento según su estado: validado = sólido, solicitado = tenue, borrador = contorno. */
@@ -64,6 +65,12 @@ export function eventosPorFecha(datos) {
   for (const p of datos?.permisos || []) agregar(p.fecha, { cat: p.tipo, estado: p.estado, id: p.id, hora_inicio: p.hora_inicio, hora_fin: p.hora_fin })
   for (const c of datos?.consultas || []) agregar(c.fecha, { cat: 'consulta', estado: 'registrada', id: c.id, hora_inicio: c.hora_inicio, hora_fin: c.hora_fin })
   return mapa
+}
+
+/** "1990-05-14" -> "14 de mayo" (los cumpleaños nunca muestran el año). */
+export function diaMes(iso) {
+  if (!iso) return ''
+  return parseISO(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })
 }
 
 export const RESULTADOS_CONSULTA = {
