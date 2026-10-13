@@ -115,11 +115,15 @@ export default function MisVacaciones({ usuarioId }) {
   // Tramos del calendario que corresponden a cada periodo (de un aniversario al siguiente), más el próximo
   const franjas = useMemo(() => {
     const orden = [...periodos].sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio))
+    const hoy = toISO(new Date())
     const out = orden.map((p, i) => ({
       desde: p.fecha_inicio,
       hasta: diaAnterior(orden[i + 1]?.fecha_inicio || unAnioDespues(p.fecha_inicio)),
       color: colorPeriodo(p), nombre: p.nombre,
-    }))
+      // Un periodo anterior se deja de mostrar cuando ya no tiene días (o venció); el actual siempre se muestra
+      visible: p.fecha_inicio <= hoy && (orden[i + 1]?.fecha_inicio || '9999') > hoy
+        ? true : p.vigente && p.dias_disponible > 0,
+    })).filter((x) => x.visible)
     const ultimo = orden[orden.length - 1]
     const inicioProximo = ultimo ? unAnioDespues(ultimo.fecha_inicio) : empleado?.fecha_ingreso && unAnioDespues(empleado.fecha_ingreso)
     if (inicioProximo) {
