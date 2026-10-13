@@ -38,6 +38,7 @@ export default function MisVacaciones({ usuarioId }) {
   const [tab, setTab] = useState('resumen')
   const [modal, setModal] = useState(null) // {tipo: 'vac'|'perm'|'ver'|'dia'|'consulta', item, tipoPermiso, inicial}
   const [lista, setLista] = useState(null) // categoría de Registros cuya lista de solicitudes está abierta ('todas' = todas)
+  const [foco, setFoco] = useState(null) // categoría de Registros resaltada en el calendario
   const [seleccion, setSeleccion] = useState(null) // {inicio, fin} elegido en el calendario
   const [selCalc, setSelCalc] = useState(null)
   const [periodoSolicitud, setPeriodoSolicitud] = useState(null) // periodo del que se toman los días seleccionados
@@ -86,6 +87,10 @@ export default function MisVacaciones({ usuarioId }) {
   const esGeneral = periodoSolicitud === 'general'
   const periodoElegido = periodos.find((p) => p.id === periodoSolicitud)
   const diasGeneral = periodosConSaldo.reduce((t, p) => t + p.dias_disponible, 0)
+  // No se pueden pedir días después del vencimiento del periodo (aniversario + 18 meses); en General, el más lejano
+  const fechaMax = esGeneral
+    ? periodosConSaldo.reduce((m, p) => (p.fecha_vencimiento > m ? p.fecha_vencimiento : m), '') || null
+    : periodoElegido?.fecha_vencimiento || null
   const maxDias = esGeneral
     ? periodosConSaldo.reduce((t, p) => t + Math.floor(p.dias_disponible + 1e-6), 0)
     : periodoElegido && periodoElegido.dias_disponible > 0 ? periodoElegido.dias_disponible : null
@@ -131,13 +136,17 @@ export default function MisVacaciones({ usuarioId }) {
     }).then(setSelCalc).catch(() => {})
   }, [seleccion, periodos, periodoSolicitud])
 
-  // Esc cancela la selección de días (si no hay una ventana abierta)
+  // Esc cancela la selección de días y luego el resaltado (si no hay una ventana abierta)
   useEffect(() => {
-    if (!seleccion || modal || lista) return
-    const alPresionar = (e) => { if (e.key === 'Escape') setSeleccion(null) }
+    if ((!seleccion && !foco) || modal || lista) return
+    const alPresionar = (e) => {
+      if (e.key !== 'Escape') return
+      if (seleccion) setSeleccion(null)
+      else setFoco(null)
+    }
     window.addEventListener('keydown', alPresionar)
     return () => window.removeEventListener('keydown', alPresionar)
-  }, [seleccion, modal, lista])
+  }, [seleccion, foco, modal, lista])
 
   const refrescar = () => {
     setModal(null)
@@ -288,7 +297,9 @@ export default function MisVacaciones({ usuarioId }) {
       </div>
 
       <div className="card ps-registros">
-        <PanelRegistros anio={anio} registros={registros} franjas={franjasDelAnio} onAbrir={setLista} />
+        <PanelRegistros anio={anio} registros={registros} franjas={franjasDelAnio} foco={foco}
+          onFoco={(k) => setFoco((f) => (f === k ? null : k))}
+          onAbrir={(k) => { setFoco(k === 'todas' ? null : k); setLista(k) }} />
       </div>
     </div>
   )
@@ -306,7 +317,7 @@ export default function MisVacaciones({ usuarioId }) {
         {!soloLectura && (
           <BarraSeleccion seleccion={seleccion} calc={selCalc} onLimpiar={() => setSeleccion(null)}
             periodos={periodosConSaldo} periodoId={periodoSolicitud} onPeriodo={setPeriodoSolicitud}
-            hayGeneral={hayGeneral} diasGeneral={diasGeneral} maxDias={maxDias}
+            hayGeneral={hayGeneral} diasGeneral={diasGeneral} maxDias={maxDias} fechaMax={fechaMax}
             onVacaciones={() => setModal({ tipo: 'vac', inicial: { fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin || seleccion.inicio, periodo_id: esGeneral ? null : periodoSolicitud } })}
             onPermiso={() => setModal({ tipo: 'perm', fechaInicial: seleccion.inicio })}
             onHomeOffice={() => setModal({ tipo: 'perm', tipoPermiso: 'home_office', fechaInicial: seleccion.inicio, fechaFinInicial: seleccion.fin || seleccion.inicio })} />
@@ -315,7 +326,7 @@ export default function MisVacaciones({ usuarioId }) {
           onSeleccion={soloLectura ? undefined : setSeleccion}
           onDia={(f) => setModal({ tipo: 'dia', fecha: f })}
           franjas={franjas}
-          maxDias={maxDias || null} />
+          maxDias={maxDias || null} fechaMax={fechaMax} foco={foco} />
       </div>
 
       {lista && (
@@ -353,7 +364,7 @@ export default function MisVacaciones({ usuarioId }) {
 }
 
 /** Registros del año por categoría (clic: abre sus solicitudes) y leyenda de periodos y estados del calendario. */
-function PanelRegistros({ anio, registros, franjas, onAbrir }) {
+function PanelRegistros({ anio, registros, franjas, foco, onFoco, onAbrir }) {
   const texto = (k, r) => {
     if (k === 'vacaciones' || k === 'home_office') return `${r.dias} día(s)${r.pendientes ? ` · ${r.pendientes} pend.` : ''}`
     if (k === 'consulta') return `${r.dias} consulta(s)`
@@ -365,11 +376,14 @@ function PanelRegistros({ anio, registros, franjas, onAbrir }) {
     <div className="registros">
       <div className="registros-cab">
         <b>Registros {anio}</b>
-        <span className="muted">Clic para ver las solicitudes</span>
+        <span className="muted">Clic: resaltar en el calendario · doble clic: ver solicitudes</span>
+        {foco && <button type="button" className="btn btn-sm" onClick={() => onFoco(foco)}>Quitar resaltado</button>}
         <button type="button" className="btn btn-sm" onClick={() => onAbrir('todas')}>Ver todas</button>
       </div>
       {Object.entries(CATEGORIAS).filter(([k]) => k !== 'consulta_medica').map(([k, c]) => (
-        <button key={k} type="button" className="registro" onClick={() => onAbrir(k)}>
+        <button key={k} type="button" className={`registro ${foco === k ? 'activo' : ''}`}
+          style={foco === k ? { borderColor: c.color, background: `${c.color}14` } : undefined}
+          onClick={(e) => { if (e.detail <= 1) onFoco(k) }} onDoubleClick={() => onAbrir(k)}>
           <i style={{ background: c.color }} />
           <span>{c.label}</span>
           <b>{texto(k, registros[k])}</b>
@@ -509,7 +523,7 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
   )
 }
 
-function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, hayGeneral, diasGeneral, maxDias, onLimpiar,
+function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, hayGeneral, diasGeneral, maxDias, fechaMax, onLimpiar,
   onVacaciones, onPermiso, onHomeOffice }) {
   // Periodo del que se tomarán los días (General: primero el más antiguo)
   const selectorPeriodo = periodos.length > 0 && (
@@ -553,7 +567,7 @@ function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, hayGe
       <b>{fmtFecha(seleccion.inicio)}{!unDia && ` → ${fmtFecha(fin)}`}</b>
       <span className="muted">
         {!seleccion.fin
-          ? `Elige el último día…${maxDias ? ` (máximo ${Math.floor(maxDias + 1e-6)} días laborales${general ? ' entre tus periodos' : ` del ${periodoSel?.nombre}`})` : ''}`
+          ? `Elige el último día…${maxDias ? ` (máximo ${Math.floor(maxDias + 1e-6)} días laborales${general ? ' entre tus periodos' : ` del ${periodoSel?.nombre}`}${fechaMax ? `, a más tardar el ${fmtFecha(fechaMax, false)}` : ''})` : ''}`
           : `${naturales} día(s) naturales`}
         {calc && seleccion.fin && ` · ${calc.dias_habiles} laborales`}
         {reparto.length > 1 && ` (${reparto.map((t) => `${t.dias} del ${t.periodo_nombre}`).join(' + ')})`}
