@@ -76,6 +76,31 @@ def sincronizar_periodos(db: Session, usuario: Usuario, hoy: date | None = None)
     return sorted(usuario.periodos, key=lambda p: p.numero)
 
 
+def asignar_dias_disponibles(db: Session, usuario: Usuario, dias: float, hoy: date | None = None) -> list[tuple[str, float]]:
+    """Fija el saldo disponible del empleado: primero el periodo actual (hasta sus días de ley) y el resto en los
+    anteriores que sigan vigentes. Ajusta `ajuste_horas` de cada periodo; no hace commit. Devuelve el reparto."""
+    hoy = hoy or date.today()
+    vigentes = sorted((p for p in sincronizar_periodos(db, usuario, hoy) if p.fecha_vencimiento >= hoy),
+                      key=lambda p: p.fecha_inicio, reverse=True)
+    hd = reglas.HORAS_DIA[reglas.categoria(usuario.rol)]
+    if dias > 0 and not vigentes:
+        raise HTTPException(422, "El empleado aún no tiene periodos de vacaciones vigentes: el primero se genera al "
+                                 "cumplir un año de servicio.")
+    maximo = sum(p.horas_otorgadas for p in vigentes) / hd
+    if dias > maximo + 1e-9:
+        detalle = ", ".join(f"{p.nombre}: {p.horas_otorgadas / hd:g}" for p in vigentes)
+        raise HTTPException(422, f"El empleado puede tener como máximo {maximo:g} día(s) disponibles ({detalle}).")
+    restante, reparto = dias * hd, []
+    for p in vigentes:
+        objetivo = min(restante, p.horas_otorgadas)
+        restante -= objetivo
+        actual = saldo_periodo(db, p, hoy=hoy).horas_disponible
+        p.ajuste_horas = round((p.ajuste_horas or 0) + objetivo - actual, 4)
+        p.nota_ajuste = "Saldo capturado en el alta o edición del empleado"
+        reparto.append((p.nombre, objetivo / hd))
+    return reparto
+
+
 def horas_por_estado(db: Session, periodo_id: int, excluir_id: int | None = None) -> dict[str, float]:
     q = select(SolicitudVacaciones).where(
         SolicitudVacaciones.periodo_id == periodo_id, SolicitudVacaciones.estado.in_(ESTADOS_ACTIVOS)

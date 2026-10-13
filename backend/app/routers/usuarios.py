@@ -16,7 +16,9 @@ from ..security import (
     ahora, asignar_password_temporal, auditar, get_current_user, hash_password, limpiar_sesiones_de,
     password_inutilizable, puede_usar_password, require_admin,
 )
-from ..services import empleado_visible, puede_aprobar, saldo_periodo, sincronizar_periodos, usuario_out
+from ..services import (
+    asignar_dias_disponibles, empleado_visible, puede_aprobar, saldo_periodo, sincronizar_periodos, usuario_out,
+)
 
 router = APIRouter(prefix="/api", tags=["usuarios"])
 
@@ -156,9 +158,19 @@ def crear(data: UsuarioIn, request: Request, db: Session = Depends(get_db), admi
     _aplicar_foto(u, data)
     db.add(u)
     _commit(db)
+    sincronizar_periodos(db, u)
+    if data.dias_disponibles is not None:
+        try:
+            reparto = asignar_dias_disponibles(db, u, data.dias_disponibles)
+        except HTTPException:
+            db.rollback()
+            db.delete(u)  # el saldo indicado no es válido: no se deja el alta a medias
+            db.commit()
+            raise
+        auditar(db, "saldo_inicial", usuario_id=u.id, actor_id=admin.id,
+                detalle=", ".join(f"{n}: {d:g} d" for n, d in reparto), request=request)
     auditar(db, "usuario_creado", usuario_id=u.id, actor_id=admin.id, detalle=f"{u.email or u.email_personal or u.numero_empleado} · {u.rol}", request=request)
     db.commit()
-    sincronizar_periodos(db, u)
     out = usuario_out(u)
     if temporal:
         out.password_temporal, out.password_temporal_expira = temporal, u.password_temporal_expira
@@ -210,6 +222,11 @@ def editar(usuario_id: int, data: UsuarioIn, request: Request, db: Session = Dep
     _commit(db)
     db.refresh(u)
     sincronizar_periodos(db, u)
+    if data.dias_disponibles is not None:
+        reparto = asignar_dias_disponibles(db, u, data.dias_disponibles)
+        auditar(db, "saldo_ajustado", usuario_id=u.id, actor_id=admin.id,
+                detalle=", ".join(f"{n}: {d:g} d" for n, d in reparto), request=request)
+        db.commit()
     return usuario_out(u)
 
 
@@ -281,7 +298,7 @@ def _aplicar_foto(u: Usuario, data: UsuarioIn):
 
 
 def _limpiar(data: UsuarioIn) -> dict:
-    valores = data.model_dump(exclude={"password", "foto", "quitar_foto"})
+    valores = data.model_dump(exclude={"password", "foto", "quitar_foto", "dias_disponibles"})
     corporativo = (valores.get("email") or "").strip().lower() or None
     personal = (valores.get("email_personal") or "").strip().lower() or None
     if not tiene_correo_corporativo(data.rol):

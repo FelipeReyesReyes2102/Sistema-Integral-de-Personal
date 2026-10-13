@@ -92,6 +92,9 @@ class UsuarioIn(UsuarioBase):
     microsoft_oid: str | None = Field(None, max_length=64)
     foto: Annotated[str, Field(max_length=700_000, pattern=r"^data:image/(png|jpeg|jpg|gif|webp);base64,[A-Za-z0-9+/=]+$")] | None = None
     quitar_foto: bool = False
+    # Opcional: días de vacaciones disponibles hoy. Se llenan primero en el periodo actual (hasta sus días de ley)
+    # y el resto en el periodo anterior.
+    dias_disponibles: float | None = Field(None, ge=0, le=400)
 
 
 class UsuarioOut(UsuarioBase, ORM):

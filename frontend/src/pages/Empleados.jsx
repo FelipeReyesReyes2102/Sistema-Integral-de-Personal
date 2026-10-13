@@ -9,7 +9,7 @@ import { useAuth } from '../auth'
 
 const VACIO = {
   numero_empleado: '', nombre: '', email: '', email_personal: '', rol: 'oficina', fecha_ingreso: '', puesto: '', departamento: '',
-  turno_id: '', grupo_id: '', jefe_id: '', es_jefe: false, activo: true, password: '', microsoft_oid: '',
+  turno_id: '', grupo_id: '', jefe_id: '', es_jefe: false, activo: true, password: '', microsoft_oid: '', dias_disponibles: '',
 }
 
 export default function Empleados() {
@@ -114,7 +114,7 @@ export default function Empleados() {
                     <><button className="icon-btn" title="Restablecer contraseña (temporal de 6 dígitos)" onClick={() => restablecer(u)}><KeyRound size={16} /></button>{' '}</>
                   )}
                   {(soySuper || u.rol !== 'superadmin') && <>
-                  <button className="icon-btn" title="Editar" onClick={() => setEditar({ ...u, password: '', email: u.email ?? '', email_personal: u.email_personal ?? '', turno_id: u.turno_id ?? '', grupo_id: u.grupo_id ?? '', jefe_id: u.jefe_id ?? '' })}><Pencil size={16} /></button>{' '}
+                  <button className="icon-btn" title="Editar" onClick={() => setEditar({ ...u, password: '', email: u.email ?? '', email_personal: u.email_personal ?? '', turno_id: u.turno_id ?? '', grupo_id: u.grupo_id ?? '', jefe_id: u.jefe_id ?? '', dias_disponibles: '' })}><Pencil size={16} /></button>{' '}
                   {u.activo && <button className="icon-btn rojo" title="Desactivar" onClick={() => desactivar(u)}><UserX size={16} /></button>}
                   </>}
                 </td>
@@ -141,6 +141,18 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
   const [registrando, setRegistrando] = useState(false)
   const [temporalJefe, setTemporalJefe] = useState(null) // jefe recién registrado: muestra su contraseña temporal
   useEffect(() => { api('/jefes').then((js) => setJefes(js.filter((j) => j.id !== inicial.id))) }, [])
+  // Saldo actual (al editar) para mostrarlo junto al campo de días disponibles
+  const [saldoActual, setSaldoActual] = useState(null)
+  useEffect(() => {
+    if (!inicial.id) return
+    api('/periodos', { query: { usuario_id: inicial.id } }).then((ps) => {
+      const vig = ps.filter((p) => p.vigente)
+      setSaldoActual({
+        total: vig.reduce((t, p) => t + p.dias_disponible, 0),
+        detalle: vig.map((p) => `${p.nombre}: ${num(p.dias_disponible)} d`).join(' · '),
+      })
+    }).catch(() => {})
+  }, [inicial.id])
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
   const graph = estado?.microsoft_graph_configurado
   const msLogin = estado?.microsoft_login_configurado
@@ -212,6 +224,8 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
       microsoft_oid: form.microsoft_oid || null,
       foto: foto || null,
       quitar_foto: quitarFoto,
+      // Vacío: sin cambios (en el alta, los días completos que le corresponden por antigüedad)
+      dias_disponibles: form.dias_disponibles === '' || form.dias_disponibles == null ? null : Number(form.dias_disponibles),
     }
     try {
       if (inicial.id) {
@@ -304,6 +318,15 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
         </label>
         <label className="campo full">Nombre completo<input value={form.nombre} onChange={set('nombre')} /></label>
         <label className="campo">Fecha de ingreso<input type="date" value={form.fecha_ingreso || ''} onChange={set('fecha_ingreso')} /></label>
+        <label className="campo">Días de vacaciones disponibles (opcional)
+          <input type="number" min="0" step="0.5" value={form.dias_disponibles ?? ''} onChange={set('dias_disponibles')}
+            placeholder={saldoActual ? `Actualmente ${num(saldoActual.total)}` : 'Ej. 18'} />
+          <span className="muted" style={{ fontSize: 11 }}>
+            {saldoActual && saldoActual.detalle ? `Hoy: ${saldoActual.detalle}. ` : ''}
+            Se llenan primero en el periodo actual (hasta sus días de ley) y el resto en el anterior.
+            {inicial.id ? ' Vacío: sin cambios.' : ' Vacío: los días completos según su antigüedad.'}
+          </span>
+        </label>
         <label className="campo">Puesto<input value={form.puesto || ''} onChange={set('puesto')} /></label>
         <label className="campo">Departamento<input value={form.departamento || ''} onChange={set('departamento')} /></label>
         <label className="campo">Turno
