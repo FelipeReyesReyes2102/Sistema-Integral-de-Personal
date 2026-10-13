@@ -8,9 +8,14 @@ import SelectorJefe from './SelectorJefe'
 /** Solicitud de vacaciones (formato O-tek) con cálculo en vivo de días y saldo. */
 export default function VacacionesModal({ periodos, usuarioId, empleado, solicitud, inicial, onClose, onSaved }) {
   const vigentes = periodos.filter((p) => p.vigente || p.id === solicitud?.periodo_id)
+  const conSaldo = vigentes.filter((p) => p.horas_disponible > 0)
+  // Con saldo en varios periodos, por defecto modo General ('') : primero los días del periodo más antiguo
+  let periodoInicial
+  if (solicitud?.periodo_id) periodoInicial = solicitud.periodo_id
+  else if (inicial && inicial.periodo_id !== undefined) periodoInicial = inicial.periodo_id || ''
+  else periodoInicial = conSaldo.length > 1 ? '' : conSaldo[conSaldo.length - 1]?.id || vigentes[0]?.id || ''
   const [form, setForm] = useState({
-    // Por defecto el periodo vigente más antiguo con saldo, para no perder días al cumplir 18 meses
-    periodo_id: solicitud?.periodo_id || inicial?.periodo_id || [...vigentes].reverse().find((p) => p.horas_disponible > 0)?.id || vigentes[0]?.id || '',
+    periodo_id: periodoInicial,
     fecha_inicio: solicitud?.fecha_inicio || inicial?.fecha_inicio || '',
     fecha_fin: solicitud?.fecha_fin || inicial?.fecha_fin || '',
     comentario: solicitud?.comentario || '',
@@ -43,12 +48,13 @@ export default function VacacionesModal({ periodos, usuarioId, empleado, solicit
 
   useEffect(() => {
     setCalc(null)
-    if (!form.periodo_id || !form.fecha_inicio || !form.fecha_fin) return
+    const general = !form.periodo_id
+    if ((general && conSaldo.length === 0) || !form.fecha_inicio || !form.fecha_fin) return
     const t = setTimeout(() => {
       api('/vacaciones/calcular', {
         method: 'POST',
         body: {
-          periodo_id: Number(form.periodo_id), fecha_inicio: form.fecha_inicio, fecha_fin: form.fecha_fin,
+          periodo_id: general ? null : Number(form.periodo_id), fecha_inicio: form.fecha_inicio, fecha_fin: form.fecha_fin,
           usuario_id: usuarioId, excluir_id: solicitud?.id,
         },
       }).then((c) => { setCalc(c); setError('') }).catch((e) => setError(e.message))
@@ -59,7 +65,7 @@ export default function VacacionesModal({ periodos, usuarioId, empleado, solicit
   async function guardar(enviar) {
     setError('')
     setGuardando(true)
-    const body = { ...form, periodo_id: Number(form.periodo_id), enviar, usuario_id: usuarioId, firma }
+    const body = { ...form, periodo_id: form.periodo_id ? Number(form.periodo_id) : null, enviar, usuario_id: usuarioId, firma }
     try {
       if (solicitud) await api(`/vacaciones/${solicitud.id}`, { method: 'PUT', body })
       else await api('/vacaciones', { method: 'POST', body })
@@ -81,12 +87,12 @@ export default function VacacionesModal({ periodos, usuarioId, empleado, solicit
   const datosValidos = calc && calc.errores.length === 0 && (!requiereJefe || form.aprobador_id)
 
   // El periodo solo se elige cuando quedan días del periodo anterior y faltan 6 meses o menos para que se pierdan
-  const conSaldo = vigentes.filter((p) => p.horas_disponible > 0)
   const anterior = conSaldo.length > 1 ? conSaldo[conSaldo.length - 1] : null
   const limite = new Date()
   limite.setMonth(limite.getMonth() + 6)
   const porVencer = anterior && parseISO(anterior.fecha_vencimiento) <= limite ? anterior : null
   const mostrarPeriodo = !!porVencer || (conSaldo.length > 1 && (solicitud || inicial?.periodo_id))
+  const reparto = calc?.reparto || []
   const paraOtro = empleado && user && empleado.id !== user.id
 
   return (
@@ -106,6 +112,9 @@ export default function VacacionesModal({ periodos, usuarioId, empleado, solicit
         <Campo label="Periodo" full
           ayuda={porVencer ? `Te quedan ${num(porVencer.dias_disponible)} día(s) del ${porVencer.nombre}; vencen el ${fmtFecha(porVencer.fecha_vencimiento, false)}.` : null}>
           <select value={form.periodo_id} onChange={set('periodo_id')}>
+            {conSaldo.length > 1 && (
+              <option value="">General · {num(conSaldo.reduce((t, p) => t + p.dias_disponible, 0))} día(s) · primero el periodo más antiguo</option>
+            )}
             {vigentes.map((p) => (
               <option key={p.id} value={p.id}>{p.nombre} · {num(p.dias_disponible)} día(s) · vence {fmtFecha(p.fecha_vencimiento, false)}</option>
             ))}
@@ -131,6 +140,11 @@ export default function VacacionesModal({ periodos, usuarioId, empleado, solicit
             )}
           </>
         ) : <span className="muted">Elige las fechas; no cuentan fines de semana, descansos ni festivos.</span>}
+        {reparto.length > 1 && (
+          <div className="fo-ayuda" style={{ flexBasis: '100%', color: 'var(--navy)' }}>
+            Se descuentan {reparto.map((t) => `${t.dias} d del ${t.periodo_nombre}`).join(' y ')} ({reparto.length} solicitudes enlazadas).
+          </div>
+        )}
         {excluidos.length > 0 && (
           <div className="fo-ayuda" style={{ flexBasis: '100%' }}>
             No se cuentan: {excluidos.map((e) => `${fmtFecha(e.fecha)} (${e.motivo.replace('Festivo: ', '')})`).join(', ')}.

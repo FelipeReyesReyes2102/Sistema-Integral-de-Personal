@@ -233,7 +233,7 @@ class AjustePeriodo(BaseModel):
 
 # ---------- Vacaciones ----------
 class VacacionesIn(BaseModel):
-    periodo_id: int
+    periodo_id: int | None = None  # None = modo general: primero los días del periodo más antiguo
     fecha_inicio: date
     fecha_fin: date
     comentario: str | None = None
@@ -244,7 +244,7 @@ class VacacionesIn(BaseModel):
 
 
 class CalculoIn(BaseModel):
-    periodo_id: int
+    periodo_id: int | None = None  # None = modo general
     fecha_inicio: date
     fecha_fin: date
     usuario_id: int | None = None
@@ -271,6 +271,15 @@ class DiasLaboralesOut(BaseModel):
     excluidos: list[DiaExcluido]
 
 
+class TramoPeriodo(BaseModel):
+    """Parte de una solicitud en modo general que se descuenta de un periodo."""
+    periodo_id: int
+    periodo_nombre: str
+    fecha_inicio: date
+    fecha_fin: date
+    dias: int
+
+
 class CalculoOut(BaseModel):
     dias_habiles: int
     horas: float
@@ -280,6 +289,7 @@ class CalculoOut(BaseModel):
     horas_disponible: float
     dias_disponible: float
     minimo_dias: int
+    reparto: list[TramoPeriodo] = []  # modo general: de qué periodo sale cada parte
 
 
 class VacacionesOut(ORM):

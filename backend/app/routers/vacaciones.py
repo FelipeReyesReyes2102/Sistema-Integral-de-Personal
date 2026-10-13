@@ -13,7 +13,8 @@ from ..models import (
 from ..models import ROLES_ADMIN, es_admin  # noqa: F401
 from ..models import Festivo
 from ..schemas import (
-    CalculoIn, CalculoOut, DiaExcluido, DiasLaboralesIn, DiasLaboralesOut, RechazoIn, VacacionesIn, VacacionesOut,
+    CalculoIn, CalculoOut, DiaExcluido, DiasLaboralesIn, DiasLaboralesOut, RechazoIn, TramoPeriodo, VacacionesIn,
+    VacacionesOut,
 )
 from ..security import get_current_user
 from ..services import (
@@ -71,6 +72,86 @@ def _calcular(db: Session, empleado: Usuario, actor: Usuario, periodo_id: int, i
     return periodo, saldo, res
 
 
+def _general(db: Session, empleado: Usuario, actor: Usuario, inicio: date, fin: date, excluir_id: int | None = None):
+    """Modo general: reparte los días laborales del rango entre los periodos vigentes, primero el más antiguo
+    (para no perder días al cumplir 18 meses). Devuelve los tramos [(periodo, desde, hasta, resultado)], el
+    resultado global y el saldo total."""
+    sincronizar_periodos(db, empleado)
+    cat = reglas.categoria(empleado.rol)
+    hd = reglas.HORAS_DIA[cat]
+    if fin < inicio:
+        return [], reglas.ResultadoValidacion(0, 0, ["La fecha final no puede ser anterior a la inicial."], [], []), 0.0
+    fechas = reglas.dias_laborales(inicio, fin, ciclo_de(empleado), festivos_de(db, empleado, inicio, fin))
+    # Solo los periodos vigentes en alguna fecha del rango (el administrador puede capturar fechas pasadas)
+    periodos = db.scalars(select(PeriodoVacaciones).where(
+        PeriodoVacaciones.usuario_id == empleado.id, PeriodoVacaciones.fecha_vencimiento >= inicio,
+        PeriodoVacaciones.fecha_inicio <= fin).order_by(PeriodoVacaciones.fecha_inicio)).all()
+    capacidad, horas_total = {}, 0.0
+    for p in periodos:
+        disp = saldo_periodo(db, p, excluir_id=excluir_id, aplicar_vencimiento=not es_admin(actor)).horas_disponible
+        if disp > 0:
+            capacidad[p.id] = int(disp // hd + 1e-9)
+            horas_total += disp
+    disponibles = sum(capacidad.values())
+
+    # Cada día laboral se toma del periodo más antiguo que tenga saldo y esté vigente en esa fecha
+    tramos: list[list] = []
+    sin_saldo = 0
+    for d in fechas:
+        p = next((p for p in periodos if capacidad.get(p.id, 0) > 0 and p.fecha_inicio <= d <= p.fecha_vencimiento), None)
+        if p is None:
+            sin_saldo += 1
+            continue
+        capacidad[p.id] -= 1
+        if tramos and tramos[-1][0].id == p.id:
+            tramos[-1][2] = d
+        else:
+            tramos.append([p, d, d])
+
+    errores, advertencias, resultado = [], [], []
+    if not fechas:
+        errores.append("El rango seleccionado no contiene días laborales.")
+    elif sin_saldo:
+        errores.append(f"Saldo insuficiente: solicitas {len(fechas)} día(s) y tienes {disponibles} día(s) "
+                       "disponibles entre tus periodos vigentes.")
+    else:
+        varios = len(tramos) > 1
+        for p, desde, hasta in tramos:
+            _, _, res = _calcular(db, empleado, actor, p.id, desde, hasta, excluir_id)
+            pref = f"{p.nombre}: " if varios else ""
+            errores += [pref + e for e in res.errores]
+            advertencias += [pref + a for a in res.advertencias]
+            resultado.append((p, desde, hasta, res))
+    if not fechas or sin_saldo:
+        if not es_admin(actor) and inicio < date.today():
+            errores.append("No es posible solicitar vacaciones en fechas pasadas.")
+        if fin >= inicio and hay_traslape(db, empleado.id, inicio, fin, excluir_id):
+            errores.append("Ya tienes otra solicitud de vacaciones que se cruza con esas fechas.")
+    total = reglas.ResultadoValidacion(len(fechas), float(len(fechas) * hd), list(dict.fromkeys(errores)),
+                                       list(dict.fromkeys(advertencias)), fechas)
+    return resultado, total, horas_total
+
+
+def _crear_solicitudes(db: Session, empleado: Usuario, data: VacacionesIn, tramos, aprobador_id: int | None,
+                       existente: SolicitudVacaciones | None = None) -> list[SolicitudVacaciones]:
+    """Una solicitud por tramo; si son varias se marcan como "Parte i de n" en el comentario."""
+    creadas = []
+    for i, (p, desde, hasta, res) in enumerate(tramos):
+        comentario = data.comentario
+        if len(tramos) > 1:
+            comentario = f"[Parte {i + 1} de {len(tramos)}] {data.comentario or ''}".strip()
+        s = existente if (i == 0 and existente) else SolicitudVacaciones(usuario_id=empleado.id)
+        s.periodo_id, s.fecha_inicio, s.fecha_fin = p.id, desde, hasta
+        s.dias_habiles, s.horas, s.comentario, s.aprobador_id = res.dias_habiles, res.horas, comentario, aprobador_id
+        if data.firma:
+            s.firma = data.firma
+        s.estado = SOLICITADO if data.enviar else BORRADOR
+        if s.id is None:
+            db.add(s)
+        creadas.append(s)
+    return creadas
+
+
 @router.post("/dias-laborales", response_model=DiasLaboralesOut)
 def dias_laborales(data: DiasLaboralesIn, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
     """Cuenta los días a disfrutar de un rango: excluye fines de semana (o descansos del ciclo de planta) y festivos."""
@@ -105,6 +186,16 @@ def dias_laborales(data: DiasLaboralesIn, db: Session = Depends(get_db), user: U
 def calcular(data: CalculoIn, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
     """Vista previa: días laborales, horas y reglas incumplidas, sin guardar."""
     empleado = _destino(db, user, data.usuario_id)
+    if data.periodo_id is None:
+        tramos, res, horas_total = _general(db, empleado, user, data.fecha_inicio, data.fecha_fin, data.excluir_id)
+        cat = reglas.categoria(empleado.rol)
+        return CalculoOut(
+            dias_habiles=res.dias_habiles, horas=res.horas, errores=res.errores, advertencias=res.advertencias,
+            fechas=res.fechas, horas_disponible=horas_total, dias_disponible=reglas.horas_a_dias(horas_total, cat),
+            minimo_dias=reglas.MIN_DIAS_SEGUIDOS[cat],
+            reparto=[TramoPeriodo(periodo_id=p.id, periodo_nombre=p.nombre, fecha_inicio=a, fecha_fin=b, dias=r.dias_habiles)
+                     for p, a, b, r in tramos],
+        )
     _, saldo, res = _calcular(db, empleado, user, data.periodo_id, data.fecha_inicio, data.fecha_fin, data.excluir_id)
     return CalculoOut(
         dias_habiles=res.dias_habiles, horas=res.horas, errores=res.errores, advertencias=res.advertencias,
@@ -143,6 +234,13 @@ def crear(data: VacacionesIn, db: Session = Depends(get_db), user: Usuario = Dep
     aprobador_id = resolver_aprobador(db, empleado, data.aprobador_id)
     if data.enviar and not data.firma:
         raise HTTPException(422, FALTA_FIRMA)
+    if data.periodo_id is None:
+        tramos, res, _ = _general(db, empleado, user, data.fecha_inicio, data.fecha_fin)
+        if not res.ok:
+            raise HTTPException(422, " ".join(res.errores))
+        creadas = _crear_solicitudes(db, empleado, data, tramos, aprobador_id)
+        db.commit()
+        return _out(creadas[0])
     periodo, _, res = _calcular(db, empleado, user, data.periodo_id, data.fecha_inicio, data.fecha_fin)
     if not res.ok:
         raise HTTPException(422, " ".join(res.errores))
@@ -178,6 +276,17 @@ def editar(sid: int, data: VacacionesIn, db: Session = Depends(get_db), user: Us
     if s.estado != BORRADOR:
         raise HTTPException(400, "Solo se pueden editar solicitudes en borrador")
     aprobador_id = resolver_aprobador(db, s.usuario, data.aprobador_id)
+    if data.enviar and not (data.firma or s.firma):
+        raise HTTPException(422, FALTA_FIRMA)
+    if data.periodo_id is None:
+        tramos, res, _ = _general(db, s.usuario, user, data.fecha_inicio, data.fecha_fin, excluir_id=s.id)
+        if not res.ok:
+            raise HTTPException(422, " ".join(res.errores))
+        if not data.firma and s.firma:
+            data.firma = s.firma
+        _crear_solicitudes(db, s.usuario, data, tramos, aprobador_id, existente=s)
+        db.commit()
+        return _out(s)
     _, _, res = _calcular(db, s.usuario, user, data.periodo_id, data.fecha_inicio, data.fecha_fin, excluir_id=s.id)
     if not res.ok:
         raise HTTPException(422, " ".join(res.errores))

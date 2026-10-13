@@ -61,7 +61,7 @@ export default function MisVacaciones({ usuarioId }) {
       setVacaciones(vs)
       setPermisos(pm)
       setConsultas(cs)
-      setPeriodoSel((sel) => (sel && ps.some((p) => p.id === sel) ? sel : (ps.find((p) => p.vigente) || ps[0])?.id ?? null))
+      setPeriodoSel((sel) => (sel === 'general' || (sel && ps.some((p) => p.id === sel)) ? sel : (ps.find((p) => p.vigente) || ps[0])?.id ?? null))
     } catch (e) {
       setError(e.message)
     }
@@ -76,15 +76,24 @@ export default function MisVacaciones({ usuarioId }) {
 
   // Periodos de los que todavía se pueden tomar días (el más antiguo primero, para no perderlos)
   const periodosConSaldo = useMemo(() => periodos.filter((p) => p.vigente && p.horas_disponible > 0).reverse(), [periodos])
+  // Modo General (por defecto con saldo en varios periodos): suma los periodos y descuenta primero el más antiguo
+  const hayGeneral = periodosConSaldo.length > 1
   useEffect(() => {
-    setPeriodoSolicitud((id) => (periodosConSaldo.some((p) => p.id === id) ? id : periodosConSaldo[0]?.id ?? null))
+    setPeriodoSolicitud((id) => (
+      (id === 'general' && hayGeneral) || periodosConSaldo.some((p) => p.id === id) ? id
+        : hayGeneral ? 'general' : periodosConSaldo[0]?.id ?? null))
   }, [periodosConSaldo])
+  const esGeneral = periodoSolicitud === 'general'
   const periodoElegido = periodos.find((p) => p.id === periodoSolicitud)
+  const diasGeneral = periodosConSaldo.reduce((t, p) => t + p.dias_disponible, 0)
+  const maxDias = esGeneral
+    ? periodosConSaldo.reduce((t, p) => t + Math.floor(p.dias_disponible + 1e-6), 0)
+    : periodoElegido && periodoElegido.dias_disponible > 0 ? periodoElegido.dias_disponible : null
   useEffect(() => { if (periodoSolicitud) setPeriodoSel(periodoSolicitud) }, [periodoSolicitud])
   // Elegir en la tarjeta un periodo con saldo también lo usa para la selección del calendario
   const elegirPeriodo = (id) => {
     setPeriodoSel(id)
-    if (periodosConSaldo.some((p) => p.id === id)) setPeriodoSolicitud(id)
+    if (id === 'general' || periodosConSaldo.some((p) => p.id === id)) setPeriodoSolicitud(id)
   }
 
   // Tramos del calendario que corresponden a cada periodo (de un aniversario al siguiente), más el próximo
@@ -110,7 +119,7 @@ export default function MisVacaciones({ usuarioId }) {
     setSelCalc(null)
     const vigente = periodoElegido || periodos.find((p) => p.vigente)
     if (!seleccion?.fin || soloLectura) return
-    if (!vigente) {
+    if (!vigente && !esGeneral) {
       api('/vacaciones/dias-laborales', {
         method: 'POST', body: { fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin, usuario_id: usuarioId },
       }).then((d) => setSelCalc({ ...d, errores: [] })).catch(() => {})
@@ -118,7 +127,7 @@ export default function MisVacaciones({ usuarioId }) {
     }
     api('/vacaciones/calcular', {
       method: 'POST',
-      body: { periodo_id: vigente.id, fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin, usuario_id: usuarioId },
+      body: { periodo_id: esGeneral ? null : vigente.id, fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin, usuario_id: usuarioId },
     }).then(setSelCalc).catch(() => {})
   }, [seleccion, periodos, periodoSolicitud])
 
@@ -148,7 +157,7 @@ export default function MisVacaciones({ usuarioId }) {
     }
   }
 
-  const periodo = periodos.find((p) => p.id === periodoSel)
+  const periodo = periodoSel === 'general' ? null : periodos.find((p) => p.id === periodoSel)
   const esPlanta = empleado?.rol === 'planta'
   // Periodos vigentes anteriores al actual con saldo: se pierden al cumplir 18 meses
   const vigentesConSaldo = periodos.filter((p) => p.vigente && p.dias_disponible > 0)
@@ -213,12 +222,26 @@ export default function MisVacaciones({ usuarioId }) {
         <div className="ps-cab">
           <span className="ps-titulo">Vacaciones</span>
           {periodos.length > 1 ? (
-            <select className="ps-select" value={periodoSel ?? ''} onChange={(e) => elegirPeriodo(Number(e.target.value))}>
+            <select className="ps-select" value={periodoSel ?? ''}
+              onChange={(e) => elegirPeriodo(e.target.value === 'general' ? 'general' : Number(e.target.value))}>
+              {hayGeneral && <option value="general">General</option>}
               {periodos.map((p) => <option key={p.id} value={p.id}>{p.nombre}{!p.vigente ? ' (vencido)' : ''}</option>)}
             </select>
           ) : periodo && <span className="muted">{periodo.nombre}</span>}
         </div>
-        {periodo ? (
+        {periodoSel === 'general' ? (
+          <>
+            <div className="ps-numero"><b>{num(diasGeneral)}</b> días disponibles</div>
+            <div className="ps-reparto">
+              {periodosConSaldo.map((p, i) => (
+                <div key={p.id} style={{ '--c': colorPeriodo(p) }}>
+                  <i /> {p.nombre} <b>{num(p.dias_disponible)} d</b>
+                  <span className="muted"> · vence {fmtFecha(p.fecha_vencimiento, false)}{i === 0 ? ' · se usa primero' : ''}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : periodo ? (
           <>
             <div className="ps-numero"><b>{num(periodo.dias_disponible)}</b> días disponibles</div>
             <div className="barra delgada"
@@ -281,7 +304,8 @@ export default function MisVacaciones({ usuarioId }) {
         {!soloLectura && (
           <BarraSeleccion seleccion={seleccion} calc={selCalc} onLimpiar={() => setSeleccion(null)}
             periodos={periodosConSaldo} periodoId={periodoSolicitud} onPeriodo={setPeriodoSolicitud}
-            onVacaciones={() => setModal({ tipo: 'vac', inicial: { fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin || seleccion.inicio, periodo_id: periodoSolicitud } })}
+            hayGeneral={hayGeneral} diasGeneral={diasGeneral} maxDias={maxDias}
+            onVacaciones={() => setModal({ tipo: 'vac', inicial: { fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin || seleccion.inicio, periodo_id: esGeneral ? null : periodoSolicitud } })}
             onPermiso={() => setModal({ tipo: 'perm', fechaInicial: seleccion.inicio })}
             onHomeOffice={() => setModal({ tipo: 'perm', tipoPermiso: 'home_office', fechaInicial: seleccion.inicio, fechaFinInicial: seleccion.fin || seleccion.inicio })} />
         )}
@@ -289,7 +313,7 @@ export default function MisVacaciones({ usuarioId }) {
           onSeleccion={soloLectura ? undefined : setSeleccion}
           onDia={(f) => setModal({ tipo: 'dia', fecha: f })}
           franjas={franjas}
-          maxDias={periodoElegido && periodoElegido.dias_disponible > 0 ? periodoElegido.dias_disponible : null} />
+          maxDias={maxDias || null} />
       </div>
 
       {lista && (
@@ -462,10 +486,18 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
   )
 }
 
-function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, onLimpiar, onVacaciones, onPermiso, onHomeOffice }) {
-  // Periodo del que se tomarán los días: define también el color de la selección en el calendario
+function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, hayGeneral, diasGeneral, maxDias, onLimpiar,
+  onVacaciones, onPermiso, onHomeOffice }) {
+  // Periodo del que se tomarán los días (General: primero el más antiguo)
   const selectorPeriodo = periodos.length > 0 && (
     <div className="sel-periodos" role="radiogroup" aria-label="Periodo vacacional">
+      {hayGeneral && (
+        <button type="button" role="radio" aria-checked={periodoId === 'general'}
+          className={`sel-periodo ${periodoId === 'general' ? 'activo' : ''}`} style={{ '--c': 'var(--primary)' }}
+          onClick={() => onPeriodo('general')} title="Suma tus periodos y descuenta primero los días del más antiguo">
+          <i /> General · {num(diasGeneral)} d
+        </button>
+      )}
       {periodos.map((p) => (
         <button key={p.id} type="button" role="radio" aria-checked={p.id === periodoId}
           className={`sel-periodo ${p.id === periodoId ? 'activo' : ''}`} style={{ '--c': colorPeriodo(p) }}
@@ -484,8 +516,10 @@ function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, onLim
       </div>
     )
   }
+  const general = periodoId === 'general'
   const periodoSel = periodos.find((p) => p.id === periodoId)
-  const sinSaldo = !periodoSel
+  const sinSaldo = !periodoSel && !general
+  const reparto = calc?.reparto || []
   const fin = seleccion.fin || seleccion.inicio
   const naturales = Math.round((parseISO(fin) - parseISO(seleccion.inicio)) / 864e5) + 1
   const unDia = naturales === 1
@@ -494,9 +528,10 @@ function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, onLim
       <b>{fmtFecha(seleccion.inicio)}{!unDia && ` → ${fmtFecha(fin)}`}</b>
       <span className="muted">
         {!seleccion.fin
-          ? `Elige el último día…${periodoSel ? ` (máximo ${Math.floor(periodoSel.dias_disponible + 1e-6)} días laborales del ${periodoSel.nombre})` : ''}`
+          ? `Elige el último día…${maxDias ? ` (máximo ${Math.floor(maxDias + 1e-6)} días laborales${general ? ' entre tus periodos' : ` del ${periodoSel?.nombre}`})` : ''}`
           : `${naturales} día(s) naturales`}
         {calc && seleccion.fin && ` · ${calc.dias_habiles} laborales`}
+        {reparto.length > 1 && ` (${reparto.map((t) => `${t.dias} del ${t.periodo_nombre}`).join(' + ')})`}
       </span>
       {calc && seleccion.fin && calc.errores.length > 0 && (
         <span style={{ color: 'var(--danger)', fontSize: 12 }}>{calc.errores[0]}</span>
