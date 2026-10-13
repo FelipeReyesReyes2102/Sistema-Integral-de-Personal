@@ -221,7 +221,13 @@ export default function MisVacaciones({ usuarioId }) {
     return r
   }, [eventos, permisos, calendario, anio])
 
-  const pct = (h) => (periodo && periodo.horas_total > 0 ? `${Math.max(0, (h / periodo.horas_total) * 100)}%` : '0%')
+  const base = periodo ? Math.max(periodo.horas_otorgadas, periodo.horas_total) : 0
+  const pct = (h) => (base > 0 ? `${Math.max(0, (h / base) * 100)}%` : '0%')
+  const aDias = (h) => (periodo ? h / periodo.horas_por_dia : 0)
+  const diasLey = periodo ? aDias(periodo.horas_otorgadas) : 0
+  // Ajuste negativo = días tomados antes del sistema (saldo capturado); positivo = días extra
+  const tomadosAntes = periodo ? Math.max(0, -periodo.ajuste_horas) : 0
+  const extra = periodo ? Math.max(0, periodo.ajuste_horas) : 0
 
   // Tarjeta del usuario: foto, tipo de usuario, puesto, ingreso, antigüedad, nómina, jefe y turno
   const perfil = empleado && (
@@ -280,17 +286,22 @@ export default function MisVacaciones({ usuarioId }) {
           </>
         ) : periodo ? (
           <>
-            <div className="ps-numero"><b>{num(periodo.dias_disponible)}</b> días disponibles</div>
+            <div className="ps-numero">
+              <b>{num(periodo.dias_disponible)}</b> de {num(diasLey + aDias(extra))} días disponibles
+            </div>
             <div className="barra delgada"
-              title={`Disponible ${num(periodo.dias_disponible)} d · Borrador ${num(periodo.dias_borrador)} d · Solicitado ${num(periodo.dias_solicitado)} d · Validado ${num(periodo.dias_validado)} d`}>
+              title={`Disponible ${num(periodo.dias_disponible)} d · Borrador ${num(periodo.dias_borrador)} d · Solicitado ${num(periodo.dias_solicitado)} d · Tomados ${num(periodo.dias_validado + aDias(tomadosAntes))} d`}>
               <div className="c-disp" style={{ width: pct(periodo.horas_disponible) }} />
               <div className="c-borr" style={{ width: pct(periodo.horas_borrador) }} />
               <div className="c-soli" style={{ width: pct(periodo.horas_solicitado) }} />
               <div className="c-vali" style={{ width: pct(periodo.horas_validado) }} />
+              <div className="c-antes" style={{ width: pct(tomadosAntes) }} />
               <div style={{ width: pct(periodo.horas_perdidas), background: 'var(--danger)' }} />
             </div>
             <div className="ps-pie">
-              {num(periodo.dias_total)} d{esPlanta ? ' de 12 h' : ''}
+              {num(diasLey)} d por antigüedad{esPlanta ? ' (de 12 h)' : ''}
+              {tomadosAntes > 0 && ` · ${num(aDias(tomadosAntes))} tomado(s) antes`}
+              {extra > 0 && ` · +${num(aDias(extra))} de ajuste`}
               {periodo.dias_solicitado > 0 && ` · ${num(periodo.dias_solicitado)} solicitado(s)`}
               {periodo.dias_validado > 0 && ` · ${num(periodo.dias_validado)} tomado(s)`}
               {` · vence ${fmtFecha(periodo.fecha_vencimiento, false)}`}
@@ -306,9 +317,6 @@ export default function MisVacaciones({ usuarioId }) {
                 Venció el {fmtFecha(periodo.fecha_vencimiento, false)}
                 {periodo.dias_perdidos > 0 ? `; se perdieron ${num(periodo.dias_perdidos)} día(s)` : ''}
               </div>
-            )}
-            {periodo.ajuste_horas !== 0 && (
-              <div className="ps-pie">Ajuste: {num(periodo.ajuste_horas)} h {periodo.nota_ajuste && `(${periodo.nota_ajuste})`}</div>
             )}
           </>
         ) : (

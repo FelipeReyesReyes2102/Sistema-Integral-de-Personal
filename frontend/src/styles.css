@@ -660,3 +660,6 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .ley-especial { display: inline-flex; align-items: center; gap: 4px; border-radius: 20px; padding: 2px 9px; font-size: 11.5px; }
 .ley-especial.aniv { background: #ffe8a3; color: #6b4700; }
 .ley-especial.cumple { background: #fde4ee; color: #ad1457; }
+
+/* Días tomados antes del sistema (saldo capturado al dar de alta) */
+.barra .c-antes { background: #9aa5b4; }
