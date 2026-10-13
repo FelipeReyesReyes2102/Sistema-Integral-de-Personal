@@ -6,35 +6,45 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import ROL_ADMIN, SOLICITADO, VALIDADO, Permiso, SolicitudVacaciones, Usuario
+from ..models import ROL_ADMIN, SOLICITADO, VALIDADO, AdminSede, Permiso, SolicitudVacaciones, Usuario
 from ..models import ROLES_ADMIN, es_admin  # noqa: F401
 from ..schemas import JefeOut, MiembroEquipoOut
 from ..security import get_current_user
+from ..sedes import Alcance, admin_permite, alcance
 from ..services import saldo_periodo, sincronizar_periodos, usuario_out
 
 router = APIRouter(prefix="/api", tags=["jefes y equipo"])
 
 
 @router.get("/jefes", response_model=list[JefeOut])
-def jefes(db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
-    """Usuarios que pueden aprobar solicitudes (jefes y administradores)."""
+def jefes(sede_id: int | None = None, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
+    """Jefes y administradores que pueden aprobar a personal de una sede (por defecto la del usuario).
+
+    Los jefes solo tienen a cargo personas de su propia sede; un administrador también aparece en las sedes
+    adicionales que administra."""
+    sede = sede_id if sede_id and admin_permite(user, sede_id) else user.sede_id
+    admins_extra = select(AdminSede.usuario_id).where(AdminSede.sede_id == sede)
     q = (select(Usuario)
-         .where(Usuario.activo.is_(True), or_(Usuario.es_jefe.is_(True), Usuario.rol.in_(ROLES_ADMIN)))
+         .where(Usuario.activo.is_(True), or_(Usuario.es_jefe.is_(True), Usuario.rol.in_(ROLES_ADMIN)),
+                or_(Usuario.sede_id == sede, Usuario.id.in_(admins_extra)))
          .order_by(Usuario.nombre))
     return db.scalars(q).all()
 
 
 @router.get("/departamentos", response_model=list[str])
-def departamentos(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    """Departamentos capturados en los empleados (para el formulario de permisos)."""
-    q = select(Usuario.departamento).where(Usuario.departamento.is_not(None), Usuario.departamento != "").distinct()
+def departamentos(db: Session = Depends(get_db), alc: Alcance = Depends(alcance)):
+    """Departamentos capturados en los empleados de la sede (para el formulario de permisos)."""
+    q = select(Usuario.departamento).where(Usuario.departamento.is_not(None), Usuario.departamento != "",
+                                           alc.filtro(Usuario.sede_id)).distinct()
     return sorted(db.scalars(q).all())
 
 
 @router.get("/equipo", response_model=list[MiembroEquipoOut])
 def mi_equipo(jefe_id: int | None = None, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
     """Personal a cargo del usuario (o de `jefe_id` si es administrador) con su saldo de vacaciones."""
-    jefe = user.id if not (jefe_id and es_admin(user)) else jefe_id
+    jefe = user.id
+    if jefe_id and es_admin(user) and (j := db.get(Usuario, jefe_id)) and admin_permite(user, j.sede_id):
+        jefe = jefe_id
     hoy = date.today()
     res = []
     for u in db.scalars(select(Usuario).where(Usuario.jefe_id == jefe, Usuario.activo.is_(True)).order_by(Usuario.nombre)):

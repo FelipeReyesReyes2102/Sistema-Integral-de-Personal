@@ -16,17 +16,19 @@ from sqlalchemy.orm import Session
 
 from . import correo
 from .database import SessionLocal
-from .models import Grupo, NotificacionCorreo, RotacionTurnos, Turno, Usuario, correo_contacto
+from .models import Grupo, NotificacionCorreo, RotacionTurnos, Sede, Turno, Usuario, correo_contacto
 from .security import ahora
+from .sedes import ahora_en
 
 log = logging.getLogger("sip.rotacion")
 DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 
 
-def config(db: Session) -> RotacionTurnos:
-    cfg = db.get(RotacionTurnos, 1)
+def config(db: Session, sede_id: int | None) -> RotacionTurnos:
+    """Configuración de rotación de la sede (se crea desactivada la primera vez)."""
+    cfg = db.scalar(select(RotacionTurnos).where(RotacionTurnos.sede_id == sede_id))
     if cfg is None:
-        cfg = RotacionTurnos(id=1, activo=False, semanas=1, turnos_orden="", aviso_activo=False, aviso_hora=12)
+        cfg = RotacionTurnos(sede_id=sede_id, activo=False, semanas=1, turnos_orden="", aviso_activo=False, aviso_hora=12)
         db.add(cfg)
         db.commit()
     return cfg
@@ -53,7 +55,7 @@ def turno_de_grupo(cfg: RotacionTurnos, grupo: Grupo, fecha: date) -> int | None
 
 
 def turno_efectivo(db: Session, usuario: Usuario, fecha: date) -> Turno | None:
-    cfg = config(db)
+    cfg = config(db, usuario.sede_id)
     if usuario.grupo is not None:
         tid = turno_de_grupo(cfg, usuario.grupo, fecha)
         if tid:
@@ -61,13 +63,13 @@ def turno_efectivo(db: Session, usuario: Usuario, fecha: date) -> Turno | None:
     return usuario.turno
 
 
-def sincronizar(db: Session, hoy: date | None = None) -> int:
-    """Copia a cada integrante el turno que le toca hoy. Devuelve cuántos usuarios cambiaron."""
+def sincronizar(db: Session, sede_id: int | None, hoy: date | None = None) -> int:
+    """Copia a cada integrante de la sede el turno que le toca hoy. Devuelve cuántos usuarios cambiaron."""
     hoy = hoy or date.today()
-    cfg = config(db)
+    cfg = config(db, sede_id)
     cambios = 0
     if cfg.activo:
-        for g in db.scalars(select(Grupo).where(Grupo.en_rotacion.is_(True))):
+        for g in db.scalars(select(Grupo).where(Grupo.en_rotacion.is_(True), Grupo.sede_id == sede_id)):
             tid = turno_de_grupo(cfg, g, hoy)
             if not tid:
                 continue
@@ -132,16 +134,16 @@ def _mensaje(usuario: Usuario, actual: dict | None, siguiente: dict | None, lune
     return asunto, cuerpo, texto
 
 
-def enviar_avisos(db: Session, hoy: date | None = None) -> dict:
-    """Envía a cada integrante de los grupos en rotación su turno de la próxima semana."""
+def enviar_avisos(db: Session, sede_id: int | None, hoy: date | None = None) -> dict:
+    """Envía a cada integrante de los grupos en rotación de la sede su turno de la próxima semana."""
     hoy = hoy or date.today()
-    cfg = config(db)
+    cfg = config(db, sede_id)
     if not cfg.activo:
         return {"enviados": 0, "errores": 0, "omitidos": 0, "motivo": "La rotación de turnos está desactivada."}
     ccfg = correo.cargar(db)
     lunes = proximo_lunes(hoy)
     enviados = errores = omitidos = 0
-    grupos = [g.id for g in db.scalars(select(Grupo).where(Grupo.en_rotacion.is_(True)))]
+    grupos = [g.id for g in db.scalars(select(Grupo).where(Grupo.en_rotacion.is_(True), Grupo.sede_id == sede_id))]
     for u in db.scalars(select(Usuario).where(Usuario.grupo_id.in_(grupos), Usuario.activo.is_(True)).order_by(Usuario.nombre)):
         destino = correo_contacto(u)  # planta: correo personal
         if not destino or not correo.EMAIL.match(destino):
@@ -150,7 +152,8 @@ def enviar_avisos(db: Session, hoy: date | None = None) -> dict:
         actual = _turno_dict(turno_efectivo(db, u, hoy))
         siguiente = _turno_dict(turno_efectivo(db, u, lunes))
         asunto, cuerpo, texto = _mensaje(u, actual, siguiente, lunes)
-        n = NotificacionCorreo(fecha=ahora(), evento="turno_semanal", destinatarios=destino, asunto=asunto[:255])
+        n = NotificacionCorreo(fecha=ahora(), evento="turno_semanal", sede_id=sede_id, destinatarios=destino,
+                               asunto=asunto[:255])
         db.add(n)
         db.commit()
         correo._registrar_y_enviar(db, n, ccfg, cuerpo, texto)
@@ -163,21 +166,23 @@ def enviar_avisos(db: Session, hoy: date | None = None) -> dict:
 
 # ---------------- Tarea programada ----------------
 def tarea_programada(ahora_local: datetime | None = None):
-    """Se ejecuta periódicamente: sincroniza turnos una vez al día y envía el aviso de los viernes."""
-    ahora_local = ahora_local or datetime.now()
-    hoy = ahora_local.date()
+    """Se ejecuta periódicamente para cada sede (con su zona horaria): sincroniza turnos una vez al día y envía
+    el aviso de los viernes."""
     with SessionLocal() as db:
-        cfg = config(db)
-        if cfg.ultima_sincronizacion != hoy:
-            cambios = sincronizar(db, hoy)
-            if cambios:
-                log.info("Rotación de turnos: %s usuario(s) cambiaron de turno", cambios)
-        if (cfg.activo and cfg.aviso_activo and hoy.weekday() == 4 and ahora_local.hour >= cfg.aviso_hora
-                and cfg.ultimo_aviso != hoy):
-            cfg.ultimo_aviso = hoy  # se marca antes de enviar para no duplicar
-            db.commit()
-            res = enviar_avisos(db, hoy)
-            log.info("Aviso semanal de turnos: %s", res)
+        for sede in db.scalars(select(Sede).where(Sede.activa.is_(True))).all():
+            local = ahora_local or ahora_en(sede)
+            hoy = local.date()
+            cfg = config(db, sede.id)
+            if cfg.ultima_sincronizacion != hoy:
+                cambios = sincronizar(db, sede.id, hoy)
+                if cambios:
+                    log.info("Rotación de turnos (%s): %s usuario(s) cambiaron de turno", sede.nombre, cambios)
+            if (cfg.activo and cfg.aviso_activo and hoy.weekday() == 4 and local.hour >= cfg.aviso_hora
+                    and cfg.ultimo_aviso != hoy):
+                cfg.ultimo_aviso = hoy  # se marca antes de enviar para no duplicar
+                db.commit()
+                res = enviar_avisos(db, sede.id, hoy)
+                log.info("Aviso semanal de turnos (%s): %s", sede.nombre, res)
 
 
 def describir(cfg: RotacionTurnos, turnos: dict[int, str]) -> str:

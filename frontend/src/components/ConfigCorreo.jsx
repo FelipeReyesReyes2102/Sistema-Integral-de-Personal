@@ -26,7 +26,7 @@ export default function ConfigCorreo() {
 
   const aplicar = (e) => {
     setEstado(e)
-    const { password_configurada, tipos_disponibles, ...valores } = e
+    const { password_configurada, tipos_disponibles, sede_id, sede_nombre, puede_editar_servidor, ...valores } = e
     setForm(valores)
     setPassword('')
     setBorrarPassword(false)
@@ -43,7 +43,8 @@ export default function ConfigCorreo() {
   const toggleTipo = (t) => setForm({
     ...form, caseta_tipos: form.caseta_tipos.includes(t) ? form.caseta_tipos.filter((x) => x !== t) : [...form.caseta_tipos, t],
   })
-  const { password_configurada, tipos_disponibles, ...guardado } = estado
+  const { password_configurada, tipos_disponibles, sede_id, sede_nombre, puede_editar_servidor, ...guardado } = estado
+  const servidor = !puede_editar_servidor  // deshabilita los campos del servidor común
   const sucio = JSON.stringify(form) !== JSON.stringify(guardado) || password || borrarPassword
 
   async function guardar() {
@@ -84,7 +85,7 @@ export default function ConfigCorreo() {
   return (
     <div className="card" style={{ marginTop: 24 }}>
       <div className="fila" style={{ marginBottom: 6 }}>
-        <h3 className="fila" style={{ gap: 8 }}><Mail size={18} /> Avisos por correo a caseta</h3>
+        <h3 className="fila" style={{ gap: 8 }}><Mail size={18} /> Avisos por correo a caseta · {sede_nombre}</h3>
         <span className={`pill ${estado.caseta_activo ? 'validado' : 'borrador'}`}>{estado.caseta_activo ? 'Avisos activos' : 'Avisos desactivados'}</span>
       </div>
       <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
@@ -111,20 +112,25 @@ export default function ConfigCorreo() {
           </div>
         </div>
 
+        <div className="of full">
+          <span className="of-ayuda" style={{ fontSize: 12 }}>
+            <b>Servidor de correo</b> (común a todas las sedes{servidor ? '; solo lo cambia un super administrador' : ''}):
+          </span>
+        </div>
         <Campo etiqueta="Método de envío">
-          <select value={form.metodo} onChange={set('metodo')}>
+          <select value={form.metodo} onChange={set('metodo')} disabled={servidor}>
             <option value="smtp">Servidor SMTP</option>
             <option value="graph">Microsoft 365 (usa la conexión con Microsoft)</option>
           </select>
         </Campo>
         <Campo etiqueta="Correo remitente" ayuda={form.metodo === 'graph' ? 'Buzón de Microsoft 365 desde el que se envía (requiere permiso Mail.Send)' : 'Dirección que aparece como remitente'}>
-          <input value={form.remitente} onChange={set('remitente')} placeholder="avisos@o-tek.com" />
+          <input value={form.remitente} onChange={set('remitente')} placeholder="avisos@o-tek.com" disabled={servidor} />
         </Campo>
         <Campo etiqueta="Nombre del remitente">
-          <input value={form.remitente_nombre} onChange={set('remitente_nombre')} />
+          <input value={form.remitente_nombre} onChange={set('remitente_nombre')} disabled={servidor} />
         </Campo>
 
-        {form.metodo === 'smtp' && (
+        {form.metodo === 'smtp' && !servidor && (
           <>
             <Campo etiqueta="Servidor SMTP" ayuda="Ej. smtp.office365.com o el de su proveedor">
               <input value={form.smtp_host} onChange={set('smtp_host')} placeholder="smtp.office365.com" />

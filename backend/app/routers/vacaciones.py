@@ -17,6 +17,7 @@ from ..schemas import (
     VacacionesOut,
 )
 from ..security import get_current_user
+from ..sedes import Alcance, admin_permite, alcance, hoy_de
 from ..services import (
     ciclo_de, empleado_visible, festivos_de, hay_traslape, puede_revisar, resolver_aprobador, saldo_periodo,
     sincronizar_periodos,
@@ -44,7 +45,7 @@ def _destino(db: Session, user: Usuario, usuario_id: int | None) -> Usuario:
         if not es_admin(user):
             raise HTTPException(403, "Solo el administrador puede capturar solicitudes de otros empleados")
         u = db.get(Usuario, usuario_id)
-        if not u:
+        if not u or not admin_permite(user, u.sede_id):
             raise HTTPException(404, "Empleado no encontrado")
         return u
     return user
@@ -63,7 +64,7 @@ def _calcular(db: Session, empleado: Usuario, actor: Usuario, periodo_id: int, i
         festivos=festivos_de(db, empleado, inicio, fin),
         horas_disponibles=saldo.horas_disponible,
         periodo_inicio=periodo.fecha_inicio, periodo_vencimiento=periodo.fecha_vencimiento,
-        hoy=date.today(), permitir_pasado=es_admin(actor), tiene_bloque=saldo.bloque_cumplido,
+        hoy=hoy_de(empleado), permitir_pasado=es_admin(actor), tiene_bloque=saldo.bloque_cumplido,
     )
     if fin >= inicio and hay_traslape(db, empleado.id, inicio, fin, excluir_id):
         res.errores.append("Ya tienes otra solicitud de vacaciones que se cruza con esas fechas.")
@@ -123,7 +124,7 @@ def _general(db: Session, empleado: Usuario, actor: Usuario, inicio: date, fin: 
             advertencias += [pref + a for a in res.advertencias]
             resultado.append((p, desde, hasta, res))
     if not fechas or sin_saldo:
-        if not es_admin(actor) and inicio < date.today():
+        if not es_admin(actor) and inicio < hoy_de(empleado):
             errores.append("No es posible solicitar vacaciones en fechas pasadas.")
         if fin >= inicio and hay_traslape(db, empleado.id, inicio, fin, excluir_id):
             errores.append("Ya tienes otra solicitud de vacaciones que se cruza con esas fechas.")
@@ -207,7 +208,7 @@ def calcular(data: CalculoIn, db: Session = Depends(get_db), user: Usuario = Dep
 @router.get("", response_model=list[VacacionesOut])
 def listar(estado: str | None = None, usuario_id: int | None = None, todos: bool = False,
            por_aprobar: bool = False, periodo_id: int | None = None,
-           db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
+           db: Session = Depends(get_db), user: Usuario = Depends(get_current_user), alc: Alcance = Depends(alcance)):
     """
     - Sin parámetros: mis solicitudes.
     - `usuario_id`: solicitudes de un subordinado (jefe) o de cualquiera (administrador).
@@ -216,7 +217,7 @@ def listar(estado: str | None = None, usuario_id: int | None = None, todos: bool
     """
     q = select(SolicitudVacaciones).order_by(SolicitudVacaciones.fecha_inicio.desc())
     if todos and es_admin(user):
-        pass
+        q = q.where(SolicitudVacaciones.usuario_id.in_(select(Usuario.id).where(alc.filtro(Usuario.sede_id))))
     elif por_aprobar:
         q = q.where(SolicitudVacaciones.aprobador_id == user.id, SolicitudVacaciones.usuario_id != user.id)
     else:
@@ -257,8 +258,8 @@ def crear(data: VacacionesIn, db: Session = Depends(get_db), user: Usuario = Dep
 
 def _obtener(db: Session, sid: int, user: Usuario) -> SolicitudVacaciones:
     s = db.get(SolicitudVacaciones, sid)
-    visible = s and (s.usuario_id == user.id or es_admin(user) or s.aprobador_id == user.id
-                     or s.usuario.jefe_id == user.id)
+    visible = s and (s.usuario_id == user.id or (es_admin(user) and admin_permite(user, s.usuario.sede_id))
+                     or s.aprobador_id == user.id or s.usuario.jefe_id == user.id)
     if not visible:
         raise HTTPException(404, "Solicitud no encontrada")
     return s

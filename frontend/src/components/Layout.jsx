@@ -4,7 +4,7 @@ import {
   CalendarDays, ClipboardCheck, Clock, Home, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
   PartyPopper, Settings, Users, UsersRound, X,
 } from 'lucide-react'
-import { api } from '../api'
+import { api, elegirSede, sedeActiva } from '../api'
 import { useAuth } from '../auth'
 import { ROLES, esAdmin as esAdminFn } from '../utils'
 import Avatar from './Avatar'
@@ -39,6 +39,9 @@ export default function Layout() {
   const [pwd, setPwd] = useState(false)
   const [colapsado, setColapsado] = useState(leerColapsado)
   const esAdmin = esAdminFn(user)
+  // Sede elegida en el selector; si ya no es una de sus sedes se descarta
+  const sedeElegida = (user.sedes || []).some((s) => String(s.id) === sedeActiva()) ? sedeActiva() : ''
+  useEffect(() => { if (sedeActiva() && !sedeElegida) elegirSede('') }, [])
   const jefe = esJefe(user)
 
   useEffect(() => {
@@ -81,6 +84,13 @@ export default function Layout() {
           </button>
           <div className="brand-nombre">SIP-O</div>
           <div className="brand-desc">Sistema Integral de Personal</div>
+          {(user.sedes || []).length > 1 ? (
+            <select className="sede-selector nav-texto" value={sedeElegida} onChange={(e) => elegirSede(e.target.value)}
+              title="Sede que estás consultando">
+              <option value="">Todas mis sedes ({user.sedes.length})</option>
+              {user.sedes.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+            </select>
+          ) : user.sede_nombre && <div className="sede-nombre nav-texto" title="Tu sede">{user.sede_nombre}</div>}
         </div>
         <nav>
           {link('/', Home, 'Mis vacaciones')}

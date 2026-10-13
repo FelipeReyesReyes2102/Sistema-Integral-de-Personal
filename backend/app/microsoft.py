@@ -205,7 +205,8 @@ def foto(token: str, sujeto: str = "me") -> tuple[bytes, str] | None:
 def buscar_empleado(email: str) -> dict:
     """Datos del empleado en Entra ID para prellenar el alta."""
     token = token_aplicacion()
-    campos = "id,displayName,mail,userPrincipalName,jobTitle,department,employeeId,employeeHireDate,accountEnabled"
+    campos = ("id,displayName,mail,userPrincipalName,jobTitle,department,employeeId,employeeHireDate,accountEnabled,"
+              "officeLocation")
     try:
         r = _graph(f"users/{quote(email.strip().lower(), safe='@.')}?$select={campos}", token)
     except httpx.HTTPError as e:
@@ -254,8 +255,36 @@ def buscar_empleado(email: str) -> dict:
         "cuenta_habilitada": u.get("accountEnabled", True),
         "jefe": jefe,
         "tiene_reportes": tiene_reportes,
+        "ubicacion": (u.get("officeLocation") or "").strip() or None,
         "foto": f"data:{imagen[1]};base64,{base64.b64encode(imagen[0]).decode()}" if imagen else None,
     }
+
+
+def ubicaciones_trabajo() -> dict[str, int]:
+    """Ubicaciones del trabajo (officeLocation) de los usuarios habilitados del directorio, con cuántos tiene cada una."""
+    token = token_aplicacion()
+    ruta = "users?$select=officeLocation,accountEnabled&$top=999"
+    conteo: dict[str, int] = {}
+    for _ in range(50):  # paginación (hasta ~50 mil usuarios)
+        try:
+            r = _graph(ruta, token)
+        except httpx.HTTPError:
+            raise ErrorMicrosoft("red", "Microsoft Graph no respondió.", 502)
+        if r.status_code == 403:
+            raise ErrorMicrosoft("sin_permiso", "La aplicación no tiene el permiso User.Read.All con consentimiento "
+                                 "de administrador en Microsoft Entra ID.", 502)
+        if r.status_code != 200:
+            raise ErrorMicrosoft("graph", f"Microsoft Graph devolvió un error ({r.status_code}).", 502)
+        datos = r.json()
+        for u in datos.get("value", []):
+            ubic = (u.get("officeLocation") or "").strip()
+            if ubic and u.get("accountEnabled", True):
+                conteo[ubic] = conteo.get(ubic, 0) + 1
+        siguiente = datos.get("@odata.nextLink")
+        if not siguiente:
+            break
+        ruta = siguiente.split(f"{settings.microsoft_graph_url}/", 1)[-1]
+    return conteo
 
 
 def _json(r: httpx.Response) -> dict:

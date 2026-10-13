@@ -6,7 +6,7 @@ export default function SelectorJefe({ empleado, value, onChange }) {
   const [jefes, setJefes] = useState([])
 
   useEffect(() => {
-    api('/jefes').then((js) => {
+    api('/jefes', { query: { sede_id: empleado?.sede_id } }).then((js) => {
       const lista = js.filter((j) => j.id !== empleado?.id)
       setJefes(lista)
       if (!value) {

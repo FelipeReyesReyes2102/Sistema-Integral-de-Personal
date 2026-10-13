@@ -17,6 +17,7 @@ from .database import SessionLocal, engine
 from .migraciones import actualizar_esquema
 from .models import ROL_SUPERADMIN, Usuario
 from .security import auditar, hash_password
+from .sedes import sede_principal
 from .services import sincronizar_periodos
 
 
@@ -41,7 +42,7 @@ def main():
             otro = db.scalar(select(Usuario).where(Usuario.numero_empleado == a.nomina))
             if otro:
                 raise SystemExit(f"El número de nómina {a.nomina} ya pertenece a {otro.nombre}.")
-            u = Usuario(email=email, numero_empleado=a.nomina, nombre=a.nombre,
+            u = Usuario(sede_id=sede_principal(db).id, email=email, numero_empleado=a.nomina, nombre=a.nombre,
                         fecha_ingreso=date.fromisoformat(a.ingreso) if a.ingreso else date.today(),
                         puesto="Super administrador", departamento="Sistemas")
             db.add(u)

@@ -67,23 +67,61 @@ CICLO_SEMANAL = "semanal"     # días fijos de la semana (dias_semana)
 CICLO_ROTATIVO = "rotativo"   # N días trabajo x M días descanso desde fecha_inicio_ciclo
 
 
-class Turno(Base):
-    __tablename__ = "turnos"
+ZONA_HORARIA_DEFECTO = "America/Mexico_City"
+
+
+class Sede(Base):
+    """Sede (ubicación de trabajo). Cada sede tiene su personal, catálogos, festivos, caseta y zona horaria."""
+    __tablename__ = "sedes"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    nombre: Mapped[str] = mapped_column(String(80), unique=True)
+    nombre: Mapped[str] = mapped_column(String(120), unique=True)
+    # "Ubicación del trabajo" (officeLocation) de Microsoft Entra ID con la que se asocia a los empleados
+    ubicacion_microsoft: Mapped[str | None] = mapped_column(String(200), unique=True)
+    zona_horaria: Mapped[str] = mapped_column(String(60), default=ZONA_HORARIA_DEFECTO)
+    activa: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Avisos a caseta de esta sede (el servidor de correo es común a todas)
+    caseta_activo: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    caseta_destinatarios: Mapped[str] = mapped_column(Text, default="")
+    caseta_tipos: Mapped[str] = mapped_column(String(200), default="llegada_tarde,salida_temprana,salida_intermedia")
+    creado: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class AdminSede(Base):
+    """Sedes adicionales que puede administrar un administrador (además de la suya)."""
+    __tablename__ = "admin_sedes"
+
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), primary_key=True)
+    sede_id: Mapped[int] = mapped_column(ForeignKey("sedes.id", ondelete="CASCADE"), primary_key=True)
+
+
+class Turno(Base):
+    __tablename__ = "turnos"
+    __table_args__ = (UniqueConstraint("sede_id", "nombre", name="uq_turnos_sede_nombre"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sede_id: Mapped[int | None] = mapped_column(ForeignKey("sedes.id"), index=True)
+    nombre: Mapped[str] = mapped_column(String(80))
     hora_entrada: Mapped[time] = mapped_column(Time)
     hora_salida: Mapped[time] = mapped_column(Time)
     horas_jornada: Mapped[int] = mapped_column(Integer, default=12)
     descripcion: Mapped[str | None] = mapped_column(String(255))
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    sede: Mapped[Sede | None] = relationship()
+
+    @property
+    def sede_nombre(self) -> str | None:
+        return self.sede.nombre if self.sede else None
+
 
 class Grupo(Base):
     __tablename__ = "grupos"
+    __table_args__ = (UniqueConstraint("sede_id", "nombre", name="uq_grupos_sede_nombre"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    nombre: Mapped[str] = mapped_column(String(80), unique=True)
+    sede_id: Mapped[int | None] = mapped_column(ForeignKey("sedes.id"), index=True)
+    nombre: Mapped[str] = mapped_column(String(80))
     descripcion: Mapped[str | None] = mapped_column(String(255))
     tipo_ciclo: Mapped[str] = mapped_column(String(20), default=CICLO_ROTATIVO)
     # semanal: "0,1,2,3" (0 = lunes ... 6 = domingo)
@@ -99,6 +137,11 @@ class Grupo(Base):
     rotacion_turno_inicial_id: Mapped[int | None] = mapped_column(ForeignKey("turnos.id", ondelete="SET NULL"))
 
     miembros: Mapped[list["Usuario"]] = relationship(back_populates="grupo")
+    sede: Mapped[Sede | None] = relationship()
+
+    @property
+    def sede_nombre(self) -> str | None:
+        return self.sede.nombre if self.sede else None
 
 
 class Usuario(Base):
@@ -107,6 +150,7 @@ class Usuario(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     numero_empleado: Mapped[str] = mapped_column(String(30), unique=True)
     nombre: Mapped[str] = mapped_column(String(150))
+    sede_id: Mapped[int | None] = mapped_column(ForeignKey("sedes.id"), index=True)
     # Correo corporativo (solo personal de oficinas: oficina, admin, super admin y médico); planta no tiene
     email: Mapped[str | None] = mapped_column(String(150), unique=True, index=True)
     email_personal: Mapped[str | None] = mapped_column(String(150), unique=True, index=True)
@@ -138,6 +182,7 @@ class Usuario(Base):
 
     turno: Mapped[Turno | None] = relationship()
     grupo: Mapped[Grupo | None] = relationship(back_populates="miembros")
+    sede: Mapped[Sede | None] = relationship()
     jefe: Mapped["Usuario | None"] = relationship(remote_side="Usuario.id", foreign_keys=[jefe_id])
     periodos: Mapped[list["PeriodoVacaciones"]] = relationship(
         back_populates="usuario", cascade="all, delete-orphan", order_by="PeriodoVacaciones.numero"
@@ -158,10 +203,17 @@ class Festivo(Base):
     __tablename__ = "festivos"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    sede_id: Mapped[int | None] = mapped_column(ForeignKey("sedes.id"), index=True)  # cada sede tiene sus festivos
     fecha: Mapped[date] = mapped_column(Date, index=True)
     nombre: Mapped[str] = mapped_column(String(120))
     # "todos" | "oficina" | "planta"
     aplica_a: Mapped[str] = mapped_column(String(20), default="todos")
+
+    sede: Mapped[Sede | None] = relationship()
+
+    @property
+    def sede_nombre(self) -> str | None:
+        return self.sede.nombre if self.sede else None
 
 
 class PeriodoVacaciones(Base):
@@ -339,6 +391,7 @@ class NotificacionCorreo(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     fecha: Mapped[datetime] = mapped_column(DateTime, index=True)
     evento: Mapped[str] = mapped_column(String(40))  # permiso_autorizado | permiso_cancelado | prueba
+    sede_id: Mapped[int | None] = mapped_column(ForeignKey("sedes.id"), index=True)
     permiso_id: Mapped[int | None] = mapped_column(ForeignKey("permisos.id", ondelete="SET NULL"), index=True)
     destinatarios: Mapped[str] = mapped_column(Text)
     asunto: Mapped[str] = mapped_column(String(255))
@@ -350,10 +403,11 @@ class NotificacionCorreo(Base):
 
 
 class RotacionTurnos(Base):
-    """Configuración única (id=1) de la rotación de turnos entre grupos."""
+    """Configuración de la rotación de turnos entre grupos (una por sede)."""
     __tablename__ = "rotacion_turnos"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    sede_id: Mapped[int | None] = mapped_column(ForeignKey("sedes.id"), index=True)
     activo: Mapped[bool] = mapped_column(Boolean, default=False)
     fecha_inicio: Mapped[date | None] = mapped_column(Date)       # inicio del primer periodo (día de cambio)
     semanas: Mapped[int] = mapped_column(Integer, default=1)      # cada cuántas semanas cambian de turno

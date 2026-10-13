@@ -1,4 +1,9 @@
-"""Configuración de correo y avisos a caseta (administrador y super administrador)."""
+"""Configuración de correo y avisos a caseta.
+
+- El servidor de correo (SMTP o Microsoft 365) es común a todas las sedes: solo lo cambia un super administrador.
+- Los avisos a caseta (activos, correos y tipos de permiso) son de cada sede: los configura el administrador
+  de la sede activa (selector del menú).
+"""
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -8,8 +13,9 @@ from sqlalchemy.orm import Session
 
 from .. import correo
 from ..database import get_db
-from ..models import TIPOS_PERMISO_SOLICITABLES, NotificacionCorreo, Usuario
+from ..models import ROL_SUPERADMIN, TIPOS_PERMISO_SOLICITABLES, NotificacionCorreo, Sede, Usuario
 from ..security import ahora, auditar, require_admin
+from ..sedes import Alcance, alcance
 
 router = APIRouter(prefix="/api/admin/correo", tags=["correo y caseta"])
 
@@ -33,12 +39,14 @@ class PruebaIn(BaseModel):
     destinatario: str | None = None
 
 
-def _estado(db: Session) -> dict:
+def _estado(db: Session, sede: Sede, user: Usuario) -> dict:
     c = correo.cargar(db)
     return {
-        "caseta_activo": c["CORREO_CASETA_ACTIVO"] == "true",
-        "caseta_destinatarios": c["CORREO_CASETA_DESTINATARIOS"],
-        "caseta_tipos": correo.lista_correos(c["CORREO_CASETA_TIPOS"]),
+        "sede_id": sede.id, "sede_nombre": sede.nombre,
+        "puede_editar_servidor": user.rol == ROL_SUPERADMIN,
+        "caseta_activo": sede.caseta_activo,
+        "caseta_destinatarios": sede.caseta_destinatarios or "",
+        "caseta_tipos": correo.lista_correos(sede.caseta_tipos),
         "metodo": c["CORREO_METODO"],
         "remitente": c["CORREO_REMITENTE"],
         "remitente_nombre": c["CORREO_REMITENTE_NOMBRE"],
@@ -51,13 +59,27 @@ def _estado(db: Session) -> dict:
     }
 
 
+def _sede(db: Session, alc: Alcance) -> Sede:
+    sede = db.get(Sede, alc.defecto) if alc.defecto else None
+    if sede is None:
+        raise HTTPException(404, "Sede no encontrada")
+    return sede
+
+
 @router.get("")
-def obtener(db: Session = Depends(get_db), _=Depends(require_admin)):
-    return _estado(db)
+def obtener(db: Session = Depends(get_db), user: Usuario = Depends(require_admin), alc: Alcance = Depends(alcance)):
+    return _estado(db, _sede(db, alc), user)
 
 
 @router.put("")
-def guardar(data: CorreoIn, request: Request, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin)):
+def guardar(data: CorreoIn, request: Request, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin),
+            alc: Alcance = Depends(alcance)):
+    sede = _sede(db, alc)
+    super_admin = admin.rol == ROL_SUPERADMIN
+    actual = correo.cargar(db)
+    if not super_admin:  # el servidor de correo es común: el administrador conserva el configurado
+        data.metodo, data.remitente = actual["CORREO_METODO"], actual["CORREO_REMITENTE"]
+        data.smtp_host = actual["CORREO_SMTP_HOST"]
     destinatarios = correo.lista_correos(data.caseta_destinatarios)
     errores = [f"Correo no válido: {d}" for d in destinatarios if not correo.EMAIL.match(d)]
     remitente = data.remitente.strip().lower()
@@ -76,10 +98,11 @@ def guardar(data: CorreoIn, request: Request, db: Session = Depends(get_db), adm
     if errores:
         raise HTTPException(422, " ".join(errores))
 
+    sede.caseta_activo = data.caseta_activo
+    sede.caseta_destinatarios = ", ".join(destinatarios)
+    sede.caseta_tipos = ",".join(tipos)
+    db.commit()
     cambios = {
-        "CORREO_CASETA_ACTIVO": str(data.caseta_activo).lower(),
-        "CORREO_CASETA_DESTINATARIOS": ", ".join(destinatarios),
-        "CORREO_CASETA_TIPOS": ",".join(tipos),
         "CORREO_METODO": data.metodo,
         "CORREO_REMITENTE": remitente,
         "CORREO_REMITENTE_NOMBRE": data.remitente_nombre.strip(),
@@ -92,25 +115,29 @@ def guardar(data: CorreoIn, request: Request, db: Session = Depends(get_db), adm
         cambios["CORREO_SMTP_PASSWORD"] = data.smtp_password
     elif data.borrar_password:
         cambios["CORREO_SMTP_PASSWORD"] = None
-    correo.guardar(db, cambios, admin.id)
+    if super_admin:
+        correo.guardar(db, cambios, admin.id)
     auditar(db, "config_correo", actor_id=admin.id,
-            detalle=f"caseta={'activo' if data.caseta_activo else 'inactivo'} · {len(destinatarios)} destinatario(s) · {data.metodo}",
+            detalle=f"{sede.nombre}: caseta={'activo' if data.caseta_activo else 'inactivo'} · "
+                    f"{len(destinatarios)} destinatario(s){' · servidor ' + data.metodo if super_admin else ''}",
             request=request)
     db.commit()
-    return _estado(db)
+    return _estado(db, sede, admin)
 
 
 @router.post("/prueba")
-def prueba(data: PruebaIn, db: Session = Depends(get_db), _=Depends(require_admin)):
-    """Envía un correo de prueba (a la dirección indicada o a los correos de caseta) con la configuración guardada."""
+def prueba(data: PruebaIn, db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+    """Envía un correo de prueba (a la dirección indicada o a la caseta de la sede) con la configuración guardada."""
     cfg = correo.cargar(db)
-    destinatarios = correo.lista_correos(data.destinatario or cfg["CORREO_CASETA_DESTINATARIOS"])
+    sede = _sede(db, alc)
+    destinatarios = correo.lista_correos(data.destinatario or sede.caseta_destinatarios)
     if not destinatarios:
         raise HTTPException(422, "Indica a qué correo enviar la prueba.")
     if any(not correo.EMAIL.match(d) for d in destinatarios):
         raise HTTPException(422, "El correo de prueba no es válido.")
     asunto, html_, texto = correo.mensaje_prueba()
-    notif = NotificacionCorreo(fecha=ahora(), evento="prueba", destinatarios=", ".join(destinatarios), asunto=asunto)
+    notif = NotificacionCorreo(fecha=ahora(), evento="prueba", sede_id=sede.id, destinatarios=", ".join(destinatarios),
+                               asunto=asunto)
     db.add(notif)
     db.commit()
     correo._registrar_y_enviar(db, notif, cfg, html_, texto)
@@ -118,8 +145,10 @@ def prueba(data: PruebaIn, db: Session = Depends(get_db), _=Depends(require_admi
 
 
 @router.get("/historial")
-def historial(limite: int = 50, db: Session = Depends(get_db), _=Depends(require_admin)):
-    q = select(NotificacionCorreo).order_by(NotificacionCorreo.id.desc()).limit(min(max(limite, 1), 200))
+def historial(limite: int = 50, db: Session = Depends(get_db), _=Depends(require_admin),
+              alc: Alcance = Depends(alcance)):
+    q = (select(NotificacionCorreo).where(alc.filtro(NotificacionCorreo.sede_id))
+         .order_by(NotificacionCorreo.id.desc()).limit(min(max(limite, 1), 200)))
     res = []
     for n in db.scalars(q):
         p = n.permiso
@@ -133,9 +162,9 @@ def historial(limite: int = 50, db: Session = Depends(get_db), _=Depends(require
 
 
 @router.post("/historial/{nid}/reintentar")
-def reintentar(nid: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def reintentar(nid: int, db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
     n = db.get(NotificacionCorreo, nid)
-    if not n:
+    if not n or not alc.permite(n.sede_id):
         raise HTTPException(404, "Notificación no encontrada")
     correo.reintentar(db, n)
     return {"ok": n.estado == "enviado", "error": n.error}

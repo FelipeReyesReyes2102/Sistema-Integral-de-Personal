@@ -15,7 +15,7 @@ from .database import SessionLocal, engine
 from .migraciones import actualizar_esquema
 from .routers import (
     auth, calendario, catalogos, configuracion, consultas, correo, equipo, permisos,
-    rotacion as rotacion_router, usuarios, vacaciones,
+    rotacion as rotacion_router, sedes, usuarios, vacaciones,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -61,7 +61,7 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-CSRF-Token"],
 )
 
-for r in (auth, usuarios, catalogos, vacaciones, permisos, calendario, equipo, configuracion, consultas, correo,
+for r in (auth, sedes, usuarios, catalogos, vacaciones, permisos, calendario, equipo, configuracion, consultas, correo,
           rotacion_router):
     app.include_router(r.router)
 

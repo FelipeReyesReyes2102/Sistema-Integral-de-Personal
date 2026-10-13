@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Pencil, Plus, Trash2, Users } from 'lucide-react'
 import { api } from '../api'
 import Modal from '../components/Modal'
+import SedeActual from '../components/SedeActual'
+import { useAuth } from '../auth'
 import { DIAS_SEMANA, fmtFecha, hoyISO } from '../utils'
 
 const VACIO = {
@@ -18,6 +20,8 @@ function describirCiclo(g) {
 }
 
 export default function Grupos() {
+  const { user } = useAuth()
+  const variasSedes = (user?.sedes || []).length > 1
   const [lista, setLista] = useState([])
   const [form, setForm] = useState(null)
   const [miembros, setMiembros] = useState(null)
@@ -57,6 +61,7 @@ export default function Grupos() {
 
   return (
     <>
+      <SedeActual que="Los grupos nuevos" />
       <div className="fila" style={{ marginBottom: 14 }}>
         <div className="muted">Los grupos definen qué días trabaja el personal de planta; con ellos se cuentan los días de vacaciones.</div>
         <div className="espacio" />
@@ -67,6 +72,7 @@ export default function Grupos() {
           <div key={g.id} className="card grupo-card" style={{ borderTopColor: g.color, opacity: g.activo ? 1 : 0.6 }}>
             <div className="fila">
               <h3 style={{ fontSize: 17 }}>{g.nombre}</h3>
+              {variasSedes && <div className="muted" style={{ fontSize: 12 }}>{g.sede_nombre}</div>}
               <div className="espacio" />
               <button className="icon-btn" onClick={() => setForm({ ...g, fecha_inicio_ciclo: g.fecha_inicio_ciclo || '' })}><Pencil size={15} /></button>
               <button className="icon-btn rojo" onClick={() => borrar(g)}><Trash2 size={15} /></button>
@@ -130,10 +136,11 @@ function Miembros({ grupo, onClose, onSaved }) {
 
   useEffect(() => {
     api('/usuarios', { query: { rol: 'planta', activos: true } }).then((us) => {
-      setEmpleados(us)
-      setSel(new Set(us.filter((u) => u.grupo_id === grupo.id).map((u) => u.id)))
+      const deSede = us.filter((u) => u.sede_id === grupo.sede_id)
+      setEmpleados(deSede)
+      setSel(new Set(deSede.filter((u) => u.grupo_id === grupo.id).map((u) => u.id)))
     })
-    api('/turnos').then(setTurnos)
+    api('/turnos').then((ts) => setTurnos(ts.filter((t) => t.sede_id === grupo.sede_id)))
   }, [grupo.id])
 
   const toggle = (id) => {

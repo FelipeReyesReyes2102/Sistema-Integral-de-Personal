@@ -3,6 +3,7 @@ import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { api } from '../api'
 import Modal from '../components/Modal'
 import RotacionTurnos from '../components/RotacionTurnos'
+import SedeActual from '../components/SedeActual'
 import { hhmm } from '../utils'
 
 const VACIO = { nombre: '', hora_entrada: '07:00', hora_salida: '19:00', horas_jornada: 12, descripcion: '', activo: true }
@@ -37,6 +38,7 @@ export default function Turnos() {
 
   return (
     <>
+    <SedeActual que="Los turnos nuevos y la rotación" />
     <div className="card">
       <div className="fila" style={{ marginBottom: 14 }}>
         <div className="muted">Define los horarios. Se usan para prellenar permisos y limitar su duración a la jornada.</div>
@@ -49,7 +51,7 @@ export default function Turnos() {
           <tbody>
             {lista.map((t) => (
               <tr key={t.id}>
-                <td><b>{t.nombre}</b></td>
+                <td><b>{t.nombre}</b>{t.sede_nombre && <div className="muted" style={{ fontSize: 11 }}>{t.sede_nombre}</div>}</td>
                 <td>{hhmm(t.hora_entrada)}</td>
                 <td>{hhmm(t.hora_salida)}</td>
                 <td>{t.horas_jornada} h</td>

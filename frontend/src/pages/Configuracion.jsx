@@ -4,6 +4,7 @@ import { api } from '../api'
 import { num } from '../utils'
 import ConfigMicrosoft from '../components/ConfigMicrosoft'
 import ConfigCorreo from '../components/ConfigCorreo'
+import ConfigSedes from '../components/ConfigSedes'
 import { useAuth } from '../auth'
 import { esSuperAdmin } from '../utils'
 
@@ -37,7 +38,10 @@ export default function Configuracion() {
     <div className="vac-layout">
       <div className="card">
         <h3 style={{ marginBottom: 6 }}>Días de vacaciones por antigüedad</h3>
-        <p className="muted" style={{ marginTop: 0 }}>Días de 8 horas que corresponden a cada año de servicio.</p>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Días de 8 horas que corresponden a cada año de servicio. Por ahora es la misma tabla para todas las sedes
+          {esSuperAdmin(user) ? '.' : '; solo la modifica un super administrador.'}
+        </p>
         <div className="tabla-wrap">
           <table className="tabla">
             <thead><tr><th>Años desde</th><th>Años hasta</th><th>Días (oficinas)</th><th>Días planta (12 h)</th><th /></tr></thead>
@@ -55,9 +59,11 @@ export default function Configuracion() {
           </table>
         </div>
         <div className="fila" style={{ marginTop: 12 }}>
-          <button className="btn" onClick={agregar}><Plus size={16} /> Agregar rango</button>
-          <div className="espacio" />
-          <button className="btn btn-primary" onClick={guardar}>Guardar tabla</button>
+          {esSuperAdmin(user) && <>
+            <button className="btn" onClick={agregar}><Plus size={16} /> Agregar rango</button>
+            <div className="espacio" />
+            <button className="btn btn-primary" onClick={guardar}>Guardar tabla</button>
+          </>}
         </div>
         {msg && <div className={`alerta ${msg.ok ? 'ok' : 'error'}`}>{msg.t}</div>}
       </div>
@@ -75,6 +81,7 @@ export default function Configuracion() {
         </ul>
       </div>
     </div>
+    {esSuperAdmin(user) && <ConfigSedes />}
     <ConfigCorreo />
     {esSuperAdmin(user) && <ConfigMicrosoft />}
     </>

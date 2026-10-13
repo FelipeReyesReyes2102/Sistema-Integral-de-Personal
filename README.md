@@ -17,6 +17,19 @@ consultas con el médico de planta.
 | **Planta** | Igual que oficinas, con días de 12 h y días laborales según su grupo/turno. |
 | **Médico de planta** | Registra consultas médicas (paciente filtrado por tipo de usuario, síntomas, diagnóstico, medicamentos recetados, indicaciones y resultado). Para sus propias vacaciones se rige como oficinas. |
 
+### Sedes
+
+- Cada sede (por ejemplo *O-tek México*, *O-Tek Colombia - Medellín*) tiene su propio personal, administradores,
+  turnos, grupos, rotación, festivos, avisos a caseta y zona horaria.
+- La sede de cada empleado se toma de su **Ubicación del trabajo** en Microsoft Entra ID; el super administrador
+  puede crear las sedes con **Configuración → Sedes → Importar desde Microsoft**.
+- **Super administrador:** ve todas las sedes, crea y edita sedes y es el único que cambia a un empleado de sede.
+- **Administrador:** solo su sede y las adicionales que le asigne un super administrador (en el empleado:
+  *Sedes adicionales que administra*). Con varias sedes, el menú muestra un selector de sede.
+- Los jefes solo tienen a cargo personas de su propia sede. Los cumpleaños se muestran por sede.
+- El servidor de correo y la tabla de antigüedad son comunes (los cambia el super administrador); los datos que
+  existían antes de las sedes quedaron en *O-tek México*.
+
 ### Inicio de sesión
 
 Con **correo o número de nómina** y contraseña (o con la cuenta de Microsoft cuando esté configurada).

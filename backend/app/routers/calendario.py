@@ -13,7 +13,8 @@ from ..models import (
 )
 from ..models import ROLES_ADMIN, es_admin  # noqa: F401
 from ..security import get_current_user, require_admin
-from ..services import ciclo_de, empleado_visible, festivos_de
+from ..sedes import Alcance, admin_permite, alcance
+from ..services import ciclo_de, consulta_festivos, empleado_visible, festivos_de
 
 router = APIRouter(prefix="/api", tags=["calendario y resumen"])
 
@@ -60,10 +61,12 @@ def _consultas(db: Session, u: Usuario, desde: date, hasta: date, con_detalle: b
              "hora_fin": c.hora_fin.strftime("%H:%M") if c.hora_fin else None} for c in db.scalars(q)]
 
 
-def _cumpleanos(db: Session, anio: int, yo: int) -> list[dict]:
-    """Cumpleaños del personal activo en el año indicado. Solo día y mes (nunca el año de nacimiento ni la edad)."""
+def _cumpleanos(db: Session, anio: int, yo: int, sede_id: int | None) -> list[dict]:
+    """Cumpleaños del personal activo de la sede en el año indicado. Solo día y mes (nunca el año de nacimiento
+    ni la edad)."""
     res = []
-    for u in db.scalars(select(Usuario).where(Usuario.activo.is_(True), Usuario.fecha_nacimiento.is_not(None))):
+    for u in db.scalars(select(Usuario).where(Usuario.activo.is_(True), Usuario.fecha_nacimiento.is_not(None),
+                                              Usuario.sede_id == sede_id)):
         n = u.fecha_nacimiento
         dia = 28 if (n.month, n.day) == (2, 29) and monthrange(anio, 2)[1] == 28 else n.day
         res.append({"fecha": date(anio, n.month, dia).isoformat(), "nombre": u.nombre, "usuario_id": u.id,
@@ -78,8 +81,7 @@ def calendario(anio: int, usuario_id: int | None = None, db: Session = Depends(g
     desde, hasta = date(anio, 1, 1), date(anio, 12, 31)
     ciclo = ciclo_de(u)
     cat = reglas.categoria(u.rol)
-    festivos = db.scalars(select(Festivo).where(Festivo.fecha >= desde, Festivo.fecha <= hasta,
-                                                Festivo.aplica_a.in_(["todos", cat]))).all()
+    festivos = db.scalars(consulta_festivos(u, desde, hasta)).all()
     no_laborables, d = [], desde
     while d <= hasta:
         if not ciclo.es_laboral(d):
@@ -93,18 +95,18 @@ def calendario(anio: int, usuario_id: int | None = None, db: Session = Depends(g
         "vacaciones": _dias_vacaciones(db, u, desde, hasta),
         "permisos": _permisos_por_dia(db, u, desde, hasta),
         "consultas": _consultas(db, u, desde, hasta, detalle_clinico),
-        "cumpleanos": _cumpleanos(db, anio, u.id),
+        "cumpleanos": _cumpleanos(db, anio, u.id, u.sede_id),
     }
 
 
 @router.get("/calendario/equipo")
 def calendario_equipo(anio: int, mes: int, grupo_id: int | None = None, rol: str | None = None, q: str | None = None,
-                      db: Session = Depends(get_db), _=Depends(require_admin)):
+                      db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
     """Vista mensual de todo el personal con todos sus eventos por día:
     vacaciones, permisos, home office y consultas médicas (más festivos y descansos)."""
     desde = date(anio, mes, 1)
     hasta = date(anio, mes, monthrange(anio, mes)[1])
-    stmt = select(Usuario).where(Usuario.activo.is_(True)).order_by(Usuario.nombre)
+    stmt = select(Usuario).where(Usuario.activo.is_(True), alc.filtro(Usuario.sede_id)).order_by(Usuario.nombre)
     if grupo_id:
         stmt = stmt.where(Usuario.grupo_id == grupo_id)
     if rol:
@@ -115,8 +117,7 @@ def calendario_equipo(anio: int, mes: int, grupo_id: int | None = None, rol: str
     totales = {"vacaciones": 0, "permiso": 0, "home_office": 0, "consulta": 0}
     for u in db.scalars(stmt):
         ciclo = ciclo_de(u)
-        fest = {f.fecha: f.nombre for f in db.scalars(select(Festivo).where(
-            Festivo.fecha >= desde, Festivo.fecha <= hasta, Festivo.aplica_a.in_(["todos", reglas.categoria(u.rol)])))}
+        fest = {f.fecha: f.nombre for f in db.scalars(consulta_festivos(u, desde, hasta))}
         dias: dict[str, dict] = {}
         d = desde
         while d <= hasta:
@@ -137,6 +138,7 @@ def calendario_equipo(anio: int, mes: int, grupo_id: int | None = None, rol: str
             totales["consulta"] += 1
         empleados.append({
             "id": u.id, "nombre": u.nombre, "rol": u.rol, "numero_empleado": u.numero_empleado,
+            "sede": u.sede.nombre if u.sede else None,
             "tiene_foto": u.foto_tipo is not None, "puesto": u.puesto,
             "grupo": u.grupo.nombre if u.grupo else None, "grupo_color": u.grupo.color if u.grupo else None,
             "turno": u.turno.nombre if u.turno else None, "dias": dias,
@@ -167,8 +169,9 @@ def resumen_permisos(anio: int | None = None, db: Session = Depends(get_db), use
 
 
 @router.get("/pendientes")
-def pendientes(db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
-    """Solicitudes por aprobar: las asignadas a mí como jefe y, si soy administrador, todas."""
+def pendientes(db: Session = Depends(get_db), user: Usuario = Depends(get_current_user),
+               alc: Alcance = Depends(alcance)):
+    """Solicitudes por aprobar: las asignadas a mí como jefe y, si soy administrador, todas las de mis sedes."""
     def contar(modelo, extra=()):
         q = select(func.count(modelo.id)).where(modelo.estado == SOLICITADO, *extra)
         return db.scalar(q) or 0
@@ -178,16 +181,18 @@ def pendientes(db: Session = Depends(get_db), user: Usuario = Depends(get_curren
     res = {"vacaciones": contar(SolicitudVacaciones, mias), "permisos": contar(Permiso, mias_p)}
     res["total"] = res["vacaciones"] + res["permisos"]
     if es_admin(user):
-        res["todas"] = contar(SolicitudVacaciones) + contar(Permiso)
+        de_sede = lambda m: (m.usuario_id.in_(select(Usuario.id).where(alc.filtro(Usuario.sede_id))),)  # noqa: E731
+        res["todas"] = contar(SolicitudVacaciones, de_sede(SolicitudVacaciones)) + contar(Permiso, de_sede(Permiso))
     return res
 
 
 @router.get("/admin/estadisticas")
-def estadisticas(db: Session = Depends(get_db), _=Depends(require_admin)):
+def estadisticas(db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
     hoy = date.today()
-    por_rol = dict(db.execute(select(Usuario.rol, func.count(Usuario.id)).where(Usuario.activo.is_(True))
-                              .group_by(Usuario.rol)).all())
+    por_rol = dict(db.execute(select(Usuario.rol, func.count(Usuario.id))
+                              .where(Usuario.activo.is_(True), alc.filtro(Usuario.sede_id)).group_by(Usuario.rol)).all())
     de_vacaciones = db.scalar(select(func.count(func.distinct(SolicitudVacaciones.usuario_id))).where(
+        SolicitudVacaciones.usuario_id.in_(select(Usuario.id).where(alc.filtro(Usuario.sede_id))),
         SolicitudVacaciones.estado == VALIDADO, SolicitudVacaciones.fecha_inicio <= hoy,
         SolicitudVacaciones.fecha_fin >= hoy)) or 0
     return {"empleados_por_rol": por_rol, "de_vacaciones_hoy": de_vacaciones}

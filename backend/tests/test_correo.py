@@ -10,7 +10,9 @@ from app import correo, microsoft
 from app.config import settings
 from app.database import SessionLocal
 from app.main import app
-from app.models import ConfiguracionApp
+from app.models import ConfiguracionApp, Sede, Usuario
+from app.security import hash_password
+from app.sedes import sede_principal
 from app.seed import main as seed
 
 FIRMA = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
@@ -48,6 +50,17 @@ def entrar(email, pwd="Cambiar123"):
     return c
 
 
+def superadmin():
+    """El servidor de correo es común a todas las sedes: solo lo configura un super administrador."""
+    with SessionLocal() as db:
+        if not db.query(Usuario).filter(Usuario.email == "super.correo@o-tek.com").first():
+            db.add(Usuario(numero_empleado="SC-1", nombre="Super Correo", email="super.correo@o-tek.com", rol="superadmin",
+                           password_hash=hash_password("Super123x"), fecha_ingreso=date(2020, 1, 1),
+                           sede_id=sede_principal(db).id))
+            db.commit()
+    return entrar("super.correo@o-tek.com", "Super123x")
+
+
 CONFIG = {"caseta_activo": True, "caseta_destinatarios": "caseta1@o-tek.com, caseta2@o-tek.com",
           "caseta_tipos": ["llegada_tarde", "salida_temprana", "salida_intermedia"], "metodo": "smtp",
           "remitente": "avisos@o-tek.com", "remitente_nombre": "SIP-O", "smtp_host": "smtp.o-tek.com",
@@ -64,6 +77,9 @@ def entorno(monkeypatch):
     yield
     with SessionLocal() as db:
         correo.guardar(db, {k: None for k in correo.CLAVES}, None)
+        for sede in db.query(Sede):
+            sede.caseta_activo, sede.caseta_destinatarios = False, ""
+        db.commit()
     microsoft.transporte = None
 
 
@@ -81,7 +97,7 @@ def permiso_de_carlos(tipo="salida_temprana", dias=3):
 
 
 def test_configuracion_validaciones_y_secreto():
-    admin = entrar("admin@empresa.com", "Admin123")
+    admin = superadmin()
     r = admin.put("/api/admin/correo", json={**CONFIG, "caseta_destinatarios": ""})
     assert r.status_code == 422 and "caseta" in r.text
     assert admin.put("/api/admin/correo", json={**CONFIG, "caseta_destinatarios": "no-es-correo"}).status_code == 422
@@ -91,10 +107,15 @@ def test_configuracion_validaciones_y_secreto():
         fila = db.get(ConfiguracionApp, "CORREO_SMTP_PASSWORD")
         assert fila.cifrado and "clave-smtp" not in fila.valor
     assert entrar("ana@empresa.com").get("/api/admin/correo").status_code == 403
+    # Un administrador configura la caseta de su sede, pero no cambia el servidor de correo común
+    admin = entrar("admin@empresa.com", "Admin123")
+    r = admin.put("/api/admin/correo", json={**CONFIG, "smtp_host": "otro.servidor.com", "caseta_destinatarios": "c@o-tek.com"})
+    assert r.status_code == 200 and r.json()["smtp_host"] == "smtp.o-tek.com" and r.json()["caseta_destinatarios"] == "c@o-tek.com"
+    assert r.json()["puede_editar_servidor"] is False
 
 
 def test_aviso_a_caseta_al_autorizar_y_al_cancelar():
-    admin = entrar("admin@empresa.com", "Admin123")
+    admin = superadmin()
     admin.put("/api/admin/correo", json=CONFIG)
     p = permiso_de_carlos()
     laura = entrar("laura@empresa.com")
@@ -114,7 +135,7 @@ def test_aviso_a_caseta_al_autorizar_y_al_cancelar():
 
 
 def test_tipos_no_seleccionados_no_avisan():
-    admin = entrar("admin@empresa.com", "Admin123")
+    admin = superadmin()
     admin.put("/api/admin/correo", json=CONFIG)  # home office no está en los tipos
     p = permiso_de_carlos("home_office", dias=40)
     entrar("laura@empresa.com").post(f"/api/permisos/{p['id']}/validar", json={})
@@ -122,7 +143,7 @@ def test_tipos_no_seleccionados_no_avisan():
 
 
 def test_error_de_envio_no_bloquea_y_se_puede_reintentar():
-    admin = entrar("admin@empresa.com", "Admin123")
+    admin = superadmin()
     admin.put("/api/admin/correo", json=CONFIG)
     FALLA["activa"] = True
     p = permiso_de_carlos("llegada_tarde", dias=5)
@@ -136,7 +157,7 @@ def test_error_de_envio_no_bloquea_y_se_puede_reintentar():
 
 
 def test_correo_de_prueba():
-    admin = entrar("admin@empresa.com", "Admin123")
+    admin = superadmin()
     admin.put("/api/admin/correo", json=CONFIG)
     r = admin.post("/api/admin/correo/prueba", json={"destinatario": "yo@o-tek.com"}).json()
     assert r["ok"] and ENVIADOS[0]["To"] == "yo@o-tek.com" and "prueba" in ENVIADOS[0]["Subject"]
@@ -158,7 +179,7 @@ def test_envio_por_microsoft_365(monkeypatch):
         return httpx.Response(404)
     microsoft.transporte = httpx.MockTransport(manejador)
     microsoft._token_app.update(valor=None, expira=0)
-    admin = entrar("admin@empresa.com", "Admin123")
+    admin = superadmin()
     admin.put("/api/admin/correo", json={**CONFIG, "metodo": "graph"})
     assert admin.post("/api/admin/correo/prueba", json={}).json()["ok"] is True
     assert enviados == ["/v1.0/users/avisos@o-tek.com/sendMail"]
@@ -186,7 +207,7 @@ def test_graph_renueva_token_en_cache_sin_mail_send(monkeypatch):
         return httpx.Response(404)
     microsoft.transporte = httpx.MockTransport(manejador)
     microsoft._token_app.update(valor="viejo", expira=9e12)
-    admin = entrar("admin@empresa.com", "Admin123")
+    admin = superadmin()
     admin.put("/api/admin/correo", json={**CONFIG, "metodo": "graph"})
     assert admin.post("/api/admin/correo/prueba", json={}).json()["ok"] is True
     assert llamadas == ["Bearer viejo", "Bearer nuevo"]

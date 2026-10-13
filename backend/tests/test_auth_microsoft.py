@@ -8,7 +8,7 @@ import base64
 import hashlib
 import json
 import time
-from datetime import timedelta
+from datetime import date, timedelta
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -293,6 +293,44 @@ def test_graph_registra_jefe_y_sugiere_es_jefe():
         db.commit()
     r = admin.post("/api/usuarios/microsoft/registrar-jefe", json={"email": "jefa9@empresa.com"})
     assert r.status_code == 200 and r.json()["es_jefe"] and r.json()["id"] == jefa["id"]
+
+
+def test_ubicacion_de_microsoft_define_la_sede():
+    """La "Ubicación del trabajo" de Microsoft asigna la sede; si no existe, la crea el super administrador."""
+    from app.sedes import sede_principal
+
+    def graph(ruta):
+        if ruta.startswith("users/carta@empresa.com"):
+            return httpx.Response(200, json={"id": "oid-carta", "displayName": "Oscar Cartagena", "mail": "carta@empresa.com",
+                                             "officeLocation": "O-Tek Colombia - Cartagena (prueba)", "accountEnabled": True})
+        if ruta.startswith("users/mx@empresa.com"):
+            return httpx.Response(200, json={"id": "oid-mx", "displayName": "Felipe MX", "mail": "mx@empresa.com",
+                                             "officeLocation": "O-tek México", "accountEnabled": True})
+        if ruta.startswith("users?$select=officeLocation"):
+            return httpx.Response(200, json={"value": [{"officeLocation": "O-tek México", "accountEnabled": True},
+                                                       {"officeLocation": "O-Tek Colombia - Medellín (prueba)", "accountEnabled": True}]})
+        return httpx.Response(404, json={"error": {"code": "Request_ResourceNotFound"}})
+    MS["graph"] = graph
+    admin = _admin()
+    # Un administrador: la ubicación de su sede se reconoce; una ubicación nueva no crea sedes
+    assert admin.get("/api/usuarios/microsoft/buscar?email=mx@empresa.com").json()["sede_nombre"] == "O-tek México"
+    d = admin.get("/api/usuarios/microsoft/buscar?email=carta@empresa.com").json()
+    assert d["ubicacion"] == "O-Tek Colombia - Cartagena (prueba)" and d["sede_id"] is None and not d["sede_nueva"]
+    # El super administrador sí la crea
+    with SessionLocal() as db:
+        if not db.query(Usuario).filter(Usuario.email == "super.ms@empresa.com").first():
+            db.add(Usuario(numero_empleado="SM-1", nombre="Super MS", email="super.ms@empresa.com", rol="superadmin",
+                           password_hash=hash_password("Super12345"), fecha_ingreso=date(2020, 1, 1),
+                           sede_id=sede_principal(db).id))
+            db.commit()
+    su = TestClient(app)
+    assert su.post("/api/auth/login-json", json={"email": "super.ms@empresa.com", "password": "Super12345"}).status_code == 200
+    su.headers["X-CSRF-Token"] = su.cookies["sip_csrf"]
+    d = su.get("/api/usuarios/microsoft/buscar?email=carta@empresa.com").json()
+    assert d["sede_nueva"] and d["sede_nombre"] == "O-Tek Colombia - Cartagena (prueba)" and d["sede_id"]
+    # Importar todas las ubicaciones del directorio
+    r = su.post("/api/sedes/importar-microsoft").json()
+    assert r["creadas"] == ["O-Tek Colombia - Medellín (prueba)"]
 
 
 @pytest.mark.parametrize("respuesta,status,texto", [

@@ -9,7 +9,8 @@ from ..models import ROL_PLANTA, Festivo, Grupo, ReglaAntiguedad, Turno, Usuario
 from ..schemas import (
     AsignarMiembros, FestivoIn, FestivoOut, GrupoIn, GrupoOut, ReglaIn, ReglaOut, TurnoIn, TurnoOut,
 )
-from ..security import get_current_user, require_admin
+from ..security import get_current_user, require_admin, require_superadmin
+from ..sedes import Alcance, alcance
 
 router = APIRouter(prefix="/api", tags=["catálogos"])
 
@@ -24,21 +25,22 @@ def _commit(db: Session, msg: str = "Ya existe un registro con ese nombre"):
 
 # ---------------- Turnos ----------------
 @router.get("/turnos", response_model=list[TurnoOut])
-def listar_turnos(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    return db.scalars(select(Turno).order_by(Turno.nombre)).all()
+def listar_turnos(db: Session = Depends(get_db), alc: Alcance = Depends(alcance)):
+    return db.scalars(select(Turno).where(alc.filtro(Turno.sede_id)).order_by(Turno.nombre)).all()
 
 
 @router.post("/turnos", response_model=TurnoOut, status_code=201)
-def crear_turno(data: TurnoIn, db: Session = Depends(get_db), _=Depends(require_admin)):
-    t = Turno(**data.model_dump())
+def crear_turno(data: TurnoIn, db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+    t = Turno(**data.model_dump(), sede_id=alc.defecto)
     db.add(t)
     _commit(db)
     return t
 
 
 @router.put("/turnos/{turno_id}", response_model=TurnoOut)
-def editar_turno(turno_id: int, data: TurnoIn, db: Session = Depends(get_db), _=Depends(require_admin)):
-    t = db.get(Turno, turno_id) or _404("Turno")
+def editar_turno(turno_id: int, data: TurnoIn, db: Session = Depends(get_db), _=Depends(require_admin),
+                 alc: Alcance = Depends(alcance)):
+    t = _de_sede(db.get(Turno, turno_id), alc, "Turno")
     for k, v in data.model_dump().items():
         setattr(t, k, v)
     _commit(db)
@@ -46,8 +48,9 @@ def editar_turno(turno_id: int, data: TurnoIn, db: Session = Depends(get_db), _=
 
 
 @router.delete("/turnos/{turno_id}", status_code=204)
-def borrar_turno(turno_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
-    t = db.get(Turno, turno_id) or _404("Turno")
+def borrar_turno(turno_id: int, db: Session = Depends(get_db), _=Depends(require_admin),
+                 alc: Alcance = Depends(alcance)):
+    t = _de_sede(db.get(Turno, turno_id), alc, "Turno")
     db.delete(t)
     db.commit()
 
@@ -60,23 +63,24 @@ def _grupo_out(db: Session, g: Grupo) -> GrupoOut:
 
 
 @router.get("/grupos", response_model=list[GrupoOut])
-def listar_grupos(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    return [_grupo_out(db, g) for g in db.scalars(select(Grupo).order_by(Grupo.nombre))]
+def listar_grupos(db: Session = Depends(get_db), alc: Alcance = Depends(alcance)):
+    return [_grupo_out(db, g) for g in db.scalars(select(Grupo).where(alc.filtro(Grupo.sede_id)).order_by(Grupo.nombre))]
 
 
 @router.post("/grupos", response_model=GrupoOut, status_code=201)
-def crear_grupo(data: GrupoIn, db: Session = Depends(get_db), _=Depends(require_admin)):
+def crear_grupo(data: GrupoIn, db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
     _validar_grupo(data)
-    g = Grupo(**data.model_dump())
+    g = Grupo(**data.model_dump(), sede_id=alc.defecto)
     db.add(g)
     _commit(db)
     return _grupo_out(db, g)
 
 
 @router.put("/grupos/{grupo_id}", response_model=GrupoOut)
-def editar_grupo(grupo_id: int, data: GrupoIn, db: Session = Depends(get_db), _=Depends(require_admin)):
+def editar_grupo(grupo_id: int, data: GrupoIn, db: Session = Depends(get_db), _=Depends(require_admin),
+                 alc: Alcance = Depends(alcance)):
     _validar_grupo(data)
-    g = db.get(Grupo, grupo_id) or _404("Grupo")
+    g = _de_sede(db.get(Grupo, grupo_id), alc, "Grupo")
     for k, v in data.model_dump().items():
         setattr(g, k, v)
     _commit(db)
@@ -84,19 +88,24 @@ def editar_grupo(grupo_id: int, data: GrupoIn, db: Session = Depends(get_db), _=
 
 
 @router.delete("/grupos/{grupo_id}", status_code=204)
-def borrar_grupo(grupo_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
-    g = db.get(Grupo, grupo_id) or _404("Grupo")
+def borrar_grupo(grupo_id: int, db: Session = Depends(get_db), _=Depends(require_admin),
+                 alc: Alcance = Depends(alcance)):
+    g = _de_sede(db.get(Grupo, grupo_id), alc, "Grupo")
     db.delete(g)
     db.commit()
 
 
 @router.put("/grupos/{grupo_id}/miembros", response_model=GrupoOut)
-def asignar_miembros(grupo_id: int, data: AsignarMiembros, db: Session = Depends(get_db), _=Depends(require_admin)):
-    """Reemplaza la lista de miembros del grupo (solo empleados de planta)."""
-    g = db.get(Grupo, grupo_id) or _404("Grupo")
-    if data.turno_id is not None and not db.get(Turno, data.turno_id):
-        raise HTTPException(404, "Turno no encontrado")
+def asignar_miembros(grupo_id: int, data: AsignarMiembros, db: Session = Depends(get_db), _=Depends(require_admin),
+                     alc: Alcance = Depends(alcance)):
+    """Reemplaza la lista de miembros del grupo (solo empleados de planta de la misma sede)."""
+    g = _de_sede(db.get(Grupo, grupo_id), alc, "Grupo")
+    if data.turno_id is not None and ((t := db.get(Turno, data.turno_id)) is None or t.sede_id != g.sede_id):
+        raise HTTPException(404, "Turno no encontrado en la sede del grupo")
     nuevos = db.scalars(select(Usuario).where(Usuario.id.in_(data.usuario_ids))).all() if data.usuario_ids else []
+    otra_sede = [u.nombre for u in nuevos if u.sede_id != g.sede_id]
+    if otra_sede:
+        raise HTTPException(400, f"Solo se pueden asignar empleados de la sede del grupo: {', '.join(otra_sede)}")
     no_planta = [u.nombre for u in nuevos if u.rol != ROL_PLANTA]
     if no_planta:
         raise HTTPException(400, f"Solo se pueden asignar empleados de planta: {', '.join(no_planta)}")
@@ -120,24 +129,26 @@ def _validar_grupo(data: GrupoIn):
 
 # ---------------- Festivos ----------------
 @router.get("/festivos", response_model=list[FestivoOut])
-def listar_festivos(anio: int | None = None, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    q = select(Festivo).order_by(Festivo.fecha)
+def listar_festivos(anio: int | None = None, db: Session = Depends(get_db), alc: Alcance = Depends(alcance)):
+    q = select(Festivo).where(alc.filtro(Festivo.sede_id)).order_by(Festivo.fecha)
     if anio:
         q = q.where(func.extract("year", Festivo.fecha) == anio)
     return db.scalars(q).all()
 
 
 @router.post("/festivos", response_model=FestivoOut, status_code=201)
-def crear_festivo(data: FestivoIn, db: Session = Depends(get_db), _=Depends(require_admin)):
-    f = Festivo(**data.model_dump())
+def crear_festivo(data: FestivoIn, db: Session = Depends(get_db), _=Depends(require_admin),
+                  alc: Alcance = Depends(alcance)):
+    f = Festivo(**data.model_dump(), sede_id=alc.defecto)
     db.add(f)
     db.commit()
     return f
 
 
 @router.put("/festivos/{festivo_id}", response_model=FestivoOut)
-def editar_festivo(festivo_id: int, data: FestivoIn, db: Session = Depends(get_db), _=Depends(require_admin)):
-    f = db.get(Festivo, festivo_id) or _404("Festivo")
+def editar_festivo(festivo_id: int, data: FestivoIn, db: Session = Depends(get_db), _=Depends(require_admin),
+                   alc: Alcance = Depends(alcance)):
+    f = _de_sede(db.get(Festivo, festivo_id), alc, "Festivo")
     for k, v in data.model_dump().items():
         setattr(f, k, v)
     db.commit()
@@ -145,8 +156,9 @@ def editar_festivo(festivo_id: int, data: FestivoIn, db: Session = Depends(get_d
 
 
 @router.delete("/festivos/{festivo_id}", status_code=204)
-def borrar_festivo(festivo_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
-    f = db.get(Festivo, festivo_id) or _404("Festivo")
+def borrar_festivo(festivo_id: int, db: Session = Depends(get_db), _=Depends(require_admin),
+                   alc: Alcance = Depends(alcance)):
+    f = _de_sede(db.get(Festivo, festivo_id), alc, "Festivo")
     db.delete(f)
     db.commit()
 
@@ -158,7 +170,8 @@ def listar_reglas(db: Session = Depends(get_db), _=Depends(get_current_user)):
 
 
 @router.put("/reglas-antiguedad", response_model=list[ReglaOut])
-def reemplazar_reglas(data: list[ReglaIn], db: Session = Depends(get_db), _=Depends(require_admin)):
+def reemplazar_reglas(data: list[ReglaIn], db: Session = Depends(get_db), _=Depends(require_superadmin)):
+    """La tabla de antigüedad es común a todas las sedes (por ahora todas usan las reglas de México)."""
     orden = sorted(data, key=lambda r: r.anios_desde)
     for i, r in enumerate(orden):
         if r.anios_hasta < r.anios_desde:
@@ -176,3 +189,10 @@ def reemplazar_reglas(data: list[ReglaIn], db: Session = Depends(get_db), _=Depe
 
 def _404(nombre: str):
     raise HTTPException(404, f"{nombre} no encontrado")
+
+
+def _de_sede(obj, alc: Alcance, nombre: str):
+    """El registro debe existir y pertenecer a una sede que el usuario administra."""
+    if obj is None or not alc.permite(obj.sede_id):
+        _404(nombre)
+    return obj

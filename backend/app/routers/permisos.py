@@ -14,6 +14,7 @@ from ..models import (
 from ..models import ROLES_ADMIN, es_admin  # noqa: F401
 from ..schemas import PermisoIn, PermisoOut, RechazoIn, ValidarPermisoIn
 from ..security import get_current_user
+from ..sedes import Alcance, admin_permite, alcance, hoy_de
 from ..services import ciclo_de, empleado_visible, festivos_de, puede_revisar, resolver_aprobador
 
 router = APIRouter(prefix="/api/permisos", tags=["permisos"])
@@ -47,7 +48,7 @@ def _home_office(db: Session, data: PermisoIn, empleado: Usuario, actor: Usuario
         raise HTTPException(422, "La fecha final del home office no puede ser anterior a la inicial.")
     if (fin - data.fecha).days > 30:
         raise HTTPException(422, "El home office puede solicitarse por máximo 31 días naturales a la vez.")
-    if not es_admin(actor) and data.fecha < date.today():
+    if not es_admin(actor) and data.fecha < hoy_de(empleado):
         raise HTTPException(422, "No es posible solicitar home office en fechas pasadas.")
     dias = reglas.dias_laborales(data.fecha, fin, ciclo_de(empleado), festivos_de(db, empleado, data.fecha, fin))
     if not dias:
@@ -86,7 +87,7 @@ def _validar(data: PermisoIn, empleado: Usuario, actor: Usuario) -> float:
     jornada = empleado.turno.horas_jornada if empleado.turno else reglas.HORAS_DIA[reglas.categoria(empleado.rol)]
     if horas > jornada:
         raise HTTPException(422, f"El permiso ({horas:g} h) excede la jornada de {jornada} h.")
-    if not es_admin(actor) and data.fecha < date.today() and data.tipo != PERMISO_CONSULTA_MEDICA:
+    if not es_admin(actor) and data.fecha < hoy_de(empleado) and data.tipo != PERMISO_CONSULTA_MEDICA:
         raise HTTPException(422, "No es posible registrar permisos en fechas pasadas.")
     return horas
 
@@ -94,10 +95,10 @@ def _validar(data: PermisoIn, empleado: Usuario, actor: Usuario) -> float:
 @router.get("", response_model=list[PermisoOut])
 def listar(estado: str | None = None, tipo: str | None = None, usuario_id: int | None = None, todos: bool = False,
            por_aprobar: bool = False, anio: int | None = None,
-           db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
+           db: Session = Depends(get_db), user: Usuario = Depends(get_current_user), alc: Alcance = Depends(alcance)):
     q = select(Permiso).order_by(Permiso.fecha.desc(), Permiso.hora_inicio.desc())
     if todos and es_admin(user):
-        pass
+        q = q.where(Permiso.usuario_id.in_(select(Usuario.id).where(alc.filtro(Usuario.sede_id))))
     elif por_aprobar:
         q = q.where(Permiso.aprobador_id == user.id, Permiso.usuario_id != user.id)
     else:
@@ -118,6 +119,8 @@ def crear(data: PermisoIn, db: Session = Depends(get_db), user: Usuario = Depend
         if not es_admin(user):
             raise HTTPException(403, "No autorizado")
         empleado = db.get(Usuario, data.usuario_id) or _404()
+        if not admin_permite(user, empleado.sede_id):
+            _404()
     aprobador_id = resolver_aprobador(db, empleado, data.aprobador_id)
     v = _preparar(db, data, empleado, user)
     if data.enviar:
@@ -134,8 +137,8 @@ def crear(data: PermisoIn, db: Session = Depends(get_db), user: Usuario = Depend
 
 def _obtener(db: Session, pid: int, user: Usuario) -> Permiso:
     p = db.get(Permiso, pid)
-    visible = p and (p.usuario_id == user.id or es_admin(user) or p.aprobador_id == user.id
-                     or p.usuario.jefe_id == user.id)
+    visible = p and (p.usuario_id == user.id or (es_admin(user) and admin_permite(user, p.usuario.sede_id))
+                     or p.aprobador_id == user.id or p.usuario.jefe_id == user.id)
     if not visible:
         _404()
     return p

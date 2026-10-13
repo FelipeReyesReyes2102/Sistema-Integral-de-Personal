@@ -45,6 +45,8 @@ class TurnoIn(BaseModel):
 
 class TurnoOut(TurnoIn, ORM):
     id: int
+    sede_id: int | None = None
+    sede_nombre: str | None = None
 
 
 class GrupoIn(BaseModel):
@@ -61,6 +63,8 @@ class GrupoIn(BaseModel):
 
 class GrupoOut(GrupoIn, ORM):
     id: int
+    sede_id: int | None = None
+    sede_nombre: str | None = None
     total_miembros: int = 0
 
 
@@ -73,6 +77,7 @@ class AsignarMiembros(BaseModel):
 class UsuarioBase(BaseModel):
     numero_empleado: str
     nombre: str
+    sede_id: int | None = None          # por defecto la sede activa del administrador
     email: str | None = None            # correo corporativo (solo oficinas)
     email_personal: str | None = None
     rol: Rol = "oficina"
@@ -96,10 +101,14 @@ class UsuarioIn(UsuarioBase):
     # Opcional: días de vacaciones disponibles hoy. Se llenan primero en el periodo actual (hasta sus días de ley)
     # y el resto en el periodo anterior.
     dias_disponibles: float | None = Field(None, ge=0, le=400)
+    # Solo super administrador: sedes adicionales que administra un administrador
+    sedes_admin: list[int] | None = None
 
 
 class UsuarioOut(UsuarioBase, ORM):
     id: int
+    sede_nombre: str | None = None
+    sedes_admin: list[int] = []
     turno_nombre: str | None = None
     grupo_nombre: str | None = None
     jefe_nombre: str | None = None
@@ -123,11 +132,13 @@ class MeOut(UsuarioOut):
     auth_method: str | None = None
     permissions: list[str] = []
     puede_usar_password: bool = True
+    sedes: list[dict] = []   # sedes que puede consultar (selector del menú)
 
 
 class JefeOut(ORM):
     id: int
     nombre: str
+    sede_id: int | None = None
     email: str | None = None
     puesto: str | None
     departamento: str | None
@@ -164,6 +175,10 @@ class EmpleadoMicrosoftOut(BaseModel):
     jefe: dict | None = None
     jefe_id: int | None = None          # jefe local que coincide con el manager de Microsoft
     jefe_registrado_id: int | None = None  # el manager existe en SIP-O aunque aún no esté marcado como jefe
+    ubicacion: str | None = None        # "Ubicación del trabajo" (officeLocation) de Microsoft
+    sede_id: int | None = None          # sede que corresponde a esa ubicación
+    sede_nombre: str | None = None
+    sede_nueva: bool = False            # se creó la sede a partir de la ubicación
     tiene_reportes: bool = False        # tiene personas a cargo en Microsoft: se sugiere marcarlo como jefe
     foto: str | None = None             # data URL
     ya_registrado_id: int | None = None
@@ -172,6 +187,7 @@ class EmpleadoMicrosoftOut(BaseModel):
 class RegistrarJefeIn(BaseModel):
     """Alta (o marcado como jefe) del jefe que Microsoft indica para un empleado."""
     email: str
+    sede_id: int | None = None  # el jefe debe ser de la misma sede que el empleado
     numero_empleado: str | None = None  # obligatorio solo si Microsoft no tiene el employeeId
 
 
@@ -184,6 +200,8 @@ class FestivoIn(BaseModel):
 
 class FestivoOut(FestivoIn, ORM):
     id: int
+    sede_id: int | None = None
+    sede_nombre: str | None = None
 
 
 class ReglaIn(BaseModel):
@@ -426,3 +444,16 @@ class PacienteOut(ORM):
     puesto: str | None
     departamento: str | None
     tiene_foto: bool = False
+
+
+# ---------- Sedes ----------
+class SedeIn(BaseModel):
+    nombre: str = Field(min_length=2, max_length=120)
+    ubicacion_microsoft: str | None = Field(None, max_length=200)
+    zona_horaria: str = "America/Mexico_City"
+    activa: bool = True
+
+
+class SedeOut(SedeIn, ORM):
+    id: int
+    empleados: int = 0

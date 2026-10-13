@@ -10,11 +10,12 @@ from sqlalchemy.orm import Session, object_session
 from . import reglas
 from .config import settings
 from .models import (
-    BORRADOR, ESTADOS_ACTIVOS, ROL_ADMIN, SOLICITADO, VALIDADO, Festivo, Permiso, PeriodoVacaciones,
+    BORRADOR, ESTADOS_ACTIVOS, ROL_ADMIN, SOLICITADO, VALIDADO, AdminSede, Festivo, Permiso, PeriodoVacaciones,
     ReglaAntiguedad, SolicitudVacaciones, Usuario,
 )
 from .models import ROLES_ADMIN, es_admin  # noqa: F401
 from .schemas import PeriodoOut, UsuarioOut
+from .sedes import admin_permite
 
 
 def tabla_antiguedad(db: Session) -> list[tuple[int, int, int]]:
@@ -38,13 +39,14 @@ def ciclo_de(usuario: Usuario) -> reglas.Ciclo:
     return reglas.Ciclo()
 
 
+def consulta_festivos(usuario: Usuario, desde: date, hasta: date):
+    """Festivos de la sede del empleado que aplican a su categoría."""
+    return select(Festivo).where(Festivo.fecha >= desde, Festivo.fecha <= hasta, Festivo.sede_id == usuario.sede_id,
+                                 Festivo.aplica_a.in_(["todos", reglas.categoria(usuario.rol)]))
+
+
 def festivos_de(db: Session, usuario: Usuario, desde: date, hasta: date) -> set[date]:
-    cat = reglas.categoria(usuario.rol)
-    rows = db.scalars(
-        select(Festivo).where(Festivo.fecha >= desde, Festivo.fecha <= hasta,
-                              Festivo.aplica_a.in_(["todos", cat]))
-    ).all()
-    return {f.fecha for f in rows}
+    return {f.fecha for f in db.scalars(consulta_festivos(usuario, desde, hasta))}
 
 
 def sincronizar_periodos(db: Session, usuario: Usuario, hoy: date | None = None) -> list[PeriodoVacaciones]:
@@ -158,6 +160,7 @@ def saldo_periodo(db: Session, p: PeriodoVacaciones, excluir_id: int | None = No
 def usuario_out(u: Usuario) -> UsuarioOut:
     out = UsuarioOut.model_validate(u)
     out.turno_nombre = u.turno.nombre if u.turno else None
+    out.sede_nombre = u.sede.nombre if u.sede else None
     out.grupo_nombre = u.grupo.nombre if u.grupo else None
     out.jefe_nombre = u.jefe.nombre if u.jefe else None
     out.tiene_foto = u.foto_tipo is not None
@@ -165,6 +168,8 @@ def usuario_out(u: Usuario) -> UsuarioOut:
     out.bloqueado = bool(u.bloqueado_hasta and u.bloqueado_hasta > datetime.now(timezone.utc).replace(tzinfo=None))
     out.antiguedad_anios = reglas.anios_cumplidos(u.fecha_ingreso, date.today())
     db = object_session(u)
+    if db is not None and u.rol == ROL_ADMIN:
+        out.sedes_admin = sorted(db.scalars(select(AdminSede.sede_id).where(AdminSede.usuario_id == u.id)))
     if db is not None and (u.es_jefe or es_admin(u)):
         out.total_a_cargo = db.scalar(
             select(func.count(Usuario.id)).where(Usuario.jefe_id == u.id, Usuario.activo.is_(True))) or 0
@@ -176,6 +181,11 @@ def puede_aprobar(u: Usuario) -> bool:
     return u.activo and (u.es_jefe or es_admin(u))
 
 
+def puede_aprobar_a(jefe: Usuario, empleado_sede_id: int | None) -> bool:
+    """Los jefes solo tienen a cargo personas de su propia sede (o de las sedes que administran)."""
+    return puede_aprobar(jefe) and (jefe.sede_id == empleado_sede_id or admin_permite(jefe, empleado_sede_id))
+
+
 def empleado_visible(db: Session, actor: Usuario, usuario_id: int | None) -> Usuario:
     """El propio usuario, un subordinado directo (si es jefe) o cualquiera (si es administrador)."""
     if not usuario_id or usuario_id == actor.id:
@@ -183,7 +193,7 @@ def empleado_visible(db: Session, actor: Usuario, usuario_id: int | None) -> Usu
     emp = db.get(Usuario, usuario_id)
     if not emp:
         raise HTTPException(404, "Empleado no encontrado")
-    if es_admin(actor) or emp.jefe_id == actor.id:
+    if (es_admin(actor) and admin_permite(actor, emp.sede_id)) or emp.jefe_id == actor.id:
         return emp
     # También el jefe elegido como aprobador en alguna solicitud del empleado
     asignado = db.scalar(select(SolicitudVacaciones.id).where(
@@ -197,7 +207,7 @@ def empleado_visible(db: Session, actor: Usuario, usuario_id: int | None) -> Usu
 def puede_revisar(actor: Usuario, solicitud) -> bool:
     """El administrador o el jefe asignado como aprobador (nunca su propia solicitud)."""
     if es_admin(actor):
-        return True
+        return admin_permite(actor, solicitud.usuario.sede_id if solicitud.usuario else None)
     return solicitud.aprobador_id == actor.id and solicitud.usuario_id != actor.id
 
 
@@ -213,6 +223,8 @@ def resolver_aprobador(db: Session, empleado: Usuario, aprobador_id: int | None)
     jefe = db.get(Usuario, aprobador_id)
     if not jefe or not puede_aprobar(jefe):
         raise HTTPException(422, "El jefe seleccionado no puede aprobar solicitudes.")
+    if not puede_aprobar_a(jefe, empleado.sede_id):
+        raise HTTPException(422, "El jefe seleccionado pertenece a otra sede.")
     return jefe.id
 
 

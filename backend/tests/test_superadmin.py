@@ -8,6 +8,7 @@ from app.main import app
 from app.models import Usuario
 from app.security import hash_password
 from app.seed import main as seed
+from app.sedes import sede_principal
 
 seed()
 
@@ -16,7 +17,8 @@ def crear_super(email="root@empresa.com", nomina="SA-100"):
     with SessionLocal() as db:
         if not db.query(Usuario).filter(Usuario.email == email).first():
             db.add(Usuario(numero_empleado=nomina, nombre="Root", email=email, rol="superadmin",
-                           password_hash=hash_password("Root12345"), fecha_ingreso=date(2020, 1, 1)))
+                           password_hash=hash_password("Root12345"), fecha_ingreso=date(2020, 1, 1),
+                           sede_id=sede_principal(db).id))
             db.commit()
 
 

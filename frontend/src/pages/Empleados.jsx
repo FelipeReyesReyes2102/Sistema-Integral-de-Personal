@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CalendarDays, Cloud, Copy, KeyRound, Pencil, Plus, Scale, Search, UserPlus, UserX } from 'lucide-react'
-import { api } from '../api'
+import { api, sedeActiva } from '../api'
 import Avatar from '../components/Avatar'
 import Modal from '../components/Modal'
 import { ROLES, esSuperAdmin, fmtFecha, num } from '../utils'
 import { useAuth } from '../auth'
 
 const VACIO = {
-  numero_empleado: '', nombre: '', email: '', email_personal: '', rol: 'oficina', fecha_ingreso: '', fecha_nacimiento: '', puesto: '', departamento: '',
+  numero_empleado: '', nombre: '', sede_id: '', sedes_admin: [], email: '', email_personal: '', rol: 'oficina', fecha_ingreso: '', fecha_nacimiento: '', puesto: '', departamento: '',
   turno_id: '', grupo_id: '', jefe_id: '', es_jefe: false, activo: true, password: '', microsoft_oid: '', dias_disponibles: '',
 }
 
@@ -16,6 +16,7 @@ export default function Empleados() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const soySuper = esSuperAdmin(user)
+  const variasSedes = (user.sedes || []).length > 1
   const [lista, setLista] = useState([])
   const [turnos, setTurnos] = useState([])
   const [grupos, setGrupos] = useState([])
@@ -68,12 +69,14 @@ export default function Empleados() {
           {grupos.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
         </select>
         <div className="espacio" />
-        <button className="btn btn-primary" onClick={() => setEditar(VACIO)}><Plus size={16} /> Nuevo empleado</button>
+        <button className="btn btn-primary" onClick={() => setEditar({ ...VACIO, sede_id: Number(sedeActiva()) || user.sede_id || '' })}>
+          <Plus size={16} /> Nuevo empleado
+        </button>
       </div>
       <div className="tabla-wrap">
         <table className="tabla">
           <thead>
-            <tr><th>No. nómina</th><th>Nombre</th><th>Tipo</th><th>Jefe directo</th><th>Ingreso</th><th>Antigüedad</th><th>Grupo</th><th>Turno</th><th>Estado</th><th /></tr>
+            <tr><th>No. nómina</th><th>Nombre</th>{variasSedes && <th>Sede</th>}<th>Tipo</th><th>Jefe directo</th><th>Ingreso</th><th>Antigüedad</th><th>Grupo</th><th>Turno</th><th>Estado</th><th /></tr>
           </thead>
           <tbody>
             {lista.map((u) => (
@@ -93,6 +96,7 @@ export default function Empleados() {
                     </div>
                   </div>
                 </td>
+                {variasSedes && <td>{u.sede_nombre || '—'}</td>}
                 <td>
                   <span className="chip">{ROLES[u.rol]}</span>
                   {u.es_jefe && <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>Jefe · {u.total_a_cargo} a cargo</div>}
@@ -114,7 +118,7 @@ export default function Empleados() {
                     <><button className="icon-btn" title="Restablecer contraseña (temporal de 6 dígitos)" onClick={() => restablecer(u)}><KeyRound size={16} /></button>{' '}</>
                   )}
                   {(soySuper || u.rol !== 'superadmin') && <>
-                  <button className="icon-btn" title="Editar" onClick={() => setEditar({ ...u, password: '', email: u.email ?? '', email_personal: u.email_personal ?? '', turno_id: u.turno_id ?? '', grupo_id: u.grupo_id ?? '', jefe_id: u.jefe_id ?? '', dias_disponibles: '' })}><Pencil size={16} /></button>{' '}
+                  <button className="icon-btn" title="Editar" onClick={() => setEditar({ ...u, password: '', email: u.email ?? '', email_personal: u.email_personal ?? '', turno_id: u.turno_id ?? '', grupo_id: u.grupo_id ?? '', jefe_id: u.jefe_id ?? '', dias_disponibles: '', sede_id: u.sede_id ?? '', sedes_admin: u.sedes_admin || [] })}><Pencil size={16} /></button>{' '}
                   {u.activo && <button className="icon-btn rojo" title="Desactivar" onClick={() => desactivar(u)}><UserX size={16} /></button>}
                   </>}
                 </td>
@@ -123,7 +127,8 @@ export default function Empleados() {
           </tbody>
         </table>
       </div>
-      {editar && <FormEmpleado inicial={editar} turnos={turnos} grupos={grupos} estado={estado} soySuper={soySuper} onClose={() => setEditar(null)}
+      {editar && <FormEmpleado inicial={editar} turnos={turnos} grupos={grupos} estado={estado} soySuper={soySuper} sedes={user.sedes || []}
+        onClose={() => setEditar(null)}
         onSaved={(creado) => { setEditar(null); cargar(); if (creado?.password_temporal) setTemporal(creado) }} />}
       {temporal && <PasswordTemporal usuario={temporal} onClose={() => setTemporal(null)} />}
       {saldos && <Saldos usuario={saldos} onClose={() => setSaldos(null)} />}
@@ -131,8 +136,17 @@ export default function Empleados() {
   )
 }
 
-function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSaved }) {
+function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estado, soySuper, sedes, onClose, onSaved }) {
   const [form, setForm] = useState(inicial)
+  // Turnos, grupos y jefes son de la sede del empleado
+  const sedeId = Number(form.sede_id) || null
+  const turnos = todosTurnos.filter((t) => t.sede_id === sedeId)
+  const grupos = todosGrupos.filter((g) => g.sede_id === sedeId)
+  const puedeCambiarSede = !inicial.id || soySuper
+  function cambiarSede(e) {
+    const nueva = Number(e.target.value) || ''
+    setForm((f) => ({ ...f, sede_id: nueva, turno_id: '', grupo_id: '', jefe_id: '' }))
+  }
   const [error, setError] = useState('')
   const [jefes, setJefes] = useState([])
   const [foto, setFoto] = useState(null)            // nueva foto (data URL) traída de Microsoft
@@ -140,7 +154,10 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
   const [ms, setMs] = useState({ buscando: false, error: '', resultado: null })
   const [registrando, setRegistrando] = useState(false)
   const [temporalJefe, setTemporalJefe] = useState(null) // jefe recién registrado: muestra su contraseña temporal
-  useEffect(() => { api('/jefes').then((js) => setJefes(js.filter((j) => j.id !== inicial.id))) }, [])
+  useEffect(() => {
+    if (!sedeId) return setJefes([])
+    api('/jefes', { query: { sede_id: sedeId } }).then((js) => setJefes(js.filter((j) => j.id !== inicial.id))).catch(() => {})
+  }, [sedeId])
   // Saldo actual (al editar) para mostrarlo junto al campo de días disponibles
   const [saldoActual, setSaldoActual] = useState(null)
   useEffect(() => {
@@ -172,6 +189,7 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
         numero_empleado: f.numero_empleado || r.numero_empleado || '',
         fecha_ingreso: r.fecha_ingreso || f.fecha_ingreso,
         jefe_id: r.jefe_id || f.jefe_id,
+        sede_id: r.sede_id && (!inicial.id || soySuper) ? r.sede_id : f.sede_id,
         es_jefe: f.es_jefe || r.tiene_reportes,     // tiene personas a cargo en Microsoft
         turno_id: f.turno_id || (f.rol !== 'planta' ? turnoOficina() : '') || '',
         microsoft_oid: r.oid,
@@ -193,7 +211,7 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
     setRegistrando(true)
     try {
       const j = await api('/usuarios/microsoft/registrar-jefe', {
-        method: 'POST', body: { email: r.jefe.email, numero_empleado: nomina || null },
+        method: 'POST', body: { email: r.jefe.email, numero_empleado: nomina || null, sede_id: sedeId },
       })
       setJefes((js) => (js.some((x) => x.id === j.id) ? js : [...js, j].sort((a, b) => a.nombre.localeCompare(b.nombre))))
       setForm((f) => ({ ...f, jefe_id: j.id }))
@@ -221,6 +239,8 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
       email: form.rol === 'planta' ? null : (form.email || '').trim() || null,
       email_personal: (form.email_personal || '').trim() || null,
       fecha_nacimiento: form.fecha_nacimiento || null,
+      sede_id: sedeId,
+      sedes_admin: soySuper && form.rol === 'admin' ? (form.sedes_admin || []).filter((x) => x !== sedeId) : null,
       password: null,
       microsoft_oid: form.microsoft_oid || null,
       foto: foto || null,
@@ -299,6 +319,13 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
                 </button>
               )}
               {r.tiene_reportes && <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Tiene personas a cargo en Microsoft: se marcó "Es jefe".</div>}
+              {r.ubicacion && (
+                <div style={{ fontSize: 12, marginTop: 4 }}>
+                  Ubicación del trabajo: <b>{r.ubicacion}</b>{' '}
+                  {r.sede_id ? (r.sede_nueva ? '→ se creó la sede' : '→ sede asignada')
+                    : <span style={{ color: 'var(--danger)' }}>(no es una de tus sedes; pide a un super administrador que lo registre)</span>}
+                </div>
+              )}
               {!r.cuenta_habilitada && <div className="alerta warn" style={{ margin: '6px 0 0' }}>La cuenta está deshabilitada en Microsoft.</div>}
               {r.ya_registrado_id && r.ya_registrado_id !== inicial.id && (
                 <div className="alerta warn" style={{ margin: '6px 0 0' }}>Este empleado ya está registrado en el sistema.</div>
@@ -318,6 +345,33 @@ function FormEmpleado({ inicial, turnos, grupos, estado, soySuper, onClose, onSa
           {form.rol === 'superadmin' && <span className="muted" style={{ fontSize: 11 }}>Acceso total, incluida la configuración de Microsoft.</span>}
         </label>
         <label className="campo full">Nombre completo<input value={form.nombre} onChange={set('nombre')} /></label>
+        <label className="campo">Sede
+          <select value={form.sede_id || ''} onChange={cambiarSede} disabled={!puedeCambiarSede}>
+            <option value="">Selecciona…</option>
+            {sedes.map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+          </select>
+          <span className="muted" style={{ fontSize: 11 }}>
+            {puedeCambiarSede
+              ? 'Se toma de la "Ubicación del trabajo" de Microsoft. Turnos, grupos y jefe son de esta sede.'
+              : 'Solo un super administrador puede cambiar a un empleado de sede.'}
+          </span>
+        </label>
+        {soySuper && form.rol === 'admin' ? (
+          <div className="campo">
+            <span>Sedes adicionales que administra</span>
+            <div className="sedes-admin">
+              {sedes.filter((x) => x.id !== sedeId).map((x) => (
+                <label key={x.id} className="checkbox">
+                  <input type="checkbox" checked={(form.sedes_admin || []).includes(x.id)}
+                    onChange={(e) => setForm((f) => ({
+                      ...f, sedes_admin: e.target.checked ? [...(f.sedes_admin || []), x.id] : (f.sedes_admin || []).filter((y) => y !== x.id),
+                    }))} /> {x.nombre}
+                </label>
+              ))}
+              {sedes.length < 2 && <span className="muted" style={{ fontSize: 11 }}>Solo existe una sede.</span>}
+            </div>
+          </div>
+        ) : <div />}
         <label className="campo">Fecha de ingreso<input type="date" value={form.fecha_ingreso || ''} onChange={set('fecha_ingreso')} /></label>
         <label className="campo">Fecha de nacimiento (cumpleaños)
           <input type="date" value={form.fecha_nacimiento || ''} onChange={set('fecha_nacimiento')} />

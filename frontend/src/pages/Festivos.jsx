@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { api } from '../api'
+import SedeActual from '../components/SedeActual'
 import { fmtFecha } from '../utils'
 
 const APLICA = { todos: 'Todos', oficina: 'Solo oficinas', planta: 'Solo planta' }
@@ -38,7 +39,8 @@ export default function Festivos() {
 
   return (
     <div className="card">
-      <p className="muted" style={{ marginTop: 0 }}>Los días festivos no se descuentan del saldo de vacaciones.</p>
+      <SedeActual que="Los festivos nuevos" />
+      <p className="muted" style={{ marginTop: 0 }}>Cada sede tiene sus propios días festivos; no se descuentan del saldo de vacaciones.</p>
       <form className="fila" onSubmit={agregar} style={{ marginBottom: 14 }}>
         <input type="date" style={{ width: 160 }} value={nuevo.fecha} onChange={(e) => setNuevo({ ...nuevo, fecha: e.target.value })} required />
         <input style={{ maxWidth: 260 }} placeholder="Nombre del festivo" value={nuevo.nombre} onChange={(e) => setNuevo({ ...nuevo, nombre: e.target.value })} required />
@@ -62,7 +64,7 @@ export default function Festivos() {
             {lista.map((f) => (
               <tr key={f.id}>
                 <td>{fmtFecha(f.fecha)}</td>
-                <td>{f.nombre}</td>
+                <td>{f.nombre}{f.sede_nombre && <span className="muted" style={{ fontSize: 11 }}> · {f.sede_nombre}</span>}</td>
                 <td>
                   <select style={{ width: 150 }} value={f.aplica_a} onChange={(e) => cambiarAplica(f, e.target.value)}>
                     {Object.entries(APLICA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}

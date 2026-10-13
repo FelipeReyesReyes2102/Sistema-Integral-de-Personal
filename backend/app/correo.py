@@ -20,7 +20,7 @@ from .config import settings
 from .config_dinamica import cifrar, descifrar
 from .database import SessionLocal
 from .models import (
-    PERMISO_HOME_OFFICE, ConfiguracionApp, NotificacionCorreo, Permiso,
+    PERMISO_HOME_OFFICE, ConfiguracionApp, NotificacionCorreo, Permiso, Sede,
 )
 from .security import ahora
 
@@ -236,16 +236,19 @@ def _registrar_y_enviar(db: Session, notif: NotificacionCorreo, cfg: dict, html_
 
 
 def notificar_permiso(permiso_id: int, evento: str = "permiso_autorizado"):
-    """Tarea en segundo plano: avisa a caseta si el aviso está activo para ese tipo de permiso."""
+    """Tarea en segundo plano: avisa a la caseta de la sede del empleado si el aviso está activo para ese tipo."""
     with SessionLocal() as db:
         cfg = cargar(db)
         p = db.get(Permiso, permiso_id)
-        tipos = set(lista_correos(cfg["CORREO_CASETA_TIPOS"]))
-        destinatarios = lista_correos(cfg["CORREO_CASETA_DESTINATARIOS"])
-        if not p or cfg["CORREO_CASETA_ACTIVO"] != "true" or p.tipo not in tipos or not destinatarios:
+        sede = p.usuario.sede if p and p.usuario else None
+        if not p or sede is None or not sede.caseta_activo:
+            return
+        tipos = set(lista_correos(sede.caseta_tipos))
+        destinatarios = lista_correos(sede.caseta_destinatarios)
+        if p.tipo not in tipos or not destinatarios:
             return
         asunto, html_, texto = mensaje_permiso(p, evento)
-        notif = NotificacionCorreo(fecha=ahora(), evento=evento, permiso_id=p.id,
+        notif = NotificacionCorreo(fecha=ahora(), evento=evento, permiso_id=p.id, sede_id=sede.id,
                                    destinatarios=", ".join(destinatarios), asunto=asunto[:255])
         db.add(notif)
         db.commit()
@@ -258,7 +261,9 @@ def reintentar(db: Session, notif: NotificacionCorreo):
         asunto, html_, texto = mensaje_permiso(notif.permiso, notif.evento)
     else:
         asunto, html_, texto = mensaje_prueba()
-    notif.destinatarios = ", ".join(lista_correos(cfg["CORREO_CASETA_DESTINATARIOS"])) or notif.destinatarios
+    sede = db.get(Sede, notif.sede_id) if notif.sede_id else None
+    if sede is not None and notif.evento != "turno_semanal":
+        notif.destinatarios = ", ".join(lista_correos(sede.caseta_destinatarios)) or notif.destinatarios
     notif.asunto = asunto[:255]
     _registrar_y_enviar(db, notif, cfg, html_, texto)
 

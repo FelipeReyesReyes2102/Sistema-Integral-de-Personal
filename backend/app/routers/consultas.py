@@ -18,6 +18,7 @@ from ..models import ROLES_ADMIN, es_admin  # noqa: F401
 from ..schemas import ConsultaIn, ConsultaOut, ConsultaResumenOut, PacienteOut
 from ..security import auditar, get_current_user, require_medico
 from ..services import empleado_visible
+from ..sedes import Alcance, admin_permite, alcance
 
 router = APIRouter(prefix="/api/consultas", tags=["servicio médico"])
 
@@ -40,14 +41,17 @@ def _resumen(c: ConsultaMedica) -> ConsultaResumenOut:
 
 
 def _puede_ver_detalle(user: Usuario, c: ConsultaMedica) -> bool:
-    return user.rol in (ROL_MEDICO, *ROLES_ADMIN) or c.paciente_id == user.id
+    if c.paciente_id == user.id:
+        return True
+    sede = c.paciente.sede_id if c.paciente else None
+    return (user.rol == ROL_MEDICO and user.sede_id == sede) or admin_permite(user, sede)
 
 
 @router.get("/pacientes", response_model=list[PacienteOut])
 def pacientes(rol: str | None = None, q: str | None = None, db: Session = Depends(get_db),
-              _=Depends(require_medico)):
-    """Empleados activos para elegir al paciente, filtrados por tipo de usuario y búsqueda."""
-    stmt = select(Usuario).where(Usuario.activo.is_(True)).order_by(Usuario.nombre)
+              medico: Usuario = Depends(require_medico)):
+    """Empleados activos de la sede del médico, filtrados por tipo de usuario y búsqueda."""
+    stmt = select(Usuario).where(Usuario.activo.is_(True), Usuario.sede_id == medico.sede_id).order_by(Usuario.nombre)
     if rol:
         if rol not in ROLES:
             raise HTTPException(400, "Tipo de usuario no válido")
@@ -67,7 +71,7 @@ def pacientes(rol: str | None = None, q: str | None = None, db: Session = Depend
 @router.get("")
 def listar(usuario_id: int | None = None, desde: date | None = None, hasta: date | None = None,
            rol: str | None = None, q: str | None = None, todos: bool = False,
-           db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
+           db: Session = Depends(get_db), user: Usuario = Depends(get_current_user), alc: Alcance = Depends(alcance)):
     """
     - Médico con `todos=true`: todas las consultas (filtros de fecha, tipo de usuario y búsqueda).
     - Sin parámetros: mis consultas (detalle completo).
@@ -75,14 +79,17 @@ def listar(usuario_id: int | None = None, desde: date | None = None, hasta: date
     """
     stmt = select(ConsultaMedica).order_by(ConsultaMedica.fecha.desc(), ConsultaMedica.hora_inicio.desc())
     if todos and user.rol in (ROL_MEDICO, *ROLES_ADMIN):
+        stmt = stmt.join(Usuario, Usuario.id == ConsultaMedica.paciente_id).where(alc.filtro(Usuario.sede_id))
         if rol or q:
-            stmt = stmt.join(Usuario, Usuario.id == ConsultaMedica.paciente_id)
             if rol:
                 stmt = stmt.where(Usuario.rol == rol)
             if q:
                 like = f"%{q.strip()}%"
                 stmt = stmt.where(or_(Usuario.nombre.ilike(like), Usuario.numero_empleado.ilike(like)))
     elif user.rol in (ROL_MEDICO, *ROLES_ADMIN) and usuario_id:
+        paciente = db.get(Usuario, usuario_id)
+        if not paciente or not (alc.permite(paciente.sede_id) or admin_permite(user, paciente.sede_id)):
+            raise HTTPException(404, "Empleado no encontrado")
         stmt = stmt.where(ConsultaMedica.paciente_id == usuario_id)  # historial del paciente
     else:
         stmt = stmt.where(ConsultaMedica.paciente_id == empleado_visible(db, user, usuario_id).id)
@@ -112,6 +119,8 @@ def _validar(db: Session, data: ConsultaIn, medico: Usuario) -> Usuario:
         raise HTTPException(404, "El paciente no existe o está inactivo")
     if paciente.id == medico.id:
         raise HTTPException(422, "No puedes registrar una consulta a tu propio nombre")
+    if paciente.sede_id != medico.sede_id:
+        raise HTTPException(422, "El paciente pertenece a otra sede.")
     if data.fecha > date.today():
         raise HTTPException(422, "La fecha de la consulta no puede ser futura")
     if data.hora_fin and data.hora_fin <= data.hora_inicio:

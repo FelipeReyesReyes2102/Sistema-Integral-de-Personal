@@ -9,6 +9,7 @@ from app.database import SessionLocal
 from app.main import app
 from app.models import Grupo, Turno, Usuario
 from app.seed import main as seed
+from app.sedes import sede_principal
 
 ENVIADOS: list = []
 
@@ -48,7 +49,7 @@ def ids():
         g = {x.nombre: x.id for x in db.query(Grupo)}
     yield t, g
     with SessionLocal() as db:  # dejar todo como estaba
-        cfg = rotacion.config(db)
+        cfg = rotacion.config(db, sede_principal(db).id)
         cfg.activo, cfg.aviso_activo, cfg.ultimo_aviso = False, False, None
         for u in db.query(Usuario):
             if u.email_personal == "carlos@empresa.com":
@@ -89,7 +90,7 @@ def test_rotacion_alterna_y_sincroniza(ids):
 
     # Sincronización: a la semana siguiente Carlos queda en Noche
     with SessionLocal() as db:
-        rotacion.sincronizar(db, date.today() + timedelta(weeks=1))
+        rotacion.sincronizar(db, sede_principal(db).id, date.today() + timedelta(weeks=1))
         assert db.query(Usuario).filter(Usuario.email_personal == "carlos@empresa.com").one().turno.nombre == "Noche"
         assert db.query(Usuario).filter(Usuario.email_personal == "maria@empresa.com").one().turno.nombre == "Día"
 

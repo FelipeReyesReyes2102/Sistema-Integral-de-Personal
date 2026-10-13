@@ -15,6 +15,19 @@ function mensajeError(detail, status) {
 
 const SIN_REDIRECCION = ['/auth/login-json', '/auth/me', '/auth/logout', '/auth/config']
 
+// Sede elegida en el selector del menú (administradores con varias sedes). Vacío = todas sus sedes.
+export function sedeActiva() {
+  try { return localStorage.getItem('sip-sede') || '' } catch { return '' }
+}
+
+export function elegirSede(id) {
+  try {
+    if (id) localStorage.setItem('sip-sede', String(id))
+    else localStorage.removeItem('sip-sede')
+  } catch { /* sin almacenamiento */ }
+  window.location.reload()
+}
+
 export async function api(path, { method = 'GET', body, query } = {}) {
   let url = `/api${path}`
   if (query) {
@@ -23,6 +36,8 @@ export async function api(path, { method = 'GET', body, query } = {}) {
   }
   const headers = { 'Content-Type': 'application/json' }
   if (method !== 'GET') headers['X-CSRF-Token'] = leerCookie('sip_csrf')
+  const sede = sedeActiva()
+  if (sede) headers['X-Sede-Id'] = sede
   const res = await fetch(url, {
     method, headers, credentials: 'same-origin',
     body: body !== undefined ? JSON.stringify(body) : undefined,

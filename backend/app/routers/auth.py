@@ -7,7 +7,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import delete, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from .. import microsoft
 from ..config import settings
@@ -21,6 +21,7 @@ from ..security import (
     puede_usar_password, sesion_actual, verify_password,
 )
 from ..services import usuario_out
+from ..sedes import sedes_visibles
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -40,8 +41,10 @@ MENSAJES = {
 
 def me_out(user: Usuario, metodo: str | None) -> MeOut:
     base = usuario_out(user).model_dump()
+    db = object_session(user)
+    sedes = [{"id": s.id, "nombre": s.nombre, "zona_horaria": s.zona_horaria} for s in sedes_visibles(db, user)] if db else []
     return MeOut(**base, authenticated=True, display_name=user.nombre, role=user.rol, auth_method=metodo,
-                 permissions=permisos_de(user), puede_usar_password=puede_usar_password(user))
+                 permissions=permisos_de(user), puede_usar_password=puede_usar_password(user), sedes=sedes)
 
 
 @router.get("/config")

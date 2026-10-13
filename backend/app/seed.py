@@ -12,8 +12,9 @@ from sqlalchemy import select
 from . import reglas
 from .database import SessionLocal, engine
 from .migraciones import actualizar_esquema
-from .models import Festivo, Grupo, ReglaAntiguedad, Turno, Usuario
+from .models import Festivo, Grupo, ReglaAntiguedad, RotacionTurnos, Turno, Usuario
 from .security import hash_password
+from .sedes import sede_principal
 from .services import sincronizar_periodos
 
 
@@ -65,11 +66,13 @@ def main(solo_catalogos: bool = False):
             ])
 
         anio = date.today().year
+        sede = sede_principal(db)
         if not db.scalar(select(Festivo.id).limit(1)):
             for a in (anio - 1, anio, anio + 1):
                 for f, nombre in festivos_mexico(a):
                     db.add(Festivo(fecha=f, nombre=nombre, aplica_a="todos"))
         db.commit()
+        _asignar_sede(db, sede.id)
         if solo_catalogos:
             print("Catálogos cargados (antigüedad, turnos, grupos y festivos). No se crearon usuarios.")
             print("Crea el super administrador con: python -m app.crear_superadmin --email ... --nombre ... --nomina ...")
@@ -95,6 +98,8 @@ def main(solo_catalogos: bool = False):
                         puesto="Técnico", departamento="Mantenimiento", turno_id=turnos["Noche"].id,
                         grupo_id=grupos["Grupo B"].id),
             ]
+            for u in usuarios:
+                u.sede_id = sede.id
             db.add_all(usuarios)
             db.commit()
             for u in usuarios:
@@ -133,6 +138,7 @@ def main(solo_catalogos: bool = False):
             db.commit()
             sincronizar_periodos(db, medico)
 
+        _asignar_sede(db, sede.id)
         print("Datos iniciales cargados.")
         print("  admin@empresa.com / Admin123")
         print("  laura@empresa.com (jefa de Carlos y María) / Cambiar123")
@@ -140,6 +146,14 @@ def main(solo_catalogos: bool = False):
         print("  ana@empresa.com, carlos@empresa.com, maria@empresa.com / Cambiar123")
     finally:
         db.close()
+
+
+def _asignar_sede(db, sede_id: int):
+    """Catálogos y usuarios sin sede pasan a la sede inicial (idempotente)."""
+    for modelo in (Turno, Grupo, Festivo, Usuario, RotacionTurnos):
+        for obj in db.scalars(select(modelo).where(modelo.sede_id.is_(None))):
+            obj.sede_id = sede_id
+    db.commit()
 
 
 if __name__ == "__main__":

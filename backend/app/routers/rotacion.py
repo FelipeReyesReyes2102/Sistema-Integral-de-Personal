@@ -10,6 +10,7 @@ from .. import rotacion
 from ..database import get_db
 from ..models import Grupo, Turno, Usuario
 from ..security import ahora, auditar, get_current_user, require_admin
+from ..sedes import Alcance, alcance, hoy_de
 
 router = APIRouter(prefix="/api", tags=["rotación de turnos"])
 
@@ -31,10 +32,10 @@ class RotacionIn(BaseModel):
     grupos: list[GrupoRotacionIn] = []
 
 
-def _estado(db: Session) -> dict:
-    cfg = rotacion.config(db)
-    turnos = {t.id: t for t in db.scalars(select(Turno).order_by(Turno.nombre))}
-    grupos = db.scalars(select(Grupo).order_by(Grupo.nombre)).all()
+def _estado(db: Session, sede_id: int | None) -> dict:
+    cfg = rotacion.config(db, sede_id)
+    turnos = {t.id: t for t in db.scalars(select(Turno).where(Turno.sede_id == sede_id).order_by(Turno.nombre))}
+    grupos = db.scalars(select(Grupo).where(Grupo.sede_id == sede_id).order_by(Grupo.nombre)).all()
     miembros = dict(db.execute(select(Usuario.grupo_id, func.count(Usuario.id))
                                .where(Usuario.activo.is_(True)).group_by(Usuario.grupo_id)).all())
     vista = []
@@ -63,13 +64,15 @@ def _estado(db: Session) -> dict:
 
 
 @router.get("/rotacion")
-def obtener(db: Session = Depends(get_db), _=Depends(require_admin)):
-    return _estado(db)
+def obtener(db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+    return _estado(db, alc.defecto)
 
 
 @router.put("/rotacion")
-def guardar(data: RotacionIn, request: Request, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin)):
-    turnos_validos = {t.id for t in db.scalars(select(Turno))}
+def guardar(data: RotacionIn, request: Request, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin),
+            alc: Alcance = Depends(alcance)):
+    sede_id = alc.defecto
+    turnos_validos = {t.id for t in db.scalars(select(Turno).where(Turno.sede_id == sede_id))}
     orden = [t for t in data.turnos_orden if t in turnos_validos]
     participantes = [g for g in data.grupos if g.en_rotacion]
     errores = []
@@ -89,9 +92,9 @@ def guardar(data: RotacionIn, request: Request, db: Session = Depends(get_db), a
     if errores:
         raise HTTPException(422, " ".join(errores))
 
-    cfg = rotacion.config(db)
+    cfg = rotacion.config(db, sede_id)
     estaba_activo = cfg.activo
-    grupos = {g.id: g for g in db.scalars(select(Grupo))}
+    grupos = {g.id: g for g in db.scalars(select(Grupo).where(Grupo.sede_id == sede_id))}
     for g in data.grupos:
         if g.grupo_id in grupos:
             grupos[g.grupo_id].en_rotacion = g.en_rotacion
@@ -104,30 +107,30 @@ def guardar(data: RotacionIn, request: Request, db: Session = Depends(get_db), a
     db.commit()
 
     if data.activo:
-        cambios = rotacion.sincronizar(db)
+        cambios = rotacion.sincronizar(db, sede_id)
         detalle = f"rotación activa · {cambios} usuario(s) actualizados"
     else:
         # Todos los integrantes de los grupos (los que rotaban y los marcados) quedan en un solo turno
-        ids = list({g.grupo_id for g in data.grupos} | {gid for gid, g in grupos.items() if g.en_rotacion})
+        ids = list({g.grupo_id for g in data.grupos if g.grupo_id in grupos} | {gid for gid, g in grupos.items() if g.en_rotacion})
         cambios = rotacion.aplicar_turno_unico(db, data.turno_unico_id, ids)
         detalle = f"rotación {'desactivada' if estaba_activo else 'inactiva'} · turno único · {cambios} usuario(s)"
     auditar(db, "rotacion_turnos", actor_id=admin.id, detalle=detalle, request=request)
     db.commit()
-    return {**_estado(db), "usuarios_actualizados": cambios}
+    return {**_estado(db, sede_id), "usuarios_actualizados": cambios}
 
 
 @router.post("/rotacion/avisos")
-def enviar_avisos(db: Session = Depends(get_db), _=Depends(require_admin)):
+def enviar_avisos(db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
     """Envía ahora el correo con el turno de la próxima semana (normalmente sale solo cada viernes)."""
-    return rotacion.enviar_avisos(db)
+    return rotacion.enviar_avisos(db, alc.defecto)
 
 
 @router.get("/turnos/mi-turno")
 def mi_turno(usuario_id: int | None = None, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
     from ..services import empleado_visible
     u = empleado_visible(db, user, usuario_id)
-    cfg = rotacion.config(db)
-    hoy = date.today()
+    cfg = rotacion.config(db, u.sede_id)
+    hoy = hoy_de(u)
     rota = bool(cfg.activo and u.grupo and u.grupo.en_rotacion)
     semanas = rotacion.semanas_de(db, u, hoy, 6)
     proximo_cambio = None
