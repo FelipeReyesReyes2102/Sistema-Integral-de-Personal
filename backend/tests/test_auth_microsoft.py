@@ -314,6 +314,9 @@ def test_ubicacion_de_microsoft_define_la_sede():
     admin = _admin()
     # Un administrador: la ubicación de su sede se reconoce; una ubicación nueva no crea sedes
     assert admin.get("/api/usuarios/microsoft/buscar?email=mx@empresa.com").json()["sede_nombre"] == "O-tek México"
+    # Mayúsculas y acentos no importan: "O-TEK MEXICO" es la misma sede que "O-tek México"
+    from app.sedes import normalizar
+    assert normalizar("O-TEK  MEXICO") == normalizar("O-tek México")
     d = admin.get("/api/usuarios/microsoft/buscar?email=carta@empresa.com").json()
     assert d["ubicacion"] == "O-Tek Colombia - Cartagena (prueba)" and d["sede_id"] is None and not d["sede_nueva"]
     # El super administrador sí la crea

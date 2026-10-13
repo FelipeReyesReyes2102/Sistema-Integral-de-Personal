@@ -6,6 +6,7 @@ Reglas:
 - Demás roles: solo su sede.
 El encabezado `X-Sede-Id` (selector de sede del menú) reduce el alcance a una de las sedes permitidas.
 """
+import unicodedata
 from datetime import date, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -110,12 +111,18 @@ def sedes_visibles(db: Session, user: Usuario) -> list[Sede]:
     return list(db.scalars(q))
 
 
+def normalizar(texto: str | None) -> str:
+    """Para comparar ubicaciones: sin mayúsculas, acentos ni espacios repetidos ("O-TEK MEXICO" = "O-tek México")."""
+    sin_acentos = unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode()
+    return " ".join(sin_acentos.lower().split())
+
+
 def sede_por_ubicacion(db: Session, ubicacion: str | None) -> Sede | None:
-    """Sede que corresponde a la "Ubicación del trabajo" de Microsoft (sin distinguir mayúsculas)."""
-    if not ubicacion or not ubicacion.strip():
+    """Sede que corresponde a la "Ubicación del trabajo" de Microsoft (sin distinguir mayúsculas ni acentos)."""
+    u = normalizar(ubicacion)
+    if not u:
         return None
-    u = ubicacion.strip().lower()
-    for s in db.scalars(select(Sede)):
-        if (s.ubicacion_microsoft or "").strip().lower() == u or s.nombre.strip().lower() == u:
+    for s in db.scalars(select(Sede).order_by(Sede.id)):
+        if normalizar(s.ubicacion_microsoft) == u or normalizar(s.nombre) == u:
             return s
     return None
