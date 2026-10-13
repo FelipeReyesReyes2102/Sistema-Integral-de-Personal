@@ -5,12 +5,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import ROL_PLANTA, Festivo, Grupo, ReglaAntiguedad, Turno, Usuario
+from ..models import ROL_PLANTA, Festivo, Grupo, ReglaAntiguedad, Sede, Turno, Usuario
 from ..schemas import (
     AsignarMiembros, FestivoIn, FestivoOut, GrupoIn, GrupoOut, ReglaIn, ReglaOut, TurnoIn, TurnoOut,
 )
 from ..security import get_current_user, require_admin, require_superadmin
-from ..sedes import Alcance, alcance
+from ..sedes import Alcance, alcance, sede_principal
+from ..services import reglas_de_sede
 
 router = APIRouter(prefix="/api", tags=["catálogos"])
 
@@ -164,27 +165,50 @@ def borrar_festivo(festivo_id: int, db: Session = Depends(get_db), _=Depends(req
 
 
 # ---------------- Tabla de antigüedad ----------------
-@router.get("/reglas-antiguedad", response_model=list[ReglaOut])
-def listar_reglas(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    return db.scalars(select(ReglaAntiguedad).order_by(ReglaAntiguedad.anios_desde)).all()
+def _tabla(db: Session, sede_id: int) -> dict:
+    filas, propia = reglas_de_sede(db, sede_id)
+    sede = db.get(Sede, sede_id)
+    return {"sede_id": sede_id, "sede_nombre": sede.nombre if sede else None, "propia": propia,
+            "principal": sede_principal(db).nombre, "reglas": [ReglaOut.model_validate(r) for r in filas]}
 
 
-@router.put("/reglas-antiguedad", response_model=list[ReglaOut])
-def reemplazar_reglas(data: list[ReglaIn], db: Session = Depends(get_db), _=Depends(require_superadmin)):
-    """La tabla de antigüedad es común a todas las sedes (por ahora todas usan las reglas de México)."""
+@router.get("/reglas-antiguedad")
+def listar_reglas(db: Session = Depends(get_db), alc: Alcance = Depends(alcance)):
+    """Tabla de días por antigüedad de la sede activa (o la de la sede principal si no tiene una propia)."""
+    return _tabla(db, alc.defecto)
+
+
+@router.delete("/reglas-antiguedad")
+def usar_tabla_principal(db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+    """La sede deja de tener tabla propia y vuelve a usar la de la sede principal."""
+    if alc.defecto == sede_principal(db).id:
+        raise HTTPException(400, "La sede principal siempre tiene su propia tabla.")
+    for r in db.scalars(select(ReglaAntiguedad).where(ReglaAntiguedad.sede_id == alc.defecto)):
+        db.delete(r)
+    db.commit()
+    return _tabla(db, alc.defecto)
+
+
+@router.put("/reglas-antiguedad")
+def reemplazar_reglas(data: list[ReglaIn], db: Session = Depends(get_db), _=Depends(require_admin),
+                      alc: Alcance = Depends(alcance)):
+    """Reemplaza la tabla de días por antigüedad de la sede activa."""
+    sede_id = alc.defecto
+    if not data:
+        raise HTTPException(400, "La tabla debe tener al menos un rango.")
     orden = sorted(data, key=lambda r: r.anios_desde)
     for i, r in enumerate(orden):
         if r.anios_hasta < r.anios_desde:
             raise HTTPException(400, f"Rango inválido {r.anios_desde}-{r.anios_hasta}")
         if i and r.anios_desde <= orden[i - 1].anios_hasta:
             raise HTTPException(400, "Los rangos de años no deben traslaparse")
-    for r in db.scalars(select(ReglaAntiguedad)):
+    for r in db.scalars(select(ReglaAntiguedad).where(ReglaAntiguedad.sede_id == sede_id)):
         db.delete(r)
     db.flush()
     for r in orden:
-        db.add(ReglaAntiguedad(**r.model_dump()))
+        db.add(ReglaAntiguedad(**r.model_dump(), sede_id=sede_id))
     db.commit()
-    return db.scalars(select(ReglaAntiguedad).order_by(ReglaAntiguedad.anios_desde)).all()
+    return _tabla(db, sede_id)
 
 
 def _404(nombre: str):

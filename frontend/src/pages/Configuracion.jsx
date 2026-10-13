@@ -6,13 +6,17 @@ import ConfigMicrosoft from '../components/ConfigMicrosoft'
 import ConfigCorreo from '../components/ConfigCorreo'
 import ConfigSedes from '../components/ConfigSedes'
 import { useAuth } from '../auth'
-import { esSuperAdmin } from '../utils'
+import { esAdmin, esSuperAdmin } from '../utils'
+import SedeActual from '../components/SedeActual'
 
 export default function Configuracion() {
   const [reglas, setReglas] = useState([])
+  const [tabla, setTabla] = useState(null) // {sede_nombre, propia, principal}
   const [msg, setMsg] = useState(null)
   const { user } = useAuth()
-  useEffect(() => { api('/reglas-antiguedad').then(setReglas) }, [])
+  const aplicar = (t) => { setTabla(t); setReglas(t.reglas) }
+  useEffect(() => { api('/reglas-antiguedad').then(aplicar) }, [])
+  const puedeEditar = esAdmin(user)
 
   const set = (i, k) => (e) => setReglas(reglas.map((r, j) => (j === i ? { ...r, [k]: e.target.value } : r)))
 
@@ -22,12 +26,22 @@ export default function Configuracion() {
     setReglas([...reglas, { anios_desde: desde, anios_hasta: desde + 4, dias: ult ? Number(ult.dias) + 2 : 12 }])
   }
 
+  async function usarPrincipal() {
+    if (!window.confirm(`¿Quitar la tabla propia de ${tabla.sede_nombre} y usar la de ${tabla.principal}?`)) return
+    try {
+      aplicar(await api('/reglas-antiguedad', { method: 'DELETE' }))
+      setMsg({ ok: true, t: `${tabla.sede_nombre} ahora usa la tabla de ${tabla.principal}.` })
+    } catch (e) {
+      setMsg({ ok: false, t: e.message })
+    }
+  }
+
   async function guardar() {
     setMsg(null)
     try {
       const body = reglas.map((r) => ({ anios_desde: Number(r.anios_desde), anios_hasta: Number(r.anios_hasta), dias: Number(r.dias) }))
-      setReglas(await api('/reglas-antiguedad', { method: 'PUT', body }))
-      setMsg({ ok: true, t: 'Tabla guardada. Los saldos se recalculan automáticamente al consultarlos.' })
+      aplicar(await api('/reglas-antiguedad', { method: 'PUT', body }))
+      setMsg({ ok: true, t: `Tabla de ${tabla?.sede_nombre} guardada. Los saldos de sus empleados se recalculan automáticamente.` })
     } catch (e) {
       setMsg({ ok: false, t: e.message })
     }
@@ -37,11 +51,14 @@ export default function Configuracion() {
     <>
     <div className="vac-layout">
       <div className="card">
-        <h3 style={{ marginBottom: 6 }}>Días de vacaciones por antigüedad</h3>
-        <p className="muted" style={{ marginTop: 0 }}>
-          Días de 8 horas que corresponden a cada año de servicio. Por ahora es la misma tabla para todas las sedes
-          {esSuperAdmin(user) ? '.' : '; solo la modifica un super administrador.'}
-        </p>
+        <h3 style={{ marginBottom: 6 }}>Días de vacaciones por antigüedad{tabla?.sede_nombre ? ` · ${tabla.sede_nombre}` : ''}</h3>
+        <p className="muted" style={{ marginTop: 0 }}>Días de 8 horas que corresponden a cada año de servicio en esta sede.</p>
+        <SedeActual que="Los cambios de la tabla" />
+        {tabla && !tabla.propia && (
+          <div className="alerta warn" style={{ marginTop: 0 }}>
+            Esta sede aún no tiene tabla propia: usa la de <b>{tabla.principal}</b>. Al guardar se crea su tabla.
+          </div>
+        )}
         <div className="tabla-wrap">
           <table className="tabla">
             <thead><tr><th>Años desde</th><th>Años hasta</th><th>Días (oficinas)</th><th>Días planta (12 h)</th><th /></tr></thead>
@@ -59,8 +76,11 @@ export default function Configuracion() {
           </table>
         </div>
         <div className="fila" style={{ marginTop: 12 }}>
-          {esSuperAdmin(user) && <>
+          {puedeEditar && <>
             <button className="btn" onClick={agregar}><Plus size={16} /> Agregar rango</button>
+            {tabla?.propia && tabla.sede_nombre !== tabla.principal && (
+              <button className="btn btn-sm" onClick={usarPrincipal}>Usar la tabla de {tabla.principal}</button>
+            )}
             <div className="espacio" />
             <button className="btn btn-primary" onClick={guardar}>Guardar tabla</button>
           </>}

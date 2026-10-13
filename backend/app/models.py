@@ -190,10 +190,13 @@ class Usuario(Base):
 
 
 class ReglaAntiguedad(Base):
-    """Tabla de días de vacaciones por años de servicio (editable por el administrador)."""
+    """Tabla de días de vacaciones por años de servicio de una sede (editable por su administrador).
+
+    Una sede sin filas propias usa la tabla de la sede principal (México)."""
     __tablename__ = "reglas_antiguedad"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    sede_id: Mapped[int | None] = mapped_column(ForeignKey("sedes.id"), index=True)
     anios_desde: Mapped[int] = mapped_column(Integer)
     anios_hasta: Mapped[int] = mapped_column(Integer)
     dias: Mapped[int] = mapped_column(Integer)

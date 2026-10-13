@@ -150,7 +150,7 @@ def main(solo_catalogos: bool = False):
 
 def _asignar_sede(db, sede_id: int):
     """Catálogos y usuarios sin sede pasan a la sede inicial (idempotente)."""
-    for modelo in (Turno, Grupo, Festivo, Usuario, RotacionTurnos):
+    for modelo in (Turno, Grupo, Festivo, Usuario, RotacionTurnos, ReglaAntiguedad):
         for obj in db.scalars(select(modelo).where(modelo.sede_id.is_(None))):
             obj.sede_id = sede_id
     db.commit()

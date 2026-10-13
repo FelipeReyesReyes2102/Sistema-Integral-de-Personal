@@ -18,8 +18,19 @@ from .schemas import PeriodoOut, UsuarioOut
 from .sedes import admin_permite
 
 
-def tabla_antiguedad(db: Session) -> list[tuple[int, int, int]]:
-    rows = db.scalars(select(ReglaAntiguedad)).all()
+def reglas_de_sede(db: Session, sede_id: int | None) -> tuple[list[ReglaAntiguedad], bool]:
+    """Filas de la tabla de antigüedad de la sede y si son propias (False = usa la de la sede principal)."""
+    propias = db.scalars(select(ReglaAntiguedad).where(ReglaAntiguedad.sede_id == sede_id)
+                         .order_by(ReglaAntiguedad.anios_desde)).all() if sede_id else []
+    if propias:
+        return list(propias), True
+    from .sedes import sede_principal
+    return list(db.scalars(select(ReglaAntiguedad).where(ReglaAntiguedad.sede_id == sede_principal(db).id)
+                           .order_by(ReglaAntiguedad.anios_desde))), False
+
+
+def tabla_antiguedad(db: Session, sede_id: int | None = None) -> list[tuple[int, int, int]]:
+    rows, _ = reglas_de_sede(db, sede_id)
     if not rows:
         return reglas.TABLA_ANTIGUEDAD_DEFAULT
     return [(r.anios_desde, r.anios_hasta, r.dias) for r in rows]
@@ -52,7 +63,7 @@ def festivos_de(db: Session, usuario: Usuario, desde: date, hasta: date) -> set[
 def sincronizar_periodos(db: Session, usuario: Usuario, hoy: date | None = None) -> list[PeriodoVacaciones]:
     """Crea los periodos que falten y recalcula días/horas según la tabla y la categoría actual."""
     hoy = hoy or date.today()
-    tabla = tabla_antiguedad(db)
+    tabla = tabla_antiguedad(db, usuario.sede_id)
     cat = reglas.categoria(usuario.rol)
     existentes = {p.numero: p for p in usuario.periodos}
     cambios = False

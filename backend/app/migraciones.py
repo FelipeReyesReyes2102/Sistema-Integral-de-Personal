@@ -72,6 +72,12 @@ def _migrar_datos(conn: Connection, agregadas: list[str], insp=None):
     """Ajustes de datos que se ejecutan una sola vez, cuando aparece la columna correspondiente."""
     if "usuarios.sede_id" in agregadas:
         _migrar_sedes(conn, insp)
+    if "reglas_antiguedad.sede_id" in agregadas:
+        # La tabla que existía es la de México (la sede principal)
+        principal = conn.execute(text("SELECT id FROM sedes WHERE nombre = :n"), {"n": SEDE_INICIAL}).scalar() or \
+            conn.execute(text("SELECT min(id) FROM sedes")).scalar()
+        if principal is not None:
+            conn.execute(text("UPDATE reglas_antiguedad SET sede_id = :s WHERE sede_id IS NULL"), {"s": principal})
     if "usuarios.email_personal" in agregadas:
         # Planta no tiene correo corporativo: el correo que tenían pasa a ser su correo personal
         conn.execute(text("UPDATE usuarios SET email_personal = email, email = NULL WHERE rol = 'planta' AND email IS NOT NULL"))
