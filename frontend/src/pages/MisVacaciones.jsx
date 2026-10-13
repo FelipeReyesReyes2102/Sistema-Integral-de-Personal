@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, Ban, Clock, Eye, Laptop, MousePointerClick, Pencil, Send, Stethoscope, Trash2, TreePalm, X,
+  ArrowLeft, Ban, Clock, Eye, EyeOff, Laptop, MousePointerClick, Pencil, Send, Stethoscope, Trash2, TreePalm, X,
 } from 'lucide-react'
 import { api } from '../api'
 import { useAuth } from '../auth'
@@ -16,6 +16,7 @@ import {
 import EventosDia from '../components/EventosDia'
 import MiTurno from '../components/MiTurno'
 import Avatar from '../components/Avatar'
+import IconoCategoria from '../components/IconoCategoria'
 import DetalleConsulta from '../components/DetalleConsulta'
 
 // Color de cada periodo vacacional: el calendario pinta sus días con un tono claro de este color
@@ -24,6 +25,11 @@ export const colorPeriodo = (p) => (p ? COLORES_PERIODO[(p.numero - 1) % COLORES
 
 const unAnioDespues = (iso) => toISO(new Date(Number(iso.slice(0, 4)) + 1, Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10))))
 const diaAnterior = (iso) => { const d = parseISO(iso); d.setDate(d.getDate() - 1); return toISO(d) }
+
+// Periodos cuyo color está oculto en el calendario (preferencia de este navegador)
+const leerOcultos = () => {
+  try { return JSON.parse(localStorage.getItem('sip-periodos-ocultos') || '[]') } catch { return [] }
+}
 
 export default function MisVacaciones({ usuarioId }) {
   const { user } = useAuth()
@@ -39,6 +45,11 @@ export default function MisVacaciones({ usuarioId }) {
   const [modal, setModal] = useState(null) // {tipo: 'vac'|'perm'|'ver'|'dia'|'consulta', item, tipoPermiso, inicial}
   const [lista, setLista] = useState(null) // categoría de Registros cuya lista de solicitudes está abierta ('todas' = todas)
   const [foco, setFoco] = useState(null) // categoría de Registros resaltada en el calendario
+  const [ocultos, setOcultos] = useState(leerOcultos) // nombres de periodos sin color en el calendario
+  useEffect(() => {
+    try { localStorage.setItem('sip-periodos-ocultos', JSON.stringify(ocultos)) } catch { /* sin almacenamiento */ }
+  }, [ocultos])
+  const alternarPeriodo = (nombre) => setOcultos((o) => (o.includes(nombre) ? o.filter((x) => x !== nombre) : [...o, nombre]))
   const [seleccion, setSeleccion] = useState(null) // {inicio, fin} elegido en el calendario
   const [selCalc, setSelCalc] = useState(null)
   const [periodoSolicitud, setPeriodoSolicitud] = useState(null) // periodo del que se toman los días seleccionados
@@ -118,6 +129,17 @@ export default function MisVacaciones({ usuarioId }) {
     return out
   }, [periodos, empleado?.fecha_ingreso])
   const franjasDelAnio = franjas.filter((x) => x.desde <= `${anio}-12-31` && x.hasta >= `${anio}-01-01`)
+  const franjasVisibles = franjas.filter((x) => !ocultos.includes(x.nombre))
+
+  // Aniversario de ingreso en el año mostrado: siempre resaltado (renueva el periodo de vacaciones)
+  const aniversario = useMemo(() => {
+    const fi = empleado?.fecha_ingreso
+    if (!fi || Number(fi.slice(0, 4)) >= anio) return null
+    const [m, d] = [Number(fi.slice(5, 7)), Number(fi.slice(8, 10))]
+    const dia = m === 2 && d === 29 && new Date(anio, 1, 29).getMonth() !== 1 ? 28 : d
+    const anios = anio - Number(fi.slice(0, 4))
+    return { fecha: toISO(new Date(anio, m - 1, dia)), titulo: `Aniversario: ${anios} año${anios === 1 ? '' : 's'} en la empresa · inicia el Periodo ${anio}` }
+  }, [empleado?.fecha_ingreso, anio])
 
   // Vista previa de días laborales del rango seleccionado en el calendario
   useEffect(() => {
@@ -298,6 +320,9 @@ export default function MisVacaciones({ usuarioId }) {
 
       <div className="card ps-registros">
         <PanelRegistros anio={anio} registros={registros} franjas={franjasDelAnio} foco={foco}
+          ocultos={ocultos} onPeriodo={alternarPeriodo}
+          onTodosPeriodos={(ver) => setOcultos(ver ? [] : franjasDelAnio.map((x) => x.nombre))}
+          aniversario={aniversario} miCumple={(calendario?.cumpleanos || []).find((c) => c.propio)}
           onFoco={(k) => setFoco((f) => (f === k ? null : k))}
           onAbrir={(k) => { setFoco(k === 'todas' ? null : k); setLista(k) }} />
       </div>
@@ -325,7 +350,7 @@ export default function MisVacaciones({ usuarioId }) {
         <YearCalendar anio={anio} onAnio={setAnio} datos={calendario} seleccion={seleccion} compacto
           onSeleccion={soloLectura ? undefined : setSeleccion}
           onDia={(f) => setModal({ tipo: 'dia', fecha: f })}
-          franjas={franjas}
+          franjas={franjasVisibles} aniversario={aniversario}
           maxDias={maxDias || null} fechaMax={fechaMax} foco={foco} />
       </div>
 
@@ -353,7 +378,8 @@ export default function MisVacaciones({ usuarioId }) {
           festivo={(calendario?.festivos || []).find((x) => x.fecha === modal.fecha)?.nombre}
           descanso={(calendario?.no_laborables || []).includes(modal.fecha)}
           persona={usuarioId ? empleado?.nombre : null} onClose={() => setModal(null)}
-          cumpleanos={(calendario?.cumpleanos || []).filter((c) => c.fecha === modal.fecha)} />
+          cumpleanos={(calendario?.cumpleanos || []).filter((c) => c.fecha === modal.fecha)}
+          aniversario={aniversario?.fecha === modal.fecha ? aniversario.titulo : null} />
       )}
       {modal?.tipo === 'consulta' && (
         <DetalleConsulta consultaId={modal.item.detalle_clinico ? modal.item.id : null} resumen={modal.item}
@@ -364,7 +390,8 @@ export default function MisVacaciones({ usuarioId }) {
 }
 
 /** Registros del año por categoría (clic: abre sus solicitudes) y leyenda de periodos y estados del calendario. */
-function PanelRegistros({ anio, registros, franjas, foco, onFoco, onAbrir }) {
+function PanelRegistros({ anio, registros, franjas, foco, onFoco, onAbrir, ocultos, onPeriodo, onTodosPeriodos, aniversario, miCumple }) {
+  const algunoVisible = franjas.some((x) => !ocultos.includes(x.nombre))
   const texto = (k, r) => {
     if (k === 'vacaciones' || k === 'home_office') return `${r.dias} día(s)${r.pendientes ? ` · ${r.pendientes} pend.` : ''}`
     if (k === 'consulta') return `${r.dias} consulta(s)`
@@ -380,22 +407,39 @@ function PanelRegistros({ anio, registros, franjas, foco, onFoco, onAbrir }) {
         {foco && <button type="button" className="btn btn-sm" onClick={() => onFoco(foco)}>Quitar resaltado</button>}
         <button type="button" className="btn btn-sm" onClick={() => onAbrir('todas')}>Ver todas</button>
       </div>
-      {Object.entries(CATEGORIAS).filter(([k]) => k !== 'consulta_medica').map(([k, c]) => (
+      {Object.entries(CATEGORIAS).filter(([k]) => k !== 'consulta_medica' && k !== 'aniversario').map(([k, c]) => (
         <button key={k} type="button" className={`registro ${foco === k ? 'activo' : ''}`}
           style={foco === k ? { borderColor: c.color, background: `${c.color}14` } : undefined}
           onClick={(e) => { if (e.detail <= 1) onFoco(k) }} onDoubleClick={() => onAbrir(k)}>
-          <i style={{ background: c.color }} />
+          <span className="reg-icono" style={{ background: c.color }}><IconoCategoria cat={k} size={12} /></span>
           <span>{c.label}</span>
           <b>{texto(k, registros[k])}</b>
         </button>
       ))}
       <div className="registros-leyenda">
-        {franjas.map((x) => (
-          <span key={x.desde} className="ley-franja" style={{ '--franja': x.color }}
-            title={`Del ${fmtFecha(x.desde, false)}${x.hasta < '9999' ? ` al ${fmtFecha(x.hasta, false)}` : ' en adelante'}`}>
-            <i /> {x.nombre}
+        {franjas.map((x) => {
+          const oculto = ocultos.includes(x.nombre)
+          return (
+            <button key={x.desde} type="button" className={`ley-franja ${oculto ? 'oculto' : ''}`} style={{ '--franja': x.color }}
+              onClick={() => onPeriodo(x.nombre)} aria-pressed={!oculto}
+              title={`${oculto ? 'Mostrar' : 'Ocultar'} el color del ${x.nombre} · del ${fmtFecha(x.desde, false)}${x.hasta < '9999' ? ` al ${fmtFecha(x.hasta, false)}` : ' en adelante'}`}>
+              <i /> {x.nombre} {oculto ? <EyeOff size={11} /> : <Eye size={11} />}
+            </button>
+          )
+        })}
+        {franjas.length > 0 && (
+          <button type="button" className="ley-todos" onClick={() => onTodosPeriodos(!algunoVisible)}>
+            {algunoVisible ? 'Ocultar colores de periodo' : 'Mostrar colores de periodo'}
+          </button>
+        )}
+        {aniversario && (
+          <span className="ley-especial aniv" title={aniversario.titulo}>
+            <IconoCategoria cat="aniversario" size={11} /> Aniversario {diaMes(aniversario.fecha)}
           </span>
-        ))}
+        )}
+        {miCumple && (
+          <span className="ley-especial cumple"><IconoCategoria cat="cumpleanos" size={11} /> Tu cumpleaños {diaMes(miCumple.fecha)}</span>
+        )}
         <span className="ley-estados">
           <i style={estiloEvento('vacaciones', 'validado')}>A</i> Aprobado
           <i style={estiloEvento('vacaciones', 'solicitado')}>P</i> Pendiente
@@ -479,7 +523,7 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
           <div className="item-sol" key={`${i.cat === 'vacaciones' ? 'v' : i.cat === 'consulta' ? 'c' : 'p'}${i.id}`}>
             <div className="info">
               <div className="titulo">
-                <i className="punto" style={{ background: CATEGORIAS[i.cat]?.color }} />
+                <span className="reg-icono" style={{ background: CATEGORIAS[i.cat]?.color, marginRight: 6 }}><IconoCategoria cat={i.cat} size={12} /></span>
                 {i.cat === 'vacaciones' ? 'Vacaciones' : i.cat === 'consulta'
                   ? <span className="fila" style={{ gap: 6 }}><Stethoscope size={16} color="#00796b" /> Consulta médica</span>
                   : TIPOS_PERMISO[i.tipo]}

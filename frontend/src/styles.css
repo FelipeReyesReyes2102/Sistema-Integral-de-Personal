@@ -407,7 +407,7 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .registros { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; display: grid; gap: 4px; }
 .registros-cab { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; font-size: 13px; }
 .registros-cab .muted { font-size: 11px; }
-.registro { display: grid; grid-template-columns: 12px 1fr auto; gap: 10px; align-items: center; border: 1px solid transparent;
+.registro { display: grid; grid-template-columns: 20px 1fr auto; gap: 10px; align-items: center; border: 1px solid transparent;
   background: none; border-radius: 8px; padding: 7px 8px; cursor: pointer; font: inherit; font-size: 13px; text-align: left; color: var(--text); }
 .registro:hover { background: var(--bg); }
 .registro i { width: 12px; height: 12px; border-radius: 3px; }
@@ -521,7 +521,7 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .tecla { font-family: inherit; font-size: 10.5px; color: var(--muted); border: 1px solid #cfd4da; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: #fff; margin-left: -6px; }
 
 /* Días pasados: solo se consultan (no se seleccionan) */
-.cd-pasado { cursor: default; opacity: .55; }
+.cd-pasado { cursor: default; opacity: .4; filter: grayscale(1); }
 .zoom-dia.pasado { background: #f7f8fa; cursor: default; }
 .zoom-dia.pasado .zoom-num { color: #a0a8b6; }
 
@@ -536,12 +536,12 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .sel-periodo.activo i { background: #fff; }
 
 /* Fondo claro de cada periodo vacacional en el calendario */
-.cd-franja:not(.cd-festivo) { background: color-mix(in srgb, var(--franja) 20%, #fff); }
+.cd-franja:not(.cd-festivo) { background: color-mix(in srgb, var(--franja) 30%, #fff); color: var(--text); font-weight: 500; }
 .cd-franja-inicio { box-shadow: inset 3px 0 0 var(--franja); font-weight: 700; }
 .zoom-dia.franja { background: color-mix(in srgb, var(--franja) 13%, #fff); }
 .zoom-chip.franja-chip { background: var(--franja); color: #fff; }
 .ley-franja i { background: color-mix(in srgb, var(--franja) 35%, #fff); border: 1px solid var(--franja); }
-.cd-pasado.cd-franja { opacity: .7; }
+.cd-pasado.cd-franja:not(.cd-festivo) { background: color-mix(in srgb, var(--franja) 10%, #fff); font-weight: 400; }
 
 /* Días fuera del saldo disponible mientras se elige el último día */
 .cd-fuera { opacity: .3; cursor: not-allowed; }
@@ -632,3 +632,31 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 }
 /* El atenuado del resaltado gana a la opacidad de los días pasados */
 .cd.cd-atenuado { opacity: .3; }
+
+/* ---------- Íconos de eventos ---------- */
+.reg-icono { width: 20px; height: 20px; border-radius: 6px; color: #fff; display: inline-flex; align-items: center; justify-content: center;
+  flex: none; vertical-align: middle; }
+.zoom-chip svg, .pill svg, .ev-cat svg, .ev-cumples-tit svg { vertical-align: -2px; }
+
+/* ---------- Aniversario y cumpleaños propio: siempre resaltados ---------- */
+.cd.cd-aniversario { background: #ffe8a3; color: #6b4700; font-weight: 700; box-shadow: inset 0 0 0 1.5px #c99a06; opacity: 1; filter: none; }
+.cd.cd-mi-cumple { background: #fde4ee; color: #ad1457; font-weight: 700; box-shadow: inset 0 0 0 1.5px #ec407a; opacity: 1; filter: none; }
+.cd-insignia { position: absolute; top: -5px; right: -5px; width: 14px; height: 14px; border-radius: 50%; color: #fff; display: flex;
+  align-items: center; justify-content: center; z-index: 3; box-shadow: 0 0 0 1.5px #fff; }
+.cd-insignia.aniv { background: #c99a06; }
+.cd-insignia.cumple { background: #ec407a; }
+.zoom-chip.aniv { background: #ffe8a3; color: #6b4700; }
+.ev-aniv { display: flex; align-items: center; gap: 8px; background: #fff3c4; color: #6b4700; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }
+
+/* ---------- Leyenda: periodos que se pueden ocultar ---------- */
+.registros-leyenda button.ley-franja { border: 1px solid var(--border); background: #fff; border-radius: 20px; padding: 2px 9px; font: inherit;
+  font-size: 11.5px; color: var(--text); cursor: pointer; }
+.registros-leyenda button.ley-franja:hover { border-color: var(--franja); }
+.registros-leyenda button.ley-franja.oculto { color: var(--muted); text-decoration: line-through; }
+.registros-leyenda button.ley-franja.oculto i { background: #fff; }
+.registros-leyenda .ley-franja svg { vertical-align: -1px; color: var(--muted); }
+.ley-todos { border: none; background: none; color: var(--primary); font: inherit; font-size: 11.5px; cursor: pointer; padding: 2px 4px; }
+.ley-todos:hover { text-decoration: underline; }
+.ley-especial { display: inline-flex; align-items: center; gap: 4px; border-radius: 20px; padding: 2px 9px; font-size: 11.5px; }
+.ley-especial.aniv { background: #ffe8a3; color: #6b4700; }
+.ley-especial.cumple { background: #fde4ee; color: #ad1457; }

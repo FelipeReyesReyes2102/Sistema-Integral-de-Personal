@@ -47,6 +47,7 @@ export const CATEGORIAS = {
   consulta_medica: { label: 'Consulta médica (permiso)', color: '#00897b' },
   festivo: { label: 'Festivo', color: '#e53935' },
   cumpleanos: { label: 'Cumpleaños', color: '#ec407a' },
+  aniversario: { label: 'Aniversario', color: '#c99a06' },
 }
 
 /** Estilo de un evento según su estado: validado = sólido, solicitado = tenue, borrador = contorno. */

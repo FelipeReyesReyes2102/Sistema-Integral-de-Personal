@@ -4,6 +4,7 @@ import { api } from '../api'
 import { CATEGORIAS, ESTADOS, RESULTADOS_CONSULTA, TIPOS_NOMINA, TIPOS_PERMISO, fmtFecha, hhmm, num } from '../utils'
 import Modal from './Modal'
 import Avatar from './Avatar'
+import IconoCategoria from './IconoCategoria'
 
 function Fila({ k, v }) {
   if (v === undefined || v === null || v === '') return null
@@ -25,7 +26,7 @@ function Evento({ e }) {
   return (
     <div className="ev-card" style={{ borderLeftColor: cat.color }}>
       <div className="ev-cab">
-        <span className="ev-cat" style={{ color: cat.color }}>{cat.label}</span>
+        <span className="ev-cat" style={{ color: cat.color }}><IconoCategoria cat={e.cat} size={15} /> {cat.label}</span>
         {e.estado && e.estado !== 'registrada' && <span className={`pill ${e.estado}`}>{ESTADOS[e.estado]}</span>}
         {e.cat === 'consulta' && <span className="pill consulta">Servicio médico</span>}
       </div>
@@ -80,19 +81,22 @@ function Evento({ e }) {
 }
 
 /** Ventana con todos los eventos de un día y sus especificaciones. */
-export default function EventosDia({ fecha, eventos, festivo, descanso, persona, onClose, pie, cumpleanos = [] }) {
+export default function EventosDia({ fecha, eventos, festivo, descanso, persona, onClose, pie, cumpleanos = [], aniversario }) {
   return (
     <Modal titulo={`${persona ? `${persona} · ` : ''}${fmtFecha(fecha)}`} onClose={onClose}
       pie={<>{pie}<button className="btn" onClick={onClose}>Cerrar</button></>}>
+      {aniversario && (
+        <div className="ev-aniv"><IconoCategoria cat="aniversario" size={18} /> <b>{aniversario}</b></div>
+      )}
       {(festivo || descanso) && (
         <div className="fila" style={{ gap: 8, marginBottom: 10 }}>
-          {festivo && <span className="pill rechazado">Festivo: {festivo}</span>}
+          {festivo && <span className="pill rechazado"><IconoCategoria cat="festivo" size={12} /> Festivo: {festivo}</span>}
           {descanso && <span className="pill borrador">Día de descanso</span>}
         </div>
       )}
       {cumpleanos.length > 0 && (
         <div className="ev-cumples">
-          <div className="ev-cumples-tit">🎂 Cumpleaños</div>
+          <div className="ev-cumples-tit"><IconoCategoria cat="cumpleanos" size={14} /> Cumpleaños</div>
           {cumpleanos.map((c) => (
             <div key={c.usuario_id} className="ev-cumple">
               <Avatar usuario={{ id: c.usuario_id, nombre: c.nombre, tiene_foto: c.tiene_foto }} tam={34} />
@@ -102,7 +106,7 @@ export default function EventosDia({ fecha, eventos, festivo, descanso, persona,
         </div>
       )}
       {eventos.length > 0 && <div className="ev-subtit">{eventos.length} evento(s) registrado(s)</div>}
-      {eventos.length === 0 && !cumpleanos.length && !festivo && <div className="muted">No hay eventos registrados este día.</div>}
+      {eventos.length === 0 && !cumpleanos.length && !festivo && !aniversario && <div className="muted">No hay eventos registrados este día.</div>}
       <div className="ev-lista">
         {eventos.map((e, i) => <Evento key={`${e.cat}-${e.id}-${i}`} e={e} />)}
       </div>

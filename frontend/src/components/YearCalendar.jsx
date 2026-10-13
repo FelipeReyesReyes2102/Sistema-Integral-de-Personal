@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CalendarDays, ChevronLeft, ChevronRight, LayoutGrid } from 'lucide-react'
+import IconoCategoria from './IconoCategoria'
 import { CATEGORIAS, DIAS_SEMANA, ESTADOS, MESES, eventosPorFecha, estiloEvento, fmtFecha, hoyISO, parseISO, toISO } from '../utils'
 
 const PRIORIDAD = ['vacaciones', 'home_office', 'salida_intermedia', 'salida_temprana', 'llegada_tarde', 'consulta', 'consulta_medica']
@@ -15,9 +16,10 @@ const PRIORIDAD = ['vacaciones', 'home_office', 'salida_intermedia', 'salida_tem
  * - `maxDias`: días laborales disponibles; al elegir el segundo día no se puede pasar de ese límite.
  * - `fechaMax`: último día que se puede seleccionar (vencimiento del periodo: aniversario + 18 meses).
  * - `foco`: categoría resaltada (sus días palpitan y el resto se atenúa).
+ * - `aniversario`: {fecha, titulo} aniversario de ingreso del empleado en el año (siempre resaltado).
  */
 export default function YearCalendar({ anio, onAnio, datos, seleccion, onSeleccion, onDia, foco, onFoco, franjas = [],
-  maxDias = null, fechaMax = null, compacto = false }) {
+  maxDias = null, fechaMax = null, compacto = false, aniversario = null }) {
   const [vista, setVista] = useState('anio')
   const [mes, setMes] = useState(new Date().getMonth())
   const [hover, setHover] = useState(null)
@@ -76,7 +78,7 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
     onSeleccion({ inicio: a, fin: b })
   }
 
-  const conInfo = (f) => eventosDe(f).length > 0 || !!festivos[f] || !!cumples[f]
+  const conInfo = (f) => eventosDe(f).length > 0 || !!festivos[f] || !!cumples[f] || aniversario?.fecha === f
 
   function clicDia(fecha) {
     if (seleccionable && !pasado(fecha) && !fuera(fecha)) return seleccionar(fecha)
@@ -109,7 +111,11 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
   }
 
   const principal = (evs) => [...evs].sort((a, b) => PRIORIDAD.indexOf(a.cat) - PRIORIDAD.indexOf(b.cat))[0]
+  const miCumple = (f) => (cumples[f] || []).some((c) => c.propio)
+  const esAniversario = (f) => aniversario?.fecha === f
   const titulo = (f, evs) => [
+    esAniversario(f) && `🏅 ${aniversario.titulo}`,
+    miCumple(f) && '🎂 ¡Tu cumpleaños!',
     cumples[f] && `🎂 Cumpleaños: ${cumples[f].map((c) => c.nombre).join(', ')}`,
     festivos[f] && `Festivo: ${festivos[f]}`,
     noLab.has(f) && 'Día de descanso',
@@ -125,6 +131,8 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
     if (festivos[f]) clases.push('cd-festivo')
     if (f === hoy) clases.push('cd-hoy')
     if (cumples[f]) clases.push('cd-cumple')
+    if (miCumple(f)) clases.push('cd-mi-cumple')
+    if (esAniversario(f)) clases.push('cd-aniversario')
     if (enRango(f)) clases.push(noLab.has(f) || festivos[f] ? 'cd-rango-excluido' : 'cd-rango')
     if (f === ri || f === rf) clases.push('cd-rango-ext')
     if (conInfo(f) || (seleccionable && !pasado(f))) clases.push('cd-clic')
@@ -141,6 +149,11 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
         title={[fr && (fr.desde === f ? `Inicia el ${fr.nombre}` : fr.nombre), titulo(f, evs)].filter(Boolean).join('\n')}
         onClick={() => clicDia(f)} onContextMenu={(e) => verDia(e, f)} onMouseEnter={() => setHover(f)}>
         {Number(f.slice(8))}
+        {(esAniversario(f) || miCumple(f)) && (
+          <span className={`cd-insignia ${esAniversario(f) ? 'aniv' : 'cumple'}`}>
+            <IconoCategoria cat={esAniversario(f) ? 'aniversario' : 'cumpleanos'} size={9} strokeWidth={2.6} />
+          </span>
+        )}
         {evs.length > 1 && (
           <span className="cd-puntos">
             {evs.slice(1, 4).map((e, i) => <i key={i} style={{ background: CATEGORIAS[e.cat]?.color }} />)}
@@ -227,13 +240,18 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
                   style={fr ? { '--franja': fr.color } : undefined} title={fr?.nombre}>
                   <span className="zoom-num">{Number(f.slice(8))}</span>
                   {fr && fr.desde === f && <span className="zoom-chip franja-chip">Inicia {fr.nombre}</span>}
-                  {festivos[f] && <span className="zoom-chip rojo">{festivos[f]}</span>}
-                  {(cumples[f] || []).map((c) => <span key={c.usuario_id} className="zoom-chip cumple" title="Cumpleaños">🎂 {c.nombre}</span>)}
+                  {esAniversario(f) && <span className="zoom-chip aniv"><IconoCategoria cat="aniversario" size={11} /> {aniversario.titulo}</span>}
+                  {festivos[f] && <span className="zoom-chip rojo"><IconoCategoria cat="festivo" size={11} /> {festivos[f]}</span>}
+                  {(cumples[f] || []).map((c) => (
+                    <span key={c.usuario_id} className="zoom-chip cumple" title="Cumpleaños">
+                      <IconoCategoria cat="cumpleanos" size={11} /> {c.propio ? '¡Tu cumpleaños!' : c.nombre}
+                    </span>
+                  ))}
                   {noLab.has(f) && !evs.length && <span className="zoom-chip gris">Descanso</span>}
                   {evs.map((e, i) => (
                     <button key={i} type="button" className="zoom-chip evento" style={estiloEvento(e.cat, e.estado)}
                       title="Ver detalles" onClick={(ev) => { ev.stopPropagation(); onDia?.(f) }}>
-                      {CATEGORIAS[e.cat]?.label}
+                      <IconoCategoria cat={e.cat} size={11} /> {CATEGORIAS[e.cat]?.label}
                       {e.hora_inicio && !['vacaciones', 'home_office'].includes(e.cat) ? ` · ${e.hora_inicio}` : ''}
                       {e.estado === 'solicitado' ? ' (pendiente)' : e.estado === 'borrador' ? ' (borrador)' : ''}
                     </button>
