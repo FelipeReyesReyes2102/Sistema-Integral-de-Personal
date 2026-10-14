@@ -137,13 +137,17 @@ def test_administrador_con_varias_sedes_y_selector(mundo):
     su = entrar("super.sedes@o-tek.com", "Clave12345")
     with SessionLocal() as db:
         laura = db.query(Usuario).filter(Usuario.email == "laura@empresa.com").one()
-        # Laura pasa a ser administradora de México y también de Medellín
+        # Laura pasa a ser GH: solo administra su sede, aunque se le asignen otras
         laura.rol = "admin"
         db.commit()
         lid = laura.id
     base = su.get(f"/api/usuarios/{lid}").json()
     cuerpo = {k: base[k] for k in ("numero_empleado", "nombre", "email", "rol", "fecha_ingreso", "jefe_id", "turno_id", "es_jefe", "activo")}
     r = su.put(f"/api/usuarios/{lid}", json={**cuerpo, "sedes_admin": [mundo["med"]]})
+    assert r.status_code == 200 and r.json()["sedes_admin"] == []
+    assert "Empleado Medellín" not in {u["nombre"] for u in entrar("laura@empresa.com", "Cambiar123").get("/api/usuarios").json()}
+    # Como Gerencia GH, el super administrador le asigna México y Medellín
+    r = su.put(f"/api/usuarios/{lid}", json={**cuerpo, "rol": "gerencia_gh", "sedes_admin": [mundo["med"]]})
     assert r.status_code == 200 and r.json()["sedes_admin"] == [mundo["med"]]
 
     laura = entrar("laura@empresa.com", "Cambiar123")

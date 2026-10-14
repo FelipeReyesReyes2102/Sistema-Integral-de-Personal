@@ -10,7 +10,8 @@ from .. import microsoft
 from ..config import settings
 from ..database import get_db
 from ..models import (
-    ROL_ADMIN, ROL_OFICINA, ROL_PLANTA, ROL_SUPERADMIN, AdminSede, Grupo, PeriodoVacaciones, Sede, Turno, Usuario,
+    ROL_ADMIN, ROL_GERENCIA_GH, ROL_OFICINA, ROL_PLANTA, ROL_SUPERADMIN, AdminSede, Grupo, PeriodoVacaciones, Sede,
+    TipoJornada, Turno, Usuario,
     tiene_correo_corporativo,
 )
 from ..correo import EMAIL
@@ -19,7 +20,7 @@ from ..security import (
     ahora, asignar_password_temporal, auditar, get_current_user, hash_password, limpiar_sesiones_de,
     password_inutilizable, puede_usar_password, require_admin,
 )
-from ..sedes import Alcance, admin_permite, alcance, sede_por_ubicacion
+from ..sedes import Alcance, admin_permite, alcance, crear_jornadas_base, jornada_por_defecto, sede_por_ubicacion
 from ..services import (
     asignar_dias_disponibles, empleado_visible, puede_aprobar, puede_aprobar_a, saldo_periodo, sincronizar_periodos,
     usuario_out,
@@ -62,6 +63,7 @@ def buscar_en_microsoft(email: str, request: Request, db: Session = Depends(get_
         sede = Sede(nombre=datos["ubicacion"].strip()[:120], ubicacion_microsoft=datos["ubicacion"].strip()[:200])
         db.add(sede)
         db.commit()
+        crear_jornadas_base(db, sede)
         auditar(db, "sede_creada", actor_id=admin.id, detalle=f"{sede.nombre} (desde Microsoft)", request=request)
         db.commit()
         out.sede_nueva = True
@@ -135,7 +137,7 @@ def registrar_jefe(data: RegistrarJefeIn, request: Request, db: Session = Depend
         raise HTTPException(422, f"Microsoft no tiene el número de nómina de {datos.get('nombre') or email}; "
                                  "indícalo para registrarlo.")
     jefe_de_jefe = _jefe_local(db, datos.get("jefe"))
-    u = Usuario(sede_id=sede_id, numero_empleado=nomina, nombre=datos.get("nombre") or email, email=datos["email"], rol=ROL_OFICINA,
+    u = Usuario(sede_id=sede_id, tipo_jornada_id=jornada_por_defecto(db, sede_id, ROL_OFICINA), numero_empleado=nomina, nombre=datos.get("nombre") or email, email=datos["email"], rol=ROL_OFICINA,
                 fecha_ingreso=datos.get("fecha_ingreso") or date.today(), puesto=datos.get("puesto"),
                 departamento=datos.get("departamento"), es_jefe=True, activo=True, microsoft_oid=datos["oid"],
                 jefe_id=jefe_de_jefe.id if jefe_de_jefe and puede_aprobar_a(jefe_de_jefe, sede_id) else None,
@@ -350,7 +352,11 @@ def _validar_sede(db: Session, admin: Usuario, sede_id: int | None):
 
 
 def _validar_catalogos(db: Session, data: UsuarioIn):
-    """El turno y el grupo deben ser de la sede del empleado."""
+    """El turno, el grupo y la jornada deben ser de la sede del empleado."""
+    if data.tipo_jornada_id and (j := db.get(TipoJornada, data.tipo_jornada_id)) and j.sede_id != data.sede_id:
+        data.tipo_jornada_id = None
+    if not data.tipo_jornada_id:
+        data.tipo_jornada_id = jornada_por_defecto(db, data.sede_id, data.rol)
     if data.turno_id and (t := db.get(Turno, data.turno_id)) and t.sede_id != data.sede_id:
         raise HTTPException(422, "El turno seleccionado pertenece a otra sede.")
     if data.grupo_id and (g := db.get(Grupo, data.grupo_id)) and g.sede_id != data.sede_id:
@@ -365,10 +371,14 @@ def _de_mis_sedes(db: Session, admin: Usuario, usuario_id: int) -> Usuario:
 
 
 def _guardar_sedes_admin(db: Session, actor: Usuario, u: Usuario, sedes: list[int] | None):
-    """Sedes adicionales que administra un administrador (solo lo define un super administrador)."""
-    if sedes is None or actor.rol != ROL_SUPERADMIN:
+    """Sedes adicionales que gestiona una Gerencia GH (solo lo define un super administrador)."""
+    if actor.rol != ROL_SUPERADMIN:
         return
-    nuevas = {s for s in sedes if s != u.sede_id and db.get(Sede, s)} if u.rol == ROL_ADMIN else set()
+    if sedes is None:
+        if u.rol == ROL_GERENCIA_GH:
+            return
+        sedes = []  # dejó de ser Gerencia GH: ya no gestiona otras sedes
+    nuevas = {s for s in sedes if s != u.sede_id and db.get(Sede, s)} if u.rol == ROL_GERENCIA_GH else set()
     actuales = {a.sede_id: a for a in db.scalars(select(AdminSede).where(AdminSede.usuario_id == u.id))}
     for sid, fila in actuales.items():
         if sid not in nuevas:

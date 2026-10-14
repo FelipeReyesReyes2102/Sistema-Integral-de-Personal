@@ -52,8 +52,10 @@ def horas_otorgadas(dias_ley: int) -> float:
     return float(dias_ley * HORAS_DIA_LEY)
 
 
-def horas_a_dias(horas: float, cat: str) -> float:
-    return round(horas / HORAS_DIA[cat], 2)
+def horas_a_dias(horas: float, cat: str | int) -> float:
+    """Horas a días de la jornada (`cat` puede ser la categoría o directamente las horas por día)."""
+    hd = cat if isinstance(cat, int) else HORAS_DIA[cat]
+    return round(horas / hd, 2)
 
 
 def horas_perdidas(horas_disponibles: float, vencimiento: date, hoy: date) -> float:
@@ -146,12 +148,17 @@ def validar_vacaciones(
     hoy: date,
     permitir_pasado: bool = False,
     tiene_bloque: bool = False,
+    horas_dia: int | None = None,
+    bloque_minimo: int | None = None,
+    dias_anticipacion: int = 0,
 ) -> ResultadoValidacion:
-    """`tiene_bloque`: el periodo ya tiene una solicitud activa de al menos el mínimo de días seguidos."""
+    """`tiene_bloque`: el periodo ya tiene una solicitud activa de al menos el mínimo de días seguidos.
+    `horas_dia` y `bloque_minimo` vienen del tipo de jornada del empleado (por defecto, los de su categoría)."""
     errores: list[str] = []
     advertencias: list[str] = []
-    hd = HORAS_DIA[cat]
-    minimo = MIN_DIAS_SEGUIDOS[cat]
+    hd = horas_dia or HORAS_DIA[cat]
+    minimo = bloque_minimo or MIN_DIAS_SEGUIDOS[cat]
+    cat = hd  # las conversiones de horas a días usan las horas de la jornada
 
     if fin < inicio:
         return ResultadoValidacion(0, 0, ["La fecha final no puede ser anterior a la inicial."], [], [])
@@ -164,6 +171,9 @@ def validar_vacaciones(
         errores.append("El rango seleccionado no contiene días laborales.")
     if not permitir_pasado and inicio < hoy:
         errores.append("No es posible solicitar vacaciones en fechas pasadas.")
+    elif not permitir_pasado and dias_anticipacion and inicio < hoy + timedelta(days=dias_anticipacion):
+        errores.append(f"Las vacaciones se solicitan con al menos {dias_anticipacion} día(s) de anticipación "
+                       f"(a partir del {hoy + timedelta(days=dias_anticipacion):%d/%m/%Y}).")
     if inicio < periodo_inicio:
         errores.append(f"El periodo seleccionado está disponible a partir del {periodo_inicio:%d/%m/%Y}.")
     if fin > periodo_vencimiento:

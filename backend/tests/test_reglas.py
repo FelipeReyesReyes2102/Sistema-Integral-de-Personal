@@ -76,3 +76,16 @@ def test_vigencia_18_meses_y_perdida():
     assert reglas.horas_perdidas(40, date(2022, 8, 31), date(2022, 8, 31)) == 0   # último día aún vigente
     assert reglas.horas_perdidas(40, date(2022, 8, 31), date(2022, 9, 1)) == 40   # al día siguiente se pierde
     assert reglas.horas_perdidas(-8, date(2022, 8, 31), date(2023, 1, 1)) == 0
+
+
+def test_anticipacion_y_parametros_de_jornada():
+    """La política de la sede y la jornada del empleado definen anticipación, horas por día y bloque mínimo."""
+    from app.reglas import Ciclo, validar_vacaciones
+    hoy = date(2026, 10, 12)  # lunes
+    base = dict(cat="oficina", ciclo=Ciclo(), festivos=set(), horas_disponibles=150.0, periodo_inicio=date(2026, 1, 1),
+                periodo_vencimiento=date(2027, 12, 31), hoy=hoy)
+    r = validar_vacaciones(inicio=date(2026, 10, 14), fin=date(2026, 10, 23), dias_anticipacion=5, **base)
+    assert any("anticipación" in e for e in r.errores)
+    r = validar_vacaciones(inicio=date(2026, 10, 19), fin=date(2026, 10, 23), dias_anticipacion=5, horas_dia=10,
+                           bloque_minimo=5, **base)
+    assert r.errores == [] and r.dias_habiles == 5 and r.horas == 50

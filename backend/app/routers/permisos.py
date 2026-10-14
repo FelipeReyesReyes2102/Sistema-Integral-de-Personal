@@ -15,7 +15,7 @@ from ..models import ROLES_ADMIN, es_admin  # noqa: F401
 from ..schemas import PermisoIn, PermisoOut, RechazoIn, ValidarPermisoIn
 from ..security import get_current_user
 from ..sedes import Alcance, admin_permite, alcance, hoy_de
-from ..services import ciclo_de, empleado_visible, festivos_de, puede_revisar, resolver_aprobador
+from ..services import ciclo_de, empleado_visible, festivos_de, jornada_de, puede_revisar, resolver_aprobador
 
 router = APIRouter(prefix="/api/permisos", tags=["permisos"])
 
@@ -46,8 +46,9 @@ def _home_office(db: Session, data: PermisoIn, empleado: Usuario, actor: Usuario
     fin = data.fecha_fin or data.fecha
     if fin < data.fecha:
         raise HTTPException(422, "La fecha final del home office no puede ser anterior a la inicial.")
-    if (fin - data.fecha).days > 30:
-        raise HTTPException(422, "El home office puede solicitarse por máximo 31 días naturales a la vez.")
+    maximo = empleado.sede.home_office_max_dias if empleado.sede else 31
+    if (fin - data.fecha).days > maximo - 1:
+        raise HTTPException(422, f"El home office puede solicitarse por máximo {maximo} días naturales a la vez.")
     if not es_admin(actor) and data.fecha < hoy_de(empleado):
         raise HTTPException(422, "No es posible solicitar home office en fechas pasadas.")
     dias = reglas.dias_laborales(data.fecha, fin, ciclo_de(empleado), festivos_de(db, empleado, data.fecha, fin))
@@ -71,7 +72,15 @@ def _home_office(db: Session, data: PermisoIn, empleado: Usuario, actor: Usuario
             "hora_fin": data.hora_fin or (t.hora_salida if t else time(17))}
 
 
+def _tipo_habilitado(empleado: Usuario, tipo: str):
+    """Cada sede decide qué tipos de permiso usa."""
+    habilitados = (empleado.sede.tipos_permiso or "").split(",") if empleado.sede else None
+    if habilitados is not None and tipo != PERMISO_CONSULTA_MEDICA and tipo not in habilitados:
+        raise HTTPException(422, "Ese tipo de permiso no está habilitado en tu sede.")
+
+
 def _preparar(db: Session, data: PermisoIn, empleado: Usuario, actor: Usuario, excluir_id: int | None = None) -> dict:
+    _tipo_habilitado(empleado, data.tipo)
     if data.tipo == PERMISO_HOME_OFFICE:
         return _home_office(db, data, empleado, actor, excluir_id)
     if not data.hora_inicio or not data.hora_fin:
@@ -84,7 +93,7 @@ def _validar(data: PermisoIn, empleado: Usuario, actor: Usuario) -> float:
     if data.tipo == PERMISO_CONSULTA_MEDICA:
         raise HTTPException(422, "Las consultas médicas ya no se solicitan: las registra el médico de planta.")
     horas = reglas.horas_permiso(data.hora_inicio, data.hora_fin)
-    jornada = empleado.turno.horas_jornada if empleado.turno else reglas.HORAS_DIA[reglas.categoria(empleado.rol)]
+    jornada = empleado.turno.horas_jornada if empleado.turno else jornada_de(empleado).horas_dia
     if horas > jornada:
         raise HTTPException(422, f"El permiso ({horas:g} h) excede la jornada de {jornada} h.")
     if not es_admin(actor) and data.fecha < hoy_de(empleado) and data.tipo != PERMISO_CONSULTA_MEDICA:
@@ -121,6 +130,7 @@ def crear(data: PermisoIn, db: Session = Depends(get_db), user: Usuario = Depend
         empleado = db.get(Usuario, data.usuario_id) or _404()
         if not admin_permite(user, empleado.sede_id):
             _404()
+    _tipo_habilitado(empleado, data.tipo)
     aprobador_id = resolver_aprobador(db, empleado, data.aprobador_id)
     v = _preparar(db, data, empleado, user)
     if data.enviar:

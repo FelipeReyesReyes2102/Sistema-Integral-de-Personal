@@ -121,6 +121,8 @@ def _validar(db: Session, data: ConsultaIn, medico: Usuario) -> Usuario:
         raise HTTPException(422, "No puedes registrar una consulta a tu propio nombre")
     if paciente.sede_id != medico.sede_id:
         raise HTTPException(422, "El paciente pertenece a otra sede.")
+    if medico.sede is not None and not medico.sede.modulo_consultas:
+        raise HTTPException(403, "El servicio médico no está habilitado en tu sede.")
     if data.fecha > date.today():
         raise HTTPException(422, "La fecha de la consulta no puede ser futura")
     if data.hora_fin and data.hora_fin <= data.hora_inicio:

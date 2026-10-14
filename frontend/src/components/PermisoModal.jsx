@@ -22,7 +22,8 @@ const TITULOS = {
 }
 
 /** Permisos de salida o ingreso (formato O-tek): llegada tarde, salida temprana, salida intermedia y consulta médica. */
-export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinInicial, usuario, permiso, onClose, onSaved }) {
+export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinInicial, usuario, permiso, onClose, onSaved,
+  tiposHabilitados = null }) {
   const [turno, setTurno] = useState(null)
   const [departamentos, setDepartamentos] = useState([])
   const [form, setForm] = useState({
@@ -103,7 +104,9 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
       <Campo label="Tipo de permiso" requerido full>
         <select value={form.tipo} onChange={set('tipo')}>
           <option value="">Selecciona…</option>
-          {Object.entries(TIPOS_PERMISO_SOLICITABLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          {Object.entries(TIPOS_PERMISO_SOLICITABLES)
+            .filter(([k]) => !tiposHabilitados || tiposHabilitados.includes(k) || k === permiso?.tipo)
+            .map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
       </Campo>
 

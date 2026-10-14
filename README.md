@@ -24,8 +24,14 @@ consultas con el médico de planta.
 - La sede de cada empleado se toma de su **Ubicación del trabajo** en Microsoft Entra ID; el super administrador
   puede crear las sedes con **Configuración → Sedes → Importar desde Microsoft**.
 - **Super administrador:** ve todas las sedes, crea y edita sedes y es el único que cambia a un empleado de sede.
-- **Administrador:** solo su sede y las adicionales que le asigne un super administrador (en el empleado:
-  *Sedes adicionales que administra*). Con varias sedes, el menú muestra un selector de sede.
+- **GH** (Gestión Humana, rol `admin`): administra solo su sede.
+- **Gerencia GH** (`gerencia_gh`): mismos accesos que GH en su sede y en las que le asigne un super administrador
+  (*Sedes adicionales que gestiona*). Con varias sedes, el menú muestra un selector de sede.
+- **Política de cada sede** (Configuración): vigencia de los días, anticipación para pedir vacaciones, cómo se
+  otorgan los días (equivalencia en horas de 8 h o días completos), permisos habilitados, máximo de home office,
+  módulos (servicio médico y cumpleaños), tabla de antigüedad y **tipos de jornada** (horas por día, bloque mínimo
+  de días seguidos y si los días hábiles son de lunes a viernes o según el ciclo del grupo). Cada empleado tiene
+  un tipo de jornada; las "Reglas vigentes" se generan a partir de esta configuración.
 - Los jefes solo tienen a cargo personas de su propia sede. Los cumpleaños se muestran por sede.
 - El servidor de correo y la tabla de antigüedad son comunes (los cambia el super administrador); los datos que
   existían antes de las sedes quedaron en *O-tek México*.

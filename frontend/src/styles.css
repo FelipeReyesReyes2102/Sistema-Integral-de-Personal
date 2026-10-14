@@ -671,3 +671,10 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
   padding: 7px 12px; margin-bottom: 12px; font-size: 13px; }
 .sedes-admin { display: grid; gap: 4px; }
 .fila-edicion td { background: #f7f9fc; }
+
+/* ---------- Política de la sede ---------- */
+.pol-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.pol-grid .full { grid-column: 1 / -1; }
+.pol-grid .campo .checkbox { font-size: 13px; color: var(--text); }
+.reglas-vigentes { line-height: 1.7; padding-left: 18px; margin: 0; font-size: 13px; }
+@media (max-width: 760px) { .pol-grid { grid-template-columns: 1fr; } }

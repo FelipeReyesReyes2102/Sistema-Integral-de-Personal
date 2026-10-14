@@ -21,11 +21,12 @@ export const TIPOS_NOMINA = {
 }
 
 export const ROLES = {
-  superadmin: 'Super administrador', admin: 'Administrador', oficina: 'Oficinas', planta: 'Planta', medico: 'Médico de planta',
+  superadmin: 'Super administrador', gerencia_gh: 'Gerencia GH', admin: 'GH', oficina: 'Oficinas', planta: 'Planta',
+  medico: 'Médico de planta',
 }
 
-/** Administrador o super administrador (el super administrador tiene acceso a todo). */
-export const esAdmin = (u) => u?.rol === 'admin' || u?.rol === 'superadmin'
+/** GH, Gerencia GH o super administrador (el super administrador tiene acceso a todo). */
+export const esAdmin = (u) => ['admin', 'gerencia_gh', 'superadmin'].includes(u?.rol)
 export const esSuperAdmin = (u) => u?.rol === 'superadmin'
 
 // Permisos que el empleado puede pedir (las consultas médicas las registra el médico)

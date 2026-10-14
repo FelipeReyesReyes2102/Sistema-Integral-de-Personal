@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-Rol = Literal["superadmin", "admin", "oficina", "planta", "medico"]
+Rol = Literal["superadmin", "gerencia_gh", "admin", "oficina", "planta", "medico"]
 TipoPermiso = Literal["llegada_tarde", "salida_temprana", "salida_intermedia", "consulta_medica", "home_office"]
 TipoNomina = Literal["con_goce", "sin_goce", "reposicion"]
 Firma = Annotated[str, Field(max_length=400_000, pattern=r"^data:image/png;base64,[A-Za-z0-9+/=]+$")]
@@ -78,6 +78,7 @@ class UsuarioBase(BaseModel):
     numero_empleado: str
     nombre: str
     sede_id: int | None = None          # por defecto la sede activa del administrador
+    tipo_jornada_id: int | None = None  # por defecto la jornada de su sede según su tipo de usuario
     email: str | None = None            # correo corporativo (solo oficinas)
     email_personal: str | None = None
     rol: Rol = "oficina"
@@ -109,6 +110,7 @@ class UsuarioOut(UsuarioBase, ORM):
     id: int
     sede_nombre: str | None = None
     sedes_admin: list[int] = []
+    tipo_jornada_nombre: str | None = None
     turno_nombre: str | None = None
     grupo_nombre: str | None = None
     jefe_nombre: str | None = None
@@ -456,4 +458,32 @@ class SedeIn(BaseModel):
 
 class SedeOut(SedeIn, ORM):
     id: int
+    empleados: int = 0
+
+
+# ---------- Política de la sede y tipos de jornada ----------
+TipoPermisoSolicitable = Literal["llegada_tarde", "salida_temprana", "salida_intermedia", "home_office"]
+
+
+class PoliticaIn(BaseModel):
+    meses_vigencia: int = Field(18, ge=1, le=60)
+    equivalencia_horas: bool = True
+    dias_anticipacion: int = Field(0, ge=0, le=90)
+    tipos_permiso: list[TipoPermisoSolicitable] = []
+    home_office_max_dias: int = Field(31, ge=1, le=365)
+    modulo_consultas: bool = True
+    modulo_cumpleanos: bool = True
+
+
+class JornadaIn(BaseModel):
+    nombre: str = Field(min_length=2, max_length=80)
+    horas_dia: int = Field(8, ge=1, le=24)
+    bloque_minimo: int = Field(6, ge=1, le=30)
+    usa_ciclo_grupo: bool = False
+    activo: bool = True
+
+
+class JornadaOut(JornadaIn, ORM):
+    id: int
+    sede_id: int
     empleados: int = 0

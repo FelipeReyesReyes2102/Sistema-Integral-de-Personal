@@ -1,6 +1,7 @@
 """Servicios que combinan las reglas con la base de datos."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 
 from fastapi import HTTPException
@@ -10,7 +11,7 @@ from sqlalchemy.orm import Session, object_session
 from . import reglas
 from .config import settings
 from .models import (
-    BORRADOR, ESTADOS_ACTIVOS, ROL_ADMIN, SOLICITADO, VALIDADO, AdminSede, Festivo, Permiso, PeriodoVacaciones,
+    BORRADOR, ESTADOS_ACTIVOS, ROL_ADMIN, ROL_GERENCIA_GH, SOLICITADO, VALIDADO, AdminSede, Festivo, Permiso, PeriodoVacaciones,
     ReglaAntiguedad, SolicitudVacaciones, Usuario,
 )
 from .models import ROLES_ADMIN, es_admin  # noqa: F401
@@ -36,10 +37,38 @@ def tabla_antiguedad(db: Session, sede_id: int | None = None) -> list[tuple[int,
     return [(r.anios_desde, r.anios_hasta, r.dias) for r in rows]
 
 
+@dataclass(frozen=True)
+class Jornada:
+    """Parámetros de la jornada de un empleado (de su tipo de jornada o, si no tiene, de su categoría)."""
+    nombre: str
+    horas_dia: int
+    bloque_minimo: int
+    usa_ciclo_grupo: bool
+
+    @property
+    def categoria(self) -> str:
+        """Para los festivos que aplican solo a oficinas o solo a planta."""
+        return "planta" if self.usa_ciclo_grupo else "oficina"
+
+
+def jornada_de(usuario: Usuario) -> Jornada:
+    t = usuario.tipo_jornada
+    if t is not None:
+        return Jornada(t.nombre, t.horas_dia, t.bloque_minimo, t.usa_ciclo_grupo)
+    cat = reglas.categoria(usuario.rol)
+    return Jornada("Planta" if cat == "planta" else "Oficina", reglas.HORAS_DIA[cat], reglas.MIN_DIAS_SEGUIDOS[cat],
+                   cat == "planta")
+
+
+def meses_vigencia(usuario: Usuario) -> int:
+    return usuario.sede.meses_vigencia if usuario.sede is not None and usuario.sede.meses_vigencia else \
+        settings.meses_vigencia_periodo
+
+
 def ciclo_de(usuario: Usuario) -> reglas.Ciclo:
-    """Oficinas: lunes a viernes. Planta: según el ciclo del grupo asignado."""
+    """Según su jornada: lunes a viernes, o el ciclo del grupo asignado (p. ej. 4×4)."""
     g = usuario.grupo
-    if reglas.categoria(usuario.rol) == "planta" and g is not None:
+    if jornada_de(usuario).usa_ciclo_grupo and g is not None:
         return reglas.Ciclo(
             tipo=g.tipo_ciclo,
             dias_semana=reglas.parse_dias_semana(g.dias_semana),
@@ -53,7 +82,7 @@ def ciclo_de(usuario: Usuario) -> reglas.Ciclo:
 def consulta_festivos(usuario: Usuario, desde: date, hasta: date):
     """Festivos de la sede del empleado que aplican a su categoría."""
     return select(Festivo).where(Festivo.fecha >= desde, Festivo.fecha <= hasta, Festivo.sede_id == usuario.sede_id,
-                                 Festivo.aplica_a.in_(["todos", reglas.categoria(usuario.rol)]))
+                                 Festivo.aplica_a.in_(["todos", jornada_de(usuario).categoria]))
 
 
 def festivos_de(db: Session, usuario: Usuario, desde: date, hasta: date) -> set[date]:
@@ -64,15 +93,18 @@ def sincronizar_periodos(db: Session, usuario: Usuario, hoy: date | None = None)
     """Crea los periodos que falten y recalcula días/horas según la tabla y la categoría actual."""
     hoy = hoy or date.today()
     tabla = tabla_antiguedad(db, usuario.sede_id)
-    cat = reglas.categoria(usuario.rol)
+    jornada = jornada_de(usuario)
+    # México: se otorgan las horas de la tabla × 8 h; si la sede no usa equivalencia, cada día es un día de la jornada
+    equivalencia = usuario.sede.equivalencia_horas if usuario.sede is not None else True
     existentes = {p.numero: p for p in usuario.periodos}
     cambios = False
     for pc in reglas.periodos_hasta(usuario.fecha_ingreso, hoy, settings.vacaciones_al_cumplir_anio,
-                                    settings.meses_vigencia_periodo):
+                                    meses_vigencia(usuario)):
         dias = reglas.dias_por_antiguedad(pc.numero, tabla)
         valores = dict(
             fecha_inicio=pc.fecha_inicio, fecha_vencimiento=pc.fecha_vencimiento, dias_ley=dias,
-            horas_otorgadas=reglas.horas_otorgadas(dias), horas_por_dia=reglas.HORAS_DIA[cat],
+            horas_otorgadas=reglas.horas_otorgadas(dias) if equivalencia else float(dias * jornada.horas_dia),
+            horas_por_dia=jornada.horas_dia,
         )
         p = existentes.get(pc.numero)
         if p is None:
@@ -95,7 +127,7 @@ def asignar_dias_disponibles(db: Session, usuario: Usuario, dias: float, hoy: da
     hoy = hoy or date.today()
     vigentes = sorted((p for p in sincronizar_periodos(db, usuario, hoy) if p.fecha_vencimiento >= hoy),
                       key=lambda p: p.fecha_inicio, reverse=True)
-    hd = reglas.HORAS_DIA[reglas.categoria(usuario.rol)]
+    hd = jornada_de(usuario).horas_dia
     if dias > 0 and not vigentes:
         raise HTTPException(422, "El empleado aún no tiene periodos de vacaciones vigentes: el primero se genera al "
                                  "cumplir un año de servicio.")
@@ -162,7 +194,8 @@ def saldo_periodo(db: Session, p: PeriodoVacaciones, excluir_id: int | None = No
     out.dias_disponible = round(disp / hd, 2)
     out.horas_perdidas = perdidas
     out.dias_perdidos = round(perdidas / hd, 2)
-    out.minimo_dias = reglas.MIN_DIAS_SEGUIDOS["planta" if hd == reglas.HORAS_DIA["planta"] else "oficina"]
+    out.minimo_dias = jornada_de(p.usuario).bloque_minimo if p.usuario is not None else \
+        reglas.MIN_DIAS_SEGUIDOS["planta" if hd == reglas.HORAS_DIA["planta"] else "oficina"]
     out.bloque_cumplido = tiene_bloque_minimo(db, p.id, out.minimo_dias, excluir_id)
     out.vigente = p.fecha_vencimiento >= hoy
     return out
@@ -172,6 +205,7 @@ def usuario_out(u: Usuario) -> UsuarioOut:
     out = UsuarioOut.model_validate(u)
     out.turno_nombre = u.turno.nombre if u.turno else None
     out.sede_nombre = u.sede.nombre if u.sede else None
+    out.tipo_jornada_nombre = jornada_de(u).nombre
     out.grupo_nombre = u.grupo.nombre if u.grupo else None
     out.jefe_nombre = u.jefe.nombre if u.jefe else None
     out.tiene_foto = u.foto_tipo is not None
@@ -179,7 +213,7 @@ def usuario_out(u: Usuario) -> UsuarioOut:
     out.bloqueado = bool(u.bloqueado_hasta and u.bloqueado_hasta > datetime.now(timezone.utc).replace(tzinfo=None))
     out.antiguedad_anios = reglas.anios_cumplidos(u.fecha_ingreso, date.today())
     db = object_session(u)
-    if db is not None and u.rol == ROL_ADMIN:
+    if db is not None and u.rol == ROL_GERENCIA_GH:
         out.sedes_admin = sorted(db.scalars(select(AdminSede.sede_id).where(AdminSede.usuario_id == u.id)))
     if db is not None and (u.es_jefe or es_admin(u)):
         out.total_a_cargo = db.scalar(

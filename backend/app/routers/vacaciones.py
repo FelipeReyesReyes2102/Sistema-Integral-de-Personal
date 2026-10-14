@@ -19,7 +19,7 @@ from ..schemas import (
 from ..security import get_current_user
 from ..sedes import Alcance, admin_permite, alcance, hoy_de
 from ..services import (
-    ciclo_de, empleado_visible, festivos_de, hay_traslape, puede_revisar, resolver_aprobador, saldo_periodo,
+    ciclo_de, consulta_festivos, jornada_de, empleado_visible, festivos_de, hay_traslape, puede_revisar, resolver_aprobador, saldo_periodo,
     sincronizar_periodos,
 )
 
@@ -58,9 +58,11 @@ def _calcular(db: Session, empleado: Usuario, actor: Usuario, periodo_id: int, i
     if not periodo or periodo.usuario_id != empleado.id:
         raise HTTPException(404, "Periodo no encontrado para este empleado")
     saldo = saldo_periodo(db, periodo, excluir_id=excluir_id, aplicar_vencimiento=not es_admin(actor))
-    cat = reglas.categoria(empleado.rol)
+    jornada = jornada_de(empleado)
     res = reglas.validar_vacaciones(
-        cat=cat, inicio=inicio, fin=fin, ciclo=ciclo_de(empleado),
+        cat=jornada.categoria, horas_dia=jornada.horas_dia, bloque_minimo=jornada.bloque_minimo,
+        dias_anticipacion=empleado.sede.dias_anticipacion if empleado.sede else 0,
+        inicio=inicio, fin=fin, ciclo=ciclo_de(empleado),
         festivos=festivos_de(db, empleado, inicio, fin),
         horas_disponibles=saldo.horas_disponible,
         periodo_inicio=periodo.fecha_inicio, periodo_vencimiento=periodo.fecha_vencimiento,
@@ -68,7 +70,7 @@ def _calcular(db: Session, empleado: Usuario, actor: Usuario, periodo_id: int, i
     )
     if fin >= inicio and hay_traslape(db, empleado.id, inicio, fin, excluir_id):
         res.errores.append("Ya tienes otra solicitud de vacaciones que se cruza con esas fechas.")
-    if cat == "planta" and empleado.grupo is None:
+    if jornada.usa_ciclo_grupo and empleado.grupo is None:
         res.advertencias.append("No tienes grupo asignado; se calcularon días de lunes a viernes.")
     return periodo, saldo, res
 
@@ -78,8 +80,7 @@ def _general(db: Session, empleado: Usuario, actor: Usuario, inicio: date, fin: 
     (para no perder días al cumplir 18 meses). Devuelve los tramos [(periodo, desde, hasta, resultado)], el
     resultado global y el saldo total."""
     sincronizar_periodos(db, empleado)
-    cat = reglas.categoria(empleado.rol)
-    hd = reglas.HORAS_DIA[cat]
+    hd = jornada_de(empleado).horas_dia
     if fin < inicio:
         return [], reglas.ResultadoValidacion(0, 0, ["La fecha final no puede ser anterior a la inicial."], [], []), 0.0
     fechas = reglas.dias_laborales(inicio, fin, ciclo_de(empleado), festivos_de(db, empleado, inicio, fin))
@@ -161,10 +162,8 @@ def dias_laborales(data: DiasLaboralesIn, db: Session = Depends(get_db), user: U
         raise HTTPException(422, "La fecha final no puede ser anterior a la inicial.")
     if (data.fecha_fin - data.fecha_inicio).days > 366:
         raise HTTPException(422, "El rango no puede ser mayor a un año.")
-    cat = reglas.categoria(empleado.rol)
     ciclo = ciclo_de(empleado)
-    nombres = {f.fecha: f.nombre for f in db.scalars(select(Festivo).where(
-        Festivo.fecha >= data.fecha_inicio, Festivo.fecha <= data.fecha_fin, Festivo.aplica_a.in_(["todos", cat])))}
+    nombres = {f.fecha: f.nombre for f in db.scalars(consulta_festivos(empleado, data.fecha_inicio, data.fecha_fin))}
     fechas = reglas.dias_laborales(data.fecha_inicio, data.fecha_fin, ciclo, set(nombres))
     excluidos, d = [], data.fecha_inicio
     laborales = set(fechas)
@@ -178,7 +177,7 @@ def dias_laborales(data: DiasLaboralesIn, db: Session = Depends(get_db), user: U
                 motivo = "Día de descanso"
             excluidos.append(DiaExcluido(fecha=d, motivo=motivo))
         d += timedelta(days=1)
-    hd = reglas.HORAS_DIA[cat]
+    hd = jornada_de(empleado).horas_dia
     return DiasLaboralesOut(dias_habiles=len(fechas), horas=float(len(fechas) * hd), horas_por_dia=hd,
                             fechas=fechas, excluidos=excluidos)
 
@@ -189,11 +188,11 @@ def calcular(data: CalculoIn, db: Session = Depends(get_db), user: Usuario = Dep
     empleado = _destino(db, user, data.usuario_id)
     if data.periodo_id is None:
         tramos, res, horas_total = _general(db, empleado, user, data.fecha_inicio, data.fecha_fin, data.excluir_id)
-        cat = reglas.categoria(empleado.rol)
+        jornada = jornada_de(empleado)
         return CalculoOut(
             dias_habiles=res.dias_habiles, horas=res.horas, errores=res.errores, advertencias=res.advertencias,
-            fechas=res.fechas, horas_disponible=horas_total, dias_disponible=reglas.horas_a_dias(horas_total, cat),
-            minimo_dias=reglas.MIN_DIAS_SEGUIDOS[cat],
+            fechas=res.fechas, horas_disponible=horas_total, dias_disponible=round(horas_total / jornada.horas_dia, 2),
+            minimo_dias=jornada.bloque_minimo,
             reparto=[TramoPeriodo(periodo_id=p.id, periodo_nombre=p.nombre, fecha_inicio=a, fecha_fin=b, dias=r.dias_habiles)
                      for p, a, b, r in tramos],
         )
@@ -201,7 +200,7 @@ def calcular(data: CalculoIn, db: Session = Depends(get_db), user: Usuario = Dep
     return CalculoOut(
         dias_habiles=res.dias_habiles, horas=res.horas, errores=res.errores, advertencias=res.advertencias,
         fechas=res.fechas, horas_disponible=saldo.horas_disponible, dias_disponible=saldo.dias_disponible,
-        minimo_dias=reglas.MIN_DIAS_SEGUIDOS[reglas.categoria(empleado.rol)],
+        minimo_dias=jornada_de(empleado).bloque_minimo,
     )
 
 

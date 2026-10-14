@@ -95,7 +95,7 @@ def calendario(anio: int, usuario_id: int | None = None, db: Session = Depends(g
         "vacaciones": _dias_vacaciones(db, u, desde, hasta),
         "permisos": _permisos_por_dia(db, u, desde, hasta),
         "consultas": _consultas(db, u, desde, hasta, detalle_clinico),
-        "cumpleanos": _cumpleanos(db, anio, u.id, u.sede_id),
+        "cumpleanos": _cumpleanos(db, anio, u.id, u.sede_id) if (u.sede is None or u.sede.modulo_cumpleanos) else [],
     }
 
 

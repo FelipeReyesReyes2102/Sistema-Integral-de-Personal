@@ -2,7 +2,7 @@ from datetime import date, datetime, time
 
 from sqlalchemy import (
     Boolean, Date, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, Time, UniqueConstraint, false,
-    func,
+    func, true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -14,8 +14,10 @@ ROL_OFICINA = "oficina"
 ROL_PLANTA = "planta"
 ROL_MEDICO = "medico"  # médico de planta: registra consultas; para vacaciones se rige como oficinas
 ROL_SUPERADMIN = "superadmin"  # todo lo del administrador + configuración de Microsoft y gestión de super admins
-ROLES = (ROL_SUPERADMIN, ROL_ADMIN, ROL_OFICINA, ROL_PLANTA, ROL_MEDICO)
-ROLES_ADMIN = (ROL_ADMIN, ROL_SUPERADMIN)
+# "admin" se muestra como GH (Gestión Humana): administra solo su sede.
+ROL_GERENCIA_GH = "gerencia_gh"  # Gerencia GH: mismos accesos que GH en las sedes que le asigne un super administrador
+ROLES = (ROL_SUPERADMIN, ROL_GERENCIA_GH, ROL_ADMIN, ROL_OFICINA, ROL_PLANTA, ROL_MEDICO)
+ROLES_ADMIN = (ROL_ADMIN, ROL_GERENCIA_GH, ROL_SUPERADMIN)
 
 
 def tiene_correo_corporativo(rol: str) -> bool:
@@ -86,6 +88,34 @@ class Sede(Base):
     caseta_tipos: Mapped[str] = mapped_column(String(200), default="llegada_tarde,salida_temprana,salida_intermedia")
     creado: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
+    # ---- Política de vacaciones y permisos de la sede (la configura su GH) ----
+    meses_vigencia: Mapped[int] = mapped_column(Integer, default=18, server_default="18")  # luego se pierden los días
+    # True: se otorgan las horas de la tabla × 8 h y cada jornada las consume según sus horas (México);
+    # False: cada día de la tabla es un día de la jornada del empleado (p. ej. 15 días hábiles para todos)
+    equivalencia_horas: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    dias_anticipacion: Mapped[int] = mapped_column(Integer, default=0, server_default="0")  # para pedir vacaciones
+    tipos_permiso: Mapped[str] = mapped_column(
+        String(200), default="llegada_tarde,salida_temprana,salida_intermedia,home_office",
+        server_default="llegada_tarde,salida_temprana,salida_intermedia,home_office")
+    home_office_max_dias: Mapped[int] = mapped_column(Integer, default=31, server_default="31")
+    modulo_consultas: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    modulo_cumpleanos: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+
+
+class TipoJornada(Base):
+    """Tipo de jornada de una sede: horas por día, bloque mínimo de vacaciones y cómo se cuentan los días hábiles."""
+    __tablename__ = "tipos_jornada"
+    __table_args__ = (UniqueConstraint("sede_id", "nombre", name="uq_jornadas_sede_nombre"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sede_id: Mapped[int] = mapped_column(ForeignKey("sedes.id"), index=True)
+    nombre: Mapped[str] = mapped_column(String(80))
+    horas_dia: Mapped[int] = mapped_column(Integer, default=8)
+    bloque_minimo: Mapped[int] = mapped_column(Integer, default=6)  # días seguidos que se toman al menos una vez
+    # False: lunes a viernes; True: según el ciclo del grupo del empleado (p. ej. 4×4)
+    usa_ciclo_grupo: Mapped[bool] = mapped_column(Boolean, default=False)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+
 
 class AdminSede(Base):
     """Sedes adicionales que puede administrar un administrador (además de la suya)."""
@@ -151,6 +181,7 @@ class Usuario(Base):
     numero_empleado: Mapped[str] = mapped_column(String(30), unique=True)
     nombre: Mapped[str] = mapped_column(String(150))
     sede_id: Mapped[int | None] = mapped_column(ForeignKey("sedes.id"), index=True)
+    tipo_jornada_id: Mapped[int | None] = mapped_column(ForeignKey("tipos_jornada.id", ondelete="SET NULL"))
     # Correo corporativo (solo personal de oficinas: oficina, admin, super admin y médico); planta no tiene
     email: Mapped[str | None] = mapped_column(String(150), unique=True, index=True)
     email_personal: Mapped[str | None] = mapped_column(String(150), unique=True, index=True)
@@ -183,6 +214,7 @@ class Usuario(Base):
     turno: Mapped[Turno | None] = relationship()
     grupo: Mapped[Grupo | None] = relationship(back_populates="miembros")
     sede: Mapped[Sede | None] = relationship()
+    tipo_jornada: Mapped[TipoJornada | None] = relationship()
     jefe: Mapped["Usuario | None"] = relationship(remote_side="Usuario.id", foreign_keys=[jefe_id])
     periodos: Mapped[list["PeriodoVacaciones"]] = relationship(
         back_populates="usuario", cascade="all, delete-orphan", order_by="PeriodoVacaciones.numero"

@@ -173,7 +173,7 @@ def require_roles(*roles: str):
     return dependencia
 
 
-require_admin = require_roles(ROL_ADMIN, ROL_SUPERADMIN)
+require_admin = require_roles(*ROLES_ADMIN)
 require_superadmin = require_roles(ROL_SUPERADMIN)
 require_medico = require_roles(ROL_MEDICO)
 

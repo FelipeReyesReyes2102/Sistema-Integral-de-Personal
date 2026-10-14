@@ -2,7 +2,8 @@
 
 Reglas:
 - Super administrador: todas las sedes; es el único que crea sedes y cambia a un empleado de sede.
-- Administrador: su sede y las adicionales que le asigne un super administrador (tabla admin_sedes).
+- GH (rol "admin"): solo su sede.
+- Gerencia GH: su sede y las adicionales que le asigne un super administrador (tabla admin_sedes).
 - Demás roles: solo su sede.
 El encabezado `X-Sede-Id` (selector de sede del menú) reduce el alcance a una de las sedes permitidas.
 """
@@ -15,7 +16,7 @@ from sqlalchemy import select, true
 from sqlalchemy.orm import Session, object_session
 
 from .database import get_db
-from .models import ROL_ADMIN, ROL_SUPERADMIN, ZONA_HORARIA_DEFECTO, AdminSede, Sede, Usuario
+from .models import ROL_GERENCIA_GH, ROL_SUPERADMIN, ZONA_HORARIA_DEFECTO, AdminSede, Sede, Usuario, es_admin
 from .security import get_current_user
 
 SEDE_INICIAL = "O-tek México"
@@ -45,7 +46,28 @@ def sede_principal(db: Session) -> Sede:
         s = Sede(nombre=SEDE_INICIAL, ubicacion_microsoft=SEDE_INICIAL, zona_horaria=ZONA_HORARIA_DEFECTO, activa=True)
         db.add(s)
         db.commit()
+        crear_jornadas_base(db, s)
     return s
+
+
+def crear_jornadas_base(db: Session, sede: Sede):
+    """Jornadas iniciales de una sede nueva (se pueden editar después)."""
+    from .migraciones import JORNADAS_BASE
+    from .models import TipoJornada
+    if db.scalar(select(TipoJornada.id).where(TipoJornada.sede_id == sede.id).limit(1)) is None:
+        for nombre, horas, bloque, ciclo in JORNADAS_BASE:
+            db.add(TipoJornada(sede_id=sede.id, nombre=nombre, horas_dia=horas, bloque_minimo=bloque, usa_ciclo_grupo=ciclo))
+        db.commit()
+
+
+def jornada_por_defecto(db: Session, sede_id: int | None, rol: str) -> int | None:
+    """Jornada inicial de un empleado: la de su sede con ciclo de grupo si es de planta; si no, la de lunes a viernes."""
+    from .models import TipoJornada
+    if not sede_id:
+        return None
+    return db.scalar(select(TipoJornada.id).where(
+        TipoJornada.sede_id == sede_id, TipoJornada.activo.is_(True), TipoJornada.usa_ciclo_grupo.is_(rol == "planta"))
+        .order_by(TipoJornada.id).limit(1))
 
 
 def sedes_administradas(db: Session, user: Usuario) -> set[int] | None:
@@ -53,7 +75,7 @@ def sedes_administradas(db: Session, user: Usuario) -> set[int] | None:
     if user.rol == ROL_SUPERADMIN:
         return None
     ids = {user.sede_id} if user.sede_id else set()
-    if user.rol == ROL_ADMIN:
+    if user.rol == ROL_GERENCIA_GH:  # GH solo su sede; Gerencia GH también las que le asignen
         ids |= set(db.scalars(select(AdminSede.sede_id).where(AdminSede.usuario_id == user.id)))
     return ids
 
@@ -62,10 +84,12 @@ def admin_permite(user: Usuario, sede_id: int | None) -> bool:
     """¿Este administrador puede gestionar a la gente de esa sede?"""
     if user.rol == ROL_SUPERADMIN:
         return True
-    if user.rol != ROL_ADMIN:
+    if not es_admin(user):
         return False
     if sede_id == user.sede_id:
         return True
+    if user.rol != ROL_GERENCIA_GH:
+        return False
     db = object_session(user)
     return db is not None and db.get(AdminSede, (user.id, sede_id)) is not None
 
@@ -88,7 +112,7 @@ class Alcance:
 
 
 def alcance(request: Request, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)) -> Alcance:
-    if user.rol in (ROL_ADMIN, ROL_SUPERADMIN):
+    if es_admin(user):
         ids = sedes_administradas(db, user)
     else:
         ids = {user.sede_id} if user.sede_id else set()
@@ -104,7 +128,7 @@ def alcance(request: Request, db: Session = Depends(get_db), user: Usuario = Dep
 
 
 def sedes_visibles(db: Session, user: Usuario) -> list[Sede]:
-    ids = sedes_administradas(db, user) if user.rol in (ROL_ADMIN, ROL_SUPERADMIN) else {user.sede_id}
+    ids = sedes_administradas(db, user) if es_admin(user) else {user.sede_id}
     q = select(Sede).order_by(Sede.nombre)
     if ids is not None:
         q = q.where(Sede.id.in_(ids or {-1}))

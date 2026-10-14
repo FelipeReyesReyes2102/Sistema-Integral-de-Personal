@@ -62,6 +62,13 @@ export default function MisVacaciones({ usuarioId }) {
   useEffect(() => {
     if (usuarioId) api(`/usuarios/${usuarioId}`).then(setEmpleado).catch((e) => setError(e.message))
   }, [usuarioId])
+  // Política de la sede del empleado: permisos y módulos habilitados
+  const [politica, setPolitica] = useState(null)
+  useEffect(() => {
+    api('/politica', { query: { usuario_id: usuarioId || user.id } }).then(setPolitica).catch(() => setPolitica(null))
+  }, [usuarioId])
+  const tiposPermiso = politica?.tipos_permiso || null
+  const permisoHabilitado = (t) => !tiposPermiso || tiposPermiso.includes(t)
 
   const cargar = useCallback(async () => {
     try {
@@ -332,6 +339,9 @@ export default function MisVacaciones({ usuarioId }) {
 
       <div className="card ps-registros">
         <PanelRegistros anio={anio} registros={registros} franjas={franjasDelAnio} foco={foco}
+          visible={(k) => (['llegada_tarde', 'salida_temprana', 'salida_intermedia', 'home_office'].includes(k) ? permisoHabilitado(k)
+            : k === 'consulta' ? politica?.modulo_consultas !== false : k === 'cumpleanos' ? politica?.modulo_cumpleanos !== false : true)
+            || (registros[k]?.dias || 0) > 0}
           ocultos={ocultos} onPeriodo={alternarPeriodo}
           onTodosPeriodos={(ver) => setOcultos(ver ? [] : franjasDelAnio.map((x) => x.nombre))}
           aniversario={aniversario} miCumple={(calendario?.cumpleanos || []).find((c) => c.propio)}
@@ -355,6 +365,8 @@ export default function MisVacaciones({ usuarioId }) {
           <BarraSeleccion seleccion={seleccion} calc={selCalc} onLimpiar={() => setSeleccion(null)}
             periodos={periodosConSaldo} periodoId={periodoSolicitud} onPeriodo={setPeriodoSolicitud}
             hayGeneral={hayGeneral} diasGeneral={diasGeneral} maxDias={maxDias} fechaMax={fechaMax}
+            homeOffice={permisoHabilitado('home_office')}
+            permisos={['llegada_tarde', 'salida_temprana', 'salida_intermedia'].some(permisoHabilitado)}
             onVacaciones={() => setModal({ tipo: 'vac', inicial: { fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin || seleccion.inicio, periodo_id: esGeneral ? null : periodoSolicitud } })}
             onPermiso={() => setModal({ tipo: 'perm', fechaInicial: seleccion.inicio })}
             onHomeOffice={() => setModal({ tipo: 'perm', tipoPermiso: 'home_office', fechaInicial: seleccion.inicio, fechaFinInicial: seleccion.fin || seleccion.inicio })} />
@@ -381,6 +393,7 @@ export default function MisVacaciones({ usuarioId }) {
       )}
       {modal?.tipo === 'perm' && (
         <PermisoModal usuario={empleado} tipoInicial={modal.tipoPermiso} permiso={modal.item} fechaInicial={modal.fechaInicial}
+          tiposHabilitados={tiposPermiso}
           fechaFinInicial={modal.fechaFinInicial}
           onClose={() => setModal(null)} onSaved={refrescar} />
       )}
@@ -402,7 +415,8 @@ export default function MisVacaciones({ usuarioId }) {
 }
 
 /** Registros del año por categoría (clic: abre sus solicitudes) y leyenda de periodos y estados del calendario. */
-function PanelRegistros({ anio, registros, franjas, foco, onFoco, onAbrir, ocultos, onPeriodo, onTodosPeriodos, aniversario, miCumple }) {
+function PanelRegistros({ anio, registros, franjas, foco, onFoco, onAbrir, ocultos, onPeriodo, onTodosPeriodos, aniversario, miCumple,
+  visible = () => true }) {
   const algunoVisible = franjas.some((x) => !ocultos.includes(x.nombre))
   const texto = (k, r) => {
     if (k === 'vacaciones' || k === 'home_office') return `${r.dias} día(s)${r.pendientes ? ` · ${r.pendientes} pend.` : ''}`
@@ -419,7 +433,7 @@ function PanelRegistros({ anio, registros, franjas, foco, onFoco, onAbrir, ocult
         {foco && <button type="button" className="btn btn-sm" onClick={() => onFoco(foco)}>Quitar resaltado</button>}
         <button type="button" className="btn btn-sm" onClick={() => onAbrir('todas')}>Ver todas</button>
       </div>
-      {Object.entries(CATEGORIAS).filter(([k]) => k !== 'consulta_medica' && k !== 'aniversario').map(([k, c]) => (
+      {Object.entries(CATEGORIAS).filter(([k]) => k !== 'consulta_medica' && k !== 'aniversario' && visible(k)).map(([k, c]) => (
         <button key={k} type="button" className={`registro ${foco === k ? 'activo' : ''}`}
           style={foco === k ? { borderColor: c.color, background: `${c.color}14` } : undefined}
           onClick={(e) => { if (e.detail <= 1) onFoco(k) }} onDoubleClick={() => onAbrir(k)}>
@@ -580,6 +594,7 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
 }
 
 function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, hayGeneral, diasGeneral, maxDias, fechaMax, onLimpiar,
+  homeOffice = true, permisos = true,
   onVacaciones, onPermiso, onHomeOffice }) {
   // Periodo del que se tomarán los días (General: primero el más antiguo)
   const selectorPeriodo = periodos.length > 0 && (
@@ -638,8 +653,8 @@ function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, hayGe
         title={sinSaldo ? 'No tienes días de vacaciones disponibles' : calc?.errores[0]}>
         <TreePalm size={14} /> Solicitar vacaciones
       </button>
-      <button className="btn btn-sm" onClick={onHomeOffice} disabled={!seleccion.fin}><Laptop size={14} /> Home office</button>
-      {unDia && <button className="btn btn-sm" onClick={onPermiso}><Clock size={14} /> Solicitar permiso</button>}
+      {homeOffice && <button className="btn btn-sm" onClick={onHomeOffice} disabled={!seleccion.fin}><Laptop size={14} /> Home office</button>}
+      {unDia && permisos && <button className="btn btn-sm" onClick={onPermiso}><Clock size={14} /> Solicitar permiso</button>}
       <button className="icon-btn plain" title="Cancelar selección (Esc)" onClick={onLimpiar}><X size={16} /></button>
       <kbd className="tecla" title="Presiona Esc para cancelar la selección">Esc</kbd>
     </div>

@@ -10,7 +10,7 @@ from ..database import get_db
 from ..models import Sede, Usuario
 from ..schemas import SedeIn, SedeOut
 from ..security import auditar, get_current_user, require_superadmin
-from ..sedes import sede_por_ubicacion, sedes_visibles, zona
+from ..sedes import crear_jornadas_base, sede_por_ubicacion, sedes_visibles, zona
 
 router = APIRouter(prefix="/api/sedes", tags=["sedes"])
 
@@ -47,6 +47,7 @@ def crear(data: SedeIn, request: Request, db: Session = Depends(get_db), su: Usu
     s = Sede(**_validar(data).model_dump())
     db.add(s)
     _commit(db)
+    crear_jornadas_base(db, s)
     auditar(db, "sede_creada", actor_id=su.id, detalle=s.nombre, request=request)
     db.commit()
     return _out(db, s)
@@ -83,8 +84,10 @@ def importar_microsoft(request: Request, db: Session = Depends(get_db), su: Usua
     creadas = []
     for ubic in sorted(ubicaciones):
         if sede_por_ubicacion(db, ubic) is None:
-            db.add(Sede(nombre=ubic[:120], ubicacion_microsoft=ubic[:200]))
+            nueva = Sede(nombre=ubic[:120], ubicacion_microsoft=ubic[:200])
+            db.add(nueva)
             _commit(db)
+            crear_jornadas_base(db, nueva)
             creadas.append(ubic)
     if creadas:
         auditar(db, "sedes_importadas", actor_id=su.id, detalle=", ".join(creadas)[:500], request=request)

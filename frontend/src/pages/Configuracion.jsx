@@ -5,6 +5,7 @@ import { num } from '../utils'
 import ConfigMicrosoft from '../components/ConfigMicrosoft'
 import ConfigCorreo from '../components/ConfigCorreo'
 import ConfigSedes from '../components/ConfigSedes'
+import ConfigPolitica from '../components/ConfigPolitica'
 import { useAuth } from '../auth'
 import { esAdmin, esSuperAdmin } from '../utils'
 import SedeActual from '../components/SedeActual'
@@ -87,19 +88,7 @@ export default function Configuracion() {
         </div>
         {msg && <div className={`alerta ${msg.ok ? 'ok' : 'error'}`}>{msg.t}</div>}
       </div>
-      <div className="card">
-        <h3 style={{ marginBottom: 10 }}>Reglas vigentes</h3>
-        <ul style={{ lineHeight: 1.7, paddingLeft: 18, margin: 0 }}>
-          <li><b>Oficinas y administradores:</b> 1 día = 8 h. Año 1 = 12 días.</li>
-          <li><b>Planta:</b> se otorgan las mismas horas (días × 8 h) y cada día de planta consume 12 h. Año 1 = 12 × 8 = 96 h ÷ 12 = <b>8 días</b>.</li>
-          <li>Los días laborales de planta se calculan con el ciclo del grupo asignado (p. ej. 4×4). Los días de descanso y festivos no se descuentan.</li>
-          <li><b>Bloque obligatorio:</b> en cada periodo se deben tomar al menos una vez <b>6 días seguidos</b> (oficinas) o <b>4</b> (planta).
-            Se permiten solicitudes más cortas, pero mientras no se haya solicitado ese bloque no se pueden pedir días sueltos que dejen
-            el saldo por debajo de él. Ej.: con 8 días y sin bloque, 3 días no se permiten (quedarían 5); 2 sí.</li>
-          <li>Estados: Borrador → Solicitado → Validado / Rechazado. Borrador y Solicitado ya apartan saldo.</li>
-          <li>Permisos (llegada tarde, salida temprana, salida intermedia y consulta con el médico de planta) se registran en horas y no descuentan vacaciones.</li>
-        </ul>
-      </div>
+      <ConfigPolitica />
     </div>
     {esSuperAdmin(user) && <ConfigSedes />}
     <ConfigCorreo />

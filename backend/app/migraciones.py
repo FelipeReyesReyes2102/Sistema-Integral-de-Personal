@@ -4,7 +4,7 @@ las columnas que el modelo ya no exige.
 Evita perder datos cuando se agregan o relajan campos del modelo. Para cambios más complejos
 (renombrar o borrar columnas) conviene adoptar Alembic.
 """
-from sqlalchemy import Table, inspect, text
+from sqlalchemy import String, Table, Text, inspect, text
 from sqlalchemy.engine import Connection, Engine
 
 from .database import Base
@@ -26,6 +26,8 @@ def actualizar_esquema(engine: Engine) -> list[str]:
                     default = col.server_default.arg
                     if not isinstance(default, str):
                         default = default.compile(dialect=engine.dialect)
+                    elif isinstance(col.type, (String, Text)):  # los textos van entre comillas
+                        default = "'" + default.replace("'", "''") + "'"
                     ddl += f" DEFAULT {default}"
                 conn.execute(text(ddl))
                 agregadas.append(f"{tabla.name}.{col.name}")
@@ -47,6 +49,7 @@ def actualizar_esquema(engine: Engine) -> list[str]:
                 indice.create(conn, checkfirst=True)
 
         _migrar_datos(conn, agregadas, insp)
+        _ajustes_idempotentes(conn)
     return agregadas
 
 
@@ -117,3 +120,28 @@ def _migrar_sedes(conn: Connection, insp):
             if ix.get("unique") and ix["column_names"] == ["nombre"]:
                 conn.execute(text(f'DROP INDEX IF EXISTS "{ix["name"]}"'))
         conn.execute(text(f"ALTER TABLE {tabla.name} ADD CONSTRAINT uq_{tabla.name}_sede_nombre UNIQUE (sede_id, nombre)"))
+
+
+def _ajustes_idempotentes(conn: Connection):
+    """Ajustes que se pueden repetir sin efecto: jornadas base por sede y roles GH."""
+    from .models import TipoJornada
+
+    jornadas = TipoJornada.__table__
+    for (sede_id,) in conn.execute(text("SELECT id FROM sedes")).all():
+        existentes = conn.execute(text("SELECT count(*) FROM tipos_jornada WHERE sede_id = :s"), {"s": sede_id}).scalar()
+        if not existentes:
+            for nombre, horas, bloque, ciclo in JORNADAS_BASE:
+                conn.execute(jornadas.insert().values(sede_id=sede_id, nombre=nombre, horas_dia=horas, bloque_minimo=bloque,
+                                                      usa_ciclo_grupo=ciclo, activo=True))
+    # Empleados sin jornada: la de su sede según su tipo (planta → jornada con ciclo de grupo)
+    conn.execute(text(
+        "UPDATE usuarios SET tipo_jornada_id = (SELECT j.id FROM tipos_jornada j WHERE j.sede_id = usuarios.sede_id "
+        "AND j.usa_ciclo_grupo = (usuarios.rol = 'planta') ORDER BY j.id LIMIT 1) "
+        "WHERE tipo_jornada_id IS NULL AND sede_id IS NOT NULL"))
+    # Un administrador con sedes adicionales pasa a Gerencia GH (GH solo administra su sede)
+    conn.execute(text("UPDATE usuarios SET rol = 'gerencia_gh' WHERE rol = 'admin' "
+                      "AND id IN (SELECT usuario_id FROM admin_sedes)"))
+
+
+# Jornadas iniciales de cada sede: (nombre, horas por día, bloque mínimo de días seguidos, ¿ciclo del grupo?)
+JORNADAS_BASE = [("Oficina", 8, 6, False), ("Planta 12 h", 12, 4, True)]
