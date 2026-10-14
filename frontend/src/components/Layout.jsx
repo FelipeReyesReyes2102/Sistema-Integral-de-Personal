@@ -9,6 +9,7 @@ import { useAuth } from '../auth'
 import { ROLES, esAdmin as esAdminFn } from '../utils'
 import Avatar from './Avatar'
 import CambiarPassword from './CambiarPassword'
+import PerfilUsuario from './PerfilUsuario'
 
 const TITULOS = {
   '/': 'Mis vacaciones y ausencias',
@@ -37,6 +38,7 @@ export default function Layout() {
   const [pendientes, setPendientes] = useState({ total: 0, todas: 0 })
   const [menu, setMenu] = useState(false)
   const [pwd, setPwd] = useState(false)
+  const [perfil, setPerfil] = useState(false)
   const [colapsado, setColapsado] = useState(leerColapsado)
   const esAdmin = esAdminFn(user)
   // Sede elegida en el selector; si ya no es una de sus sedes se descarta
@@ -119,14 +121,17 @@ export default function Layout() {
           )}
         </nav>
         <div className="usuario">
-          <div className="fila" style={{ gap: 10, flexWrap: 'nowrap' }} title={colapsado ? `${user.nombre} · ${ROLES[user.rol]}` : undefined}>
-            <Avatar usuario={user} tam={36} />
-            <div className="nombre">{user.nombre}</div>
-          </div>
-          <div className="muted usuario-detalle">
-            {ROLES[user.rol]}{user.es_jefe && !esAdmin ? ' · Jefe' : ''}
-            {user.jefe_nombre && <div>Reporta a: {user.jefe_nombre}</div>}
-          </div>
+          <button type="button" className="usuario-boton" onClick={() => setPerfil(true)}
+            title={colapsado ? `${user.nombre} · ${ROLES[user.rol]} — ver mi información` : 'Ver mi información'}>
+            <div className="fila" style={{ gap: 10, flexWrap: 'nowrap' }}>
+              <Avatar usuario={user} tam={36} />
+              <div className="nombre">{user.nombre}</div>
+            </div>
+            <div className="muted usuario-detalle">
+              {ROLES[user.rol]}{user.es_jefe && !esAdmin ? ' · Jefe' : ''}
+              {user.jefe_nombre && <div>Reporta a: {user.jefe_nombre}</div>}
+            </div>
+          </button>
           <div className="fila usuario-acciones" style={{ marginTop: 8 }}>
             {user.puede_usar_password && user.auth_method !== 'microsoft' && (
               <button className="btn btn-sm" onClick={() => setPwd(true)} title="Cambiar contraseña">
@@ -163,6 +168,7 @@ export default function Layout() {
         </button>
       </nav>
       {pwd && <CambiarPassword onClose={() => setPwd(false)} />}
+      {perfil && <PerfilUsuario onClose={() => setPerfil(false)} onPassword={() => setPwd(true)} />}
     </div>
   )
 }

@@ -693,3 +693,21 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 /* Logo SIP (versión con letras más grandes) */
 .sidebar .brand .logo-chip .logo-completo { height: 78px; }
 .login-logo { height: 86px; }
+
+/* ---------- Mi información (clic en el usuario del menú) ---------- */
+.usuario-boton { display: block; width: 100%; background: none; border: none; padding: 6px; margin: -6px -6px 0; width: calc(100% + 12px);
+  border-radius: 8px; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.usuario-boton:hover { background: var(--navy-2); }
+.app.menu-colapsado .usuario-boton { display: flex; justify-content: center; margin: 0; width: auto; }
+.perfil-cab { display: flex; gap: 16px; align-items: center; margin-bottom: 14px; }
+.perfil-nombre { font-family: Poppins, Inter, sans-serif; font-size: 18px; font-weight: 600; color: var(--navy); }
+.perfil-saldo { background: var(--primary-light); color: var(--navy); border-radius: 10px; padding: 10px 14px; margin-bottom: 6px; }
+.perfil-saldo b { font-family: Poppins, Inter, sans-serif; font-size: 20px; margin-right: 4px; }
+.perfil-seccion { font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--muted);
+  margin: 14px 0 4px; }
+.perfil-dato { display: grid; grid-template-columns: 18px 150px 1fr; gap: 8px; align-items: start; padding: 5px 0;
+  border-bottom: 1px dashed #eef0f4; font-size: 13px; }
+.perfil-dato svg { color: var(--primary); margin-top: 1px; }
+.perfil-et { color: var(--muted); }
+.perfil-val { color: var(--text); word-break: break-word; }
+@media (max-width: 520px) { .perfil-dato { grid-template-columns: 18px 1fr; } .perfil-val { grid-column: 2; } }
