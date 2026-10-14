@@ -690,3 +690,6 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .login-avatar-sip { background: #fff; }
 .login-avatar-sip img { width: 46px; height: 46px; object-fit: contain; }
 .login-logo { height: 72px; }
+/* Logo SIP (versión con letras más grandes) */
+.sidebar .brand .logo-chip .logo-completo { height: 78px; }
+.login-logo { height: 86px; }
