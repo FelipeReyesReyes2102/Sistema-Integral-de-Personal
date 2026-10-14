@@ -678,3 +678,7 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .pol-grid .campo .checkbox { font-size: 13px; color: var(--text); }
 .reglas-vigentes { line-height: 1.7; padding-left: 18px; margin: 0; font-size: 13px; }
 @media (max-width: 760px) { .pol-grid { grid-template-columns: 1fr; } }
+
+/* Login: separador entre usuario/contraseña y Microsoft */
+.login-o { display: flex; align-items: center; gap: 10px; margin: 18px 0 14px; color: #8d98ad; font-size: 12px; }
+.login-o::before, .login-o::after { content: ''; flex: 1; height: 1px; background: rgba(255, 255, 255, .14); }
