@@ -33,7 +33,7 @@ export default function CambioObligatorio() {
 
   return (
     <div className="login-page">
-      <img src="/logo-otek.png" alt="O-tek" className="login-logo" />
+      <img src="/logo-sip.png" alt="SIP · Sistema Integral de Personal" className="login-logo" />
       <svg className="login-ola" viewBox="0 0 1440 600" preserveAspectRatio="none" aria-hidden="true">
         <path d="M0,0 C360,140 720,190 1000,160 C1200,140 1330,90 1440,105 L1440,600 L0,600 Z" />
       </svg>

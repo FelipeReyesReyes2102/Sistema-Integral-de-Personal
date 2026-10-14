@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { UserRound } from 'lucide-react'
 import { api } from '../api'
 import { useAuth } from '../auth'
 
@@ -112,13 +111,13 @@ export default function Login() {
 
   return (
     <div className="login-page">
-      <img src="/logo-otek.png" alt="O-tek" className="login-logo" />
+      <img src="/logo-sip.png" alt="SIP · Sistema Integral de Personal" className="login-logo" />
       <svg className="login-ola" viewBox="0 0 1440 600" preserveAspectRatio="none" aria-hidden="true">
         <path d="M0,0 C360,140 720,190 1000,160 C1200,140 1330,90 1440,105 L1440,600 L0,600 Z" />
       </svg>
 
       <div className="login-card">
-        <div className="login-avatar"><UserRound size={30} /></div>
+        <div className="login-avatar login-avatar-sip"><img src="/icono-sip.png" alt="" /></div>
         <h1>{config.app_nombre}</h1>
         <p className="login-sub">{config.app_descripcion}</p>
 

@@ -75,15 +75,13 @@ export default function Layout() {
       <aside className={`sidebar ${menu ? 'abierto' : ''}`}>
         <div className="brand">
           <div className="logo-chip">
-            <img className="logo-completo" src="/logo-otek.png" alt="O-tek" />
-            <img className="logo-mini" src="/favicon.png" alt="O-tek" />
+            <img className="logo-completo" src="/logo-sip.png" alt="SIP · Sistema Integral de Personal" />
+            <img className="logo-mini" src="/icono-sip.png" alt="SIP" />
           </div>
           <button className="menu-toggle oculto-movil" onClick={() => setColapsado(!colapsado)}
             title={colapsado ? 'Expandir menú' : 'Encoger menú'} aria-label={colapsado ? 'Expandir menú' : 'Encoger menú'}>
             {colapsado ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
           </button>
-          <div className="brand-nombre">SIP-O</div>
-          <div className="brand-desc">Sistema Integral de Personal</div>
           {(user.sedes || []).length > 1 ? (
             <select className="sede-selector nav-texto" value={sedeElegida} onChange={(e) => elegirSede(e.target.value)}
               title="Sede que estás consultando">

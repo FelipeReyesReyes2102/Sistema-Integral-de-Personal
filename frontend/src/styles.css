@@ -682,3 +682,11 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 /* Login: separador entre usuario/contraseña y Microsoft */
 .login-o { display: flex; align-items: center; gap: 10px; margin: 18px 0 14px; color: #8d98ad; font-size: 12px; }
 .login-o::before, .login-o::after { content: ''; flex: 1; height: 1px; background: rgba(255, 255, 255, .14); }
+
+/* Logo SIP */
+.sidebar .brand .logo-chip { padding: 8px 10px; }
+.sidebar .brand .logo-chip .logo-completo { height: 52px; }
+.app.menu-colapsado .sidebar .brand .logo-chip .logo-mini { height: 30px; }
+.login-avatar-sip { background: #fff; }
+.login-avatar-sip img { width: 46px; height: 46px; object-fit: contain; }
+.login-logo { height: 72px; }
