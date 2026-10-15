@@ -44,7 +44,20 @@ def listar(q: str | None = None, rol: str | None = None, grupo_id: int | None = 
         stmt = stmt.where(Usuario.grupo_id == grupo_id)
     if activos is not None:
         stmt = stmt.where(Usuario.activo == activos)
-    return [usuario_out(u) for u in db.scalars(stmt)]
+    return [_con_saldo(db, u) for u in db.scalars(stmt)]
+
+
+def _con_saldo(db: Session, u: Usuario) -> UsuarioOut:
+    """Datos del empleado con sus días de vacaciones disponibles (periodos vigentes)."""
+    out = usuario_out(u)
+    vigentes = [s for s in (saldo_periodo(db, p) for p in sincronizar_periodos(db, u)) if s.vigente]
+    out.saldo_dias = round(sum(s.dias_disponible for s in vigentes), 2)
+    out.saldo_detalle = " · ".join(f"{s.nombre}: {s.dias_disponible:g} d" for s in reversed(vigentes)) or None
+    # Días del periodo anterior que todavía no se usan: se pierden al vencer
+    anteriores = [s for s in vigentes[:-1] if s.dias_disponible > 0]
+    if anteriores:
+        out.dias_por_vencer, out.fecha_por_vencer = anteriores[0].dias_disponible, anteriores[0].fecha_vencimiento
+    return out
 
 
 @router.get("/usuarios/microsoft/buscar", response_model=EmpleadoMicrosoftOut)

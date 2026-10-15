@@ -76,7 +76,7 @@ export default function Empleados() {
       <div className="tabla-wrap">
         <table className="tabla">
           <thead>
-            <tr><th>No. nómina</th><th>Nombre</th>{variasSedes && <th>Sede</th>}<th>Tipo</th><th>Jefe directo</th><th>Ingreso</th><th>Antigüedad</th><th>Grupo</th><th>Turno</th><th>Estado</th><th /></tr>
+            <tr><th>No. nómina</th><th>Nombre</th>{variasSedes && <th>Sede</th>}<th>Tipo</th><th>Jefe directo</th><th>Ingreso</th><th>Antigüedad</th><th>Días disponibles</th><th>Grupo</th><th>Turno</th><th>Estado</th><th /></tr>
           </thead>
           <tbody>
             {lista.map((u) => (
@@ -105,6 +105,12 @@ export default function Empleados() {
                 <td>{u.jefe_nombre || <span className="muted">Sin jefe</span>}</td>
                 <td>{fmtFecha(u.fecha_ingreso, false)}</td>
                 <td>{u.antiguedad_anios} año(s)</td>
+                <td title={u.saldo_detalle || 'Sin periodos vigentes'}>
+                  <b className="saldo-num">{num(u.saldo_dias ?? 0)}</b> <span className="muted">d</span>
+                  {u.dias_por_vencer > 0 && (
+                    <div className="saldo-vence">{num(u.dias_por_vencer)} vencen {fmtFecha(u.fecha_por_vencer, false)}</div>
+                  )}
+                </td>
                 <td>{u.grupo_nombre || '—'}</td>
                 <td>{u.turno_nombre || '—'}</td>
                 <td>

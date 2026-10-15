@@ -711,3 +711,7 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .perfil-et { color: var(--muted); }
 .perfil-val { color: var(--text); word-break: break-word; }
 @media (max-width: 520px) { .perfil-dato { grid-template-columns: 18px 1fr; } .perfil-val { grid-column: 2; } }
+
+/* Días disponibles en la lista de empleados */
+.saldo-num { font-size: 15px; color: var(--navy); }
+.saldo-vence { font-size: 11px; color: #8a5300; background: #fff4e5; border-radius: 6px; padding: 1px 6px; margin-top: 2px; display: inline-block; }

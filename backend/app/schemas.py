@@ -111,6 +111,11 @@ class UsuarioOut(UsuarioBase, ORM):
     sede_nombre: str | None = None
     sedes_admin: list[int] = []
     tipo_jornada_nombre: str | None = None
+    # Saldo de vacaciones (solo en la lista de empleados)
+    saldo_dias: float | None = None
+    saldo_detalle: str | None = None
+    dias_por_vencer: float | None = None
+    fecha_por_vencer: date | None = None
     turno_nombre: str | None = None
     grupo_nombre: str | None = None
     jefe_nombre: str | None = None
