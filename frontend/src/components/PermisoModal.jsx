@@ -44,10 +44,15 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
 
   useEffect(() => {
     api('/departamentos').then(setDepartamentos).catch(() => {})
-    if (usuario?.turno_id) {
-      api('/turnos').then((ts) => setTurno(ts.find((t) => t.id === usuario.turno_id) || null)).catch(() => {})
-    }
   }, [usuario?.id])
+
+  // Horario del turno en la fecha del permiso (horario por día y horarios especiales como Short Friday)
+  useEffect(() => {
+    if (!form.fecha) return
+    api('/turnos/horario', { query: { fecha: form.fecha, ...(usuario?.id ? { usuario_id: usuario.id } : {}) } })
+      .then((h) => setTurno(h.turno ? { hora_entrada: h.entrada, hora_salida: h.salida, especial: h.especial } : null))
+      .catch(() => setTurno(null))
+  }, [usuario?.id, form.fecha])
 
   // Prellenar con el horario del turno según el tipo
   useEffect(() => {
@@ -119,7 +124,7 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
         </Campo>
       ) : (
         <Campo label="Horario" requerido
-          ayuda={turno ? `Tu turno: ${hhmm(turno.hora_entrada)} - ${hhmm(turno.hora_salida)}` : null}>
+          ayuda={turno ? `Horario ese día: ${hhmm(turno.hora_entrada)} - ${hhmm(turno.hora_salida)}${turno.especial ? ` (${turno.especial})` : ''}` : null}>
           <div className="fo-horas">
             <input type="time" value={form.hora_inicio} onChange={set('hora_inicio')} title={etiquetas[0]} aria-label={etiquetas[0]} />
             <span>a</span>

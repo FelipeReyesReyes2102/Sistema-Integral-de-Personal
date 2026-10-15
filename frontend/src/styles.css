@@ -715,3 +715,22 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 /* Días disponibles en la lista de empleados */
 .saldo-num { font-size: 15px; color: var(--navy); }
 .saldo-vence { font-size: 11px; color: #8a5300; background: #fff4e5; border-radius: 6px; padding: 1px 6px; margin-top: 2px; display: inline-block; }
+
+/* ---------- Turnos: horario por día y especiales ---------- */
+.turno-sec { border-top: 1px solid var(--border); margin-top: 14px; padding-top: 12px; }
+.turno-sec > .fila { gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.turno-dias { display: grid; gap: 4px; }
+.turno-dia { display: grid; grid-template-columns: 140px 1fr; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 8px; font-size: 13px; }
+.turno-dia.propio { background: var(--primary-soft, rgba(37, 99, 235, .08)); }
+.turno-dia input[type=time] { width: 110px; }
+.turno-especial { border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 8px; }
+.te-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 12px; }
+.dia-chip { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); background: var(--card, #fff); color: var(--text); cursor: pointer; font-weight: 600; font-size: 12px; }
+.dia-chip.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+.turno-esp { font-size: 12px; line-height: 1.5; }
+.semana-horario { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.semana-horario > div { display: flex; flex-direction: column; align-items: center; padding: 4px 8px; border: 1px solid var(--border); border-radius: 8px; font-size: 11px; min-width: 74px; }
+.semana-horario > div.hoy { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; }
+.semana-horario > div.especial { background: #fff4e0; border-color: #f0b44c; }
+.semana-horario small { color: #b26a00; font-weight: 600; }
+@media (max-width: 640px) { .te-grid { grid-template-columns: 1fr 1fr; } .turno-dia { grid-template-columns: 1fr; } }

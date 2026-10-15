@@ -197,6 +197,15 @@ def _plantilla(titulo: str, color: str, filas: list[tuple[str, str]], nota: str)
 </table></td></tr></table></body></html>"""
 
 
+def _turno_txt(u, fecha) -> str:
+    from .horarios import horario_de
+    h = horario_de(u.turno, fecha)
+    if not h:
+        return ""
+    extra = f", {h['especial']}" if h["especial"] else ""
+    return f"{u.turno.nombre} ({h['entrada']:%H:%M} a {h['salida']:%H:%M}{extra})"
+
+
 def mensaje_permiso(p: Permiso, evento: str) -> tuple[str, str, str]:
     u = p.usuario
     tipo = NOMBRES_TIPO.get(p.tipo, p.tipo)
@@ -211,7 +220,7 @@ def mensaje_permiso(p: Permiso, evento: str) -> tuple[str, str, str]:
     asunto = f"[Caseta] {'Cancelado' if cancelado else 'Autorizado'}: {tipo} · {u.nombre} · {cuando}"
     filas = [
         ("Empleado", u.nombre), ("No. de nómina", u.numero_empleado), ("Departamento", p.departamento or u.departamento or ""),
-        ("Puesto", u.puesto or ""), ("Turno", u.turno.nombre if u.turno else ""), ("Tipo de permiso", tipo),
+        ("Puesto", u.puesto or ""), ("Turno", _turno_txt(u, p.fecha)), ("Tipo de permiso", tipo),
         ("Fecha", cuando), ("Horario", horario),
         ("Autorizó", p.revisado_por.nombre if p.revisado_por else ""),
     ]

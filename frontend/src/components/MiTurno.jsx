@@ -3,7 +3,24 @@ import { Clock, RefreshCw } from 'lucide-react'
 import { api } from '../api'
 import { fmtFecha } from '../utils'
 
-const horario = (t) => (t ? `${t.hora_entrada} - ${t.hora_salida}` : '')
+const horario = (t) => (t ? t.resumen || `${t.hora_entrada} - ${t.hora_salida}` : '')
+
+/** Horario de cada día de esta semana; marca el día de hoy y los horarios especiales (p. ej. Short Friday). */
+export function SemanaHorario({ dias }) {
+  if (!dias?.length) return null
+  const hoy = new Date().toLocaleDateString('en-CA')
+  return (
+    <div className="semana-horario">
+      {dias.filter((d, i) => i < 5 || d.especial).map((d) => (
+        <div key={d.fecha} className={`${d.fecha === hoy ? 'hoy' : ''} ${d.especial ? 'especial' : ''}`} title={d.especial || ''}>
+          <span>{d.dia}</span>
+          <b>{d.entrada}–{d.salida}</b>
+          {d.especial && <small>{d.especial}</small>}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 /** Tarjeta "Mi turno": turno actual, de la próxima semana y siguientes (con rotación). */
 export default function MiTurno({ usuarioId, incrustado = false }) {
@@ -19,7 +36,8 @@ export default function MiTurno({ usuarioId, incrustado = false }) {
   if (incrustado) {
     return (
       <div className="pf-turno">
-        <div><Clock size={13} /> Turno <b>{d.actual.nombre}</b> <span className="muted">{horario(d.actual)}</span></div>
+        <div><Clock size={13} /> Turno <b>{d.actual.nombre}</b> <span className="muted">
+          {d.hoy ? `hoy ${d.hoy.entrada} - ${d.hoy.salida}${d.hoy.especial ? ` (${d.hoy.especial})` : ''}` : horario(d.actual)}</span></div>
         {d.rotacion_activa && sig && (
           <div className={`ps-bloque ${cambia ? '' : 'ok'}`} title={d.semanas.map((s) => `${fmtFecha(s.desde)}: ${s.turno?.nombre || '—'}`).join(' · ')}>
             <RefreshCw size={11} /> Próx. semana: <b>{sig.nombre}</b>{cambia ? ' (cambio)' : ''}
@@ -42,6 +60,7 @@ export default function MiTurno({ usuarioId, incrustado = false }) {
           <span className="muted">Esta semana</span>
           <div className="mt-turno">{d.actual.nombre}</div>
           <div className="muted">{horario(d.actual)}</div>
+          <SemanaHorario dias={d.semana_actual} />
         </div>
         {d.rotacion_activa && sig && (
           <div className={cambia ? 'mt-cambio' : ''}>

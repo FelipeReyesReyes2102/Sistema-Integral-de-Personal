@@ -111,8 +111,9 @@ def semanas_de(db: Session, usuario: Usuario, desde: date, n: int = 6) -> list[d
 def _turno_dict(t: Turno | None) -> dict | None:
     if not t:
         return None
+    from .horarios import resumen
     return {"id": t.id, "nombre": t.nombre, "hora_entrada": t.hora_entrada.strftime("%H:%M"),
-            "hora_salida": t.hora_salida.strftime("%H:%M"), "horas_jornada": t.horas_jornada}
+            "hora_salida": t.hora_salida.strftime("%H:%M"), "horas_jornada": t.horas_jornada, "resumen": resumen(t)}
 
 
 # ---------------- Aviso semanal por correo ----------------

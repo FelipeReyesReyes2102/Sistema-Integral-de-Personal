@@ -34,6 +34,31 @@ class CambioPassword(BaseModel):
 
 
 # ---------- Turnos / Grupos ----------
+class TurnoDiaIO(ORM):
+    dia: int = Field(ge=0, le=6)  # 0 = lunes ... 6 = domingo
+    hora_entrada: time
+    hora_salida: time
+
+
+class HorarioEspecialIO(ORM):
+    id: int | None = None
+    nombre: str = Field(min_length=2, max_length=80)
+    fecha_inicio: date
+    fecha_fin: date | None = None
+    dias: list[int] = [4]
+    cada_semanas: int = Field(1, ge=1, le=8)
+    hora_entrada: time
+    hora_salida: time
+    activo: bool = True
+
+    @field_validator("dias", mode="before")
+    @classmethod
+    def _dias(cls, v):
+        if isinstance(v, str):
+            return [int(x) for x in v.split(",") if x.strip().isdigit()]
+        return v
+
+
 class TurnoIn(BaseModel):
     nombre: str
     hora_entrada: time
@@ -41,12 +66,15 @@ class TurnoIn(BaseModel):
     horas_jornada: int = Field(12, ge=1, le=24)
     descripcion: str | None = None
     activo: bool = True
+    dias: list[TurnoDiaIO] = []                 # horario distinto por día (opcional)
+    especiales: list[HorarioEspecialIO] = []    # p. ej. Short Friday
 
 
 class TurnoOut(TurnoIn, ORM):
     id: int
     sede_id: int | None = None
     sede_nombre: str | None = None
+    resumen: str | None = None
 
 
 class GrupoIn(BaseModel):

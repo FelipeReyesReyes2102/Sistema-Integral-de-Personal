@@ -72,7 +72,8 @@ export default function PerfilUsuario({ onClose, onPassword }) {
       <Dato icono={CalendarDays} etiqueta="Fecha de ingreso">{user.fecha_ingreso && `${fmtFecha(user.fecha_ingreso, false)} · ${antiguedad}`}</Dato>
       <Dato icono={Briefcase} etiqueta="Tipo de jornada">{user.tipo_jornada_nombre}</Dato>
       <Dato icono={Clock} etiqueta="Turno">
-        {turno?.actual ? `${turno.actual.nombre} (${turno.actual.hora_entrada} - ${turno.actual.hora_salida})` : user.turno_nombre}
+        {turno?.actual ? `${turno.actual.nombre} (${turno.actual.resumen || `${turno.actual.hora_entrada} - ${turno.actual.hora_salida}`})` : user.turno_nombre}
+        {turno?.hoy?.especial && ` · hoy ${turno.hoy.especial}: ${turno.hoy.entrada} - ${turno.hoy.salida}`}
         {turno?.rotacion_activa && turno.siguiente_semana?.turno && ` · próxima semana: ${turno.siguiente_semana.turno.nombre}`}
       </Dato>
       <Dato icono={Users} etiqueta="Grupo">{user.grupo_nombre}</Dato>

@@ -139,10 +139,44 @@ class Turno(Base):
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
 
     sede: Mapped[Sede | None] = relationship()
+    # Horario distinto por día de la semana (si no hay, aplica el horario general)
+    dias: Mapped[list["TurnoDia"]] = relationship(cascade="all, delete-orphan", order_by="TurnoDia.dia")
+    # Horarios especiales por temporada o semanas alternas (p. ej. "Short Friday"); tienen prioridad
+    especiales: Mapped[list["HorarioEspecial"]] = relationship(cascade="all, delete-orphan",
+                                                                order_by="HorarioEspecial.fecha_inicio")
 
     @property
     def sede_nombre(self) -> str | None:
         return self.sede.nombre if self.sede else None
+
+
+class TurnoDia(Base):
+    """Horario de un turno para un día de la semana (0 = lunes ... 6 = domingo)."""
+    __tablename__ = "turnos_dias"
+    __table_args__ = (UniqueConstraint("turno_id", "dia", name="uq_turnos_dias"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    turno_id: Mapped[int] = mapped_column(ForeignKey("turnos.id", ondelete="CASCADE"), index=True)
+    dia: Mapped[int] = mapped_column(Integer)
+    hora_entrada: Mapped[time] = mapped_column(Time)
+    hora_salida: Mapped[time] = mapped_column(Time)
+
+
+class HorarioEspecial(Base):
+    """Horario que reemplaza al normal en ciertos días de un rango de fechas, opcionalmente cada N semanas
+    (p. ej. "Short Friday": viernes de 8:30 a 15:00 cada 2 semanas durante el verano)."""
+    __tablename__ = "horarios_especiales"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    turno_id: Mapped[int] = mapped_column(ForeignKey("turnos.id", ondelete="CASCADE"), index=True)
+    nombre: Mapped[str] = mapped_column(String(80))
+    fecha_inicio: Mapped[date] = mapped_column(Date)
+    fecha_fin: Mapped[date | None] = mapped_column(Date)  # vacío = sin fecha de fin
+    dias: Mapped[str] = mapped_column(String(20), default="4")  # días de la semana: "4" = viernes
+    cada_semanas: Mapped[int] = mapped_column(Integer, default=1)  # 1 = todas las semanas, 2 = una sí y una no
+    hora_entrada: Mapped[time] = mapped_column(Time)
+    hora_salida: Mapped[time] = mapped_column(Time)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 class Grupo(Base):

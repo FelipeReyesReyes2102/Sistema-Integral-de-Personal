@@ -5,7 +5,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import ROL_PLANTA, Festivo, Grupo, ReglaAntiguedad, Sede, Turno, Usuario
+from .. import horarios
+from ..models import ROL_PLANTA, Festivo, Grupo, HorarioEspecial, ReglaAntiguedad, Sede, Turno, TurnoDia, Usuario
 from ..schemas import (
     AsignarMiembros, FestivoIn, FestivoOut, GrupoIn, GrupoOut, ReglaIn, ReglaOut, TurnoIn, TurnoOut,
 )
@@ -27,25 +28,53 @@ def _commit(db: Session, msg: str = "Ya existe un registro con ese nombre"):
 # ---------------- Turnos ----------------
 @router.get("/turnos", response_model=list[TurnoOut])
 def listar_turnos(db: Session = Depends(get_db), alc: Alcance = Depends(alcance)):
-    return db.scalars(select(Turno).where(alc.filtro(Turno.sede_id)).order_by(Turno.nombre)).all()
+    return [_turno_out(t) for t in db.scalars(select(Turno).where(alc.filtro(Turno.sede_id)).order_by(Turno.nombre))]
+
+
+def _turno_out(t: Turno) -> TurnoOut:
+    o = TurnoOut.model_validate(t)
+    o.resumen = horarios.resumen(t)
+    return o
+
+
+def _aplicar_turno(t: Turno, data: TurnoIn):
+    """Datos generales, horario por día y horarios especiales (se reemplazan completos)."""
+    for k, v in data.model_dump(exclude={"dias", "especiales"}).items():
+        setattr(t, k, v)
+    dias = {d.dia: d for d in data.dias}
+    for d in dias.values():
+        if d.hora_entrada == d.hora_salida:
+            raise HTTPException(422, f"El horario del {horarios.DIAS_CORTOS[d.dia]} no puede empezar y terminar a la misma hora.")
+    t.dias = [TurnoDia(dia=d.dia, hora_entrada=d.hora_entrada, hora_salida=d.hora_salida) for d in sorted(dias.values(), key=lambda x: x.dia)]
+    especiales = []
+    for e in data.especiales:
+        if e.fecha_fin and e.fecha_fin < e.fecha_inicio:
+            raise HTTPException(422, f"{e.nombre}: la fecha final no puede ser anterior a la inicial.")
+        if not e.dias:
+            raise HTTPException(422, f"{e.nombre}: elige al menos un día de la semana.")
+        especiales.append(HorarioEspecial(
+            nombre=e.nombre.strip(), fecha_inicio=e.fecha_inicio, fecha_fin=e.fecha_fin,
+            dias=",".join(str(d) for d in sorted(set(e.dias)) if 0 <= d <= 6), cada_semanas=e.cada_semanas,
+            hora_entrada=e.hora_entrada, hora_salida=e.hora_salida, activo=e.activo))
+    t.especiales = especiales
 
 
 @router.post("/turnos", response_model=TurnoOut, status_code=201)
 def crear_turno(data: TurnoIn, db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
-    t = Turno(**data.model_dump(), sede_id=alc.defecto)
+    t = Turno(sede_id=alc.defecto)
+    _aplicar_turno(t, data)
     db.add(t)
     _commit(db)
-    return t
+    return _turno_out(t)
 
 
 @router.put("/turnos/{turno_id}", response_model=TurnoOut)
 def editar_turno(turno_id: int, data: TurnoIn, db: Session = Depends(get_db), _=Depends(require_admin),
                  alc: Alcance = Depends(alcance)):
     t = _de_sede(db.get(Turno, turno_id), alc, "Turno")
-    for k, v in data.model_dump().items():
-        setattr(t, k, v)
+    _aplicar_turno(t, data)
     _commit(db)
-    return t
+    return _turno_out(t)
 
 
 @router.delete("/turnos/{turno_id}", status_code=204)

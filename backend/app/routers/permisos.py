@@ -5,7 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, object_session
 
-from .. import correo, reglas
+from .. import correo, horarios, reglas
 from ..database import get_db
 from ..models import (
     BORRADOR, CANCELADO, ESTADOS_ACTIVOS, PERMISO_CONSULTA_MEDICA, PERMISO_HOME_OFFICE, RECHAZADO, ROL_ADMIN,
@@ -93,7 +93,8 @@ def _validar(data: PermisoIn, empleado: Usuario, actor: Usuario) -> float:
     if data.tipo == PERMISO_CONSULTA_MEDICA:
         raise HTTPException(422, "Las consultas médicas ya no se solicitan: las registra el médico de planta.")
     horas = reglas.horas_permiso(data.hora_inicio, data.hora_fin)
-    jornada = empleado.turno.horas_jornada if empleado.turno else jornada_de(empleado).horas_dia
+    horario = horarios.horario_de(empleado.turno, data.fecha)
+    jornada = max(horario["horas"], empleado.turno.horas_jornada) if horario else jornada_de(empleado).horas_dia
     if horas > jornada:
         raise HTTPException(422, f"El permiso ({horas:g} h) excede la jornada de {jornada} h.")
     if not es_admin(actor) and data.fecha < hoy_de(empleado) and data.tipo != PERMISO_CONSULTA_MEDICA:

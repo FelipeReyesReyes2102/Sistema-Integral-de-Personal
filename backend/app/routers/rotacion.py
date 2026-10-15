@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .. import rotacion
+from .. import horarios, rotacion
 from ..database import get_db
 from ..models import Grupo, Turno, Usuario
 from ..security import ahora, auditar, get_current_user, require_admin
@@ -125,6 +125,20 @@ def enviar_avisos(db: Session = Depends(get_db), _=Depends(require_admin), alc: 
     return rotacion.enviar_avisos(db, alc.defecto)
 
 
+@router.get("/turnos/horario")
+def horario(fecha: date, usuario_id: int | None = None, db: Session = Depends(get_db),
+            user: Usuario = Depends(get_current_user)):
+    """Horario efectivo del empleado en una fecha (incluye horarios por día y especiales como Short Friday)."""
+    from ..services import empleado_visible
+    u = empleado_visible(db, user, usuario_id)
+    t = rotacion.turno_efectivo(db, u, fecha)
+    h = horarios.horario_de(t, fecha)
+    if not h:
+        return {"turno": None, "fecha": fecha}
+    return {"turno": t.nombre, "fecha": fecha, "entrada": h["entrada"].strftime("%H:%M"),
+            "salida": h["salida"].strftime("%H:%M"), "horas": h["horas"], "especial": h["especial"]}
+
+
 @router.get("/turnos/mi-turno")
 def mi_turno(usuario_id: int | None = None, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
     from ..services import empleado_visible
@@ -136,8 +150,13 @@ def mi_turno(usuario_id: int | None = None, db: Session = Depends(get_db), user:
     proximo_cambio = None
     if rota and cfg.fecha_inicio:
         proximo_cambio = rotacion.inicio_periodo(cfg, hoy) + timedelta(weeks=cfg.semanas)
+    t_hoy = rotacion.turno_efectivo(db, u, hoy)
+    h = horarios.horario_de(t_hoy, hoy)
     return {
         "rotacion_activa": rota,
+        "hoy": {"entrada": h["entrada"].strftime("%H:%M"), "salida": h["salida"].strftime("%H:%M"),
+                "especial": h["especial"]} if h else None,
+        "semana_actual": horarios.semana(t_hoy, hoy - timedelta(days=hoy.weekday())),
         "grupo": u.grupo.nombre if u.grupo else None,
         "actual": rotacion._turno_dict(rotacion.turno_efectivo(db, u, hoy)),
         "siguiente_semana": semanas[1] if len(semanas) > 1 else None,
