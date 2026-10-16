@@ -12,6 +12,7 @@ import Turnos from './pages/Turnos'
 import Grupos from './pages/Grupos'
 import Festivos from './pages/Festivos'
 import Configuracion from './pages/Configuracion'
+import Bitacora from './pages/Bitacora'
 import CalendarioEquipo from './pages/CalendarioEquipo'
 import Consultas from './pages/Consultas'
 
@@ -63,6 +64,7 @@ export default function App() {
         <Route path="/grupos" element={<SoloAdmin><Grupos /></SoloAdmin>} />
         <Route path="/festivos" element={<SoloAdmin><Festivos /></SoloAdmin>} />
         <Route path="/configuracion" element={<SoloAdmin><Configuracion /></SoloAdmin>} />
+        <Route path="/bitacora" element={<SoloAdmin><Bitacora /></SoloAdmin>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

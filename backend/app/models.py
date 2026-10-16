@@ -403,6 +403,26 @@ class Auditoria(Base):
     ip: Mapped[str | None] = mapped_column(String(64))
 
 
+class Bitacora(Base):
+    """Bitácora de cambios hechos por los usuarios (configuración y vacaciones). La llena app/bitacora.py."""
+    __tablename__ = "bitacora"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fecha: Mapped[datetime] = mapped_column(DateTime, index=True)
+    seccion: Mapped[str] = mapped_column(String(20), index=True)   # configuracion | vacaciones
+    accion: Mapped[str] = mapped_column(String(20))                # crear | editar | estado | eliminar
+    entidad: Mapped[str] = mapped_column(String(60))               # Turno, Festivo, Solicitud de vacaciones...
+    entidad_id: Mapped[str | None] = mapped_column(String(40))
+    descripcion: Mapped[str] = mapped_column(String(255), default="")
+    # Sin llave foránea: la historia se conserva aunque se elimine la sede o el usuario
+    sede_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    sede_nombre: Mapped[str | None] = mapped_column(String(120))
+    actor_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    actor_nombre: Mapped[str | None] = mapped_column(String(120))
+    ip: Mapped[str | None] = mapped_column(String(64))
+    cambios: Mapped[str] = mapped_column(Text, default="[]")       # JSON: [{campo, antes, despues}]
+
+
 class ConfiguracionApp(Base):
     """Valores de configuración editables desde la pantalla de Configuración (tienen prioridad sobre .env).
 

@@ -9,13 +9,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from starlette.concurrency import run_in_threadpool
 
-from . import config_dinamica, rotacion
+from . import bitacora, config_dinamica, rotacion
 from .config import settings
 from .database import SessionLocal, engine
 from .migraciones import actualizar_esquema
 from .routers import (
     auth, calendario, catalogos, configuracion, consultas, correo, equipo, permisos,
-    politica, rotacion as rotacion_router, sedes, usuarios, vacaciones,
+    politica, rotacion as rotacion_router, sedes, usuarios, vacaciones, bitacora as bitacora_router,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -61,8 +61,10 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-CSRF-Token"],
 )
 
+bitacora.activar()
+
 for r in (auth, sedes, politica, usuarios, catalogos, vacaciones, permisos, calendario, equipo, configuracion, consultas, correo,
-          rotacion_router):
+          rotacion_router, bitacora_router):
     app.include_router(r.router)
 
 

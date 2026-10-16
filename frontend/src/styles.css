@@ -734,3 +734,26 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .semana-horario > div.especial { background: #fff4e0; border-color: #f0b44c; }
 .semana-horario small { color: #b26a00; font-weight: 600; }
 @media (max-width: 640px) { .te-grid { grid-template-columns: 1fr 1fr; } .turno-dia { grid-template-columns: 1fr; } }
+
+/* ---------- Bitácora ---------- */
+.bt-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.bt-tab { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border: 0; background: none; cursor: pointer;
+  font: inherit; font-weight: 600; color: var(--muted, #667); border-bottom: 3px solid transparent; margin-bottom: -1px; }
+.bt-tab.on { color: var(--primary); border-bottom-color: var(--primary); }
+.bt-filtros { display: grid; grid-template-columns: 150px 150px 190px 160px 1fr auto; gap: 10px; align-items: end; margin-bottom: 12px; }
+.bt-input-icono { position: relative; display: block; }
+.bt-input-icono svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--muted, #889); }
+.bt-input-icono input { width: 100%; padding-left: 28px; }
+.bt-acciones { display: flex; gap: 6px; }
+.bt-tabla td { vertical-align: top; }
+.bt-accion { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.bt-crear { background: #e3f4e8; color: #1e7a3c; }
+.bt-editar { background: #e8f0fb; color: #1f4a86; }
+.bt-estado { background: #fff3dc; color: #a35d00; }
+.bt-eliminar { background: #fde7e7; color: #b42318; }
+.bt-cambios { margin: 0; padding: 0; list-style: none; font-size: 12px; line-height: 1.6; }
+.bt-cambios svg { vertical-align: -1px; color: var(--muted, #889); }
+.bt-viejo { color: #b42318; text-decoration: line-through; text-decoration-color: rgba(180, 35, 24, .4); }
+.bt-nuevo { color: #1e7a3c; font-weight: 600; }
+@media (max-width: 1100px) { .bt-filtros { grid-template-columns: 1fr 1fr 1fr; } .bt-buscar { grid-column: span 2; } }
+@media (max-width: 640px) { .bt-filtros { grid-template-columns: 1fr 1fr; } .bt-buscar { grid-column: 1 / -1; } }

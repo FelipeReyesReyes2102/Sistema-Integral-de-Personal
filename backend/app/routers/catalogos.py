@@ -45,17 +45,27 @@ def _aplicar_turno(t: Turno, data: TurnoIn):
     for d in dias.values():
         if d.hora_entrada == d.hora_salida:
             raise HTTPException(422, f"El horario del {horarios.DIAS_CORTOS[d.dia]} no puede empezar y terminar a la misma hora.")
-    t.dias = [TurnoDia(dia=d.dia, hora_entrada=d.hora_entrada, hora_salida=d.hora_salida) for d in sorted(dias.values(), key=lambda x: x.dia)]
+    # Se actualizan en su lugar: reemplazar las filas chocaría con la llave única (turno, día) al guardar
+    actuales = {d.dia: d for d in t.dias}
+    nuevos = []
+    for d in sorted(dias.values(), key=lambda x: x.dia):
+        fila = actuales.get(d.dia) or TurnoDia(dia=d.dia)
+        fila.hora_entrada, fila.hora_salida = d.hora_entrada, d.hora_salida
+        nuevos.append(fila)
+    t.dias = nuevos
+    previos = {e.id: e for e in t.especiales}
     especiales = []
     for e in data.especiales:
         if e.fecha_fin and e.fecha_fin < e.fecha_inicio:
             raise HTTPException(422, f"{e.nombre}: la fecha final no puede ser anterior a la inicial.")
         if not e.dias:
             raise HTTPException(422, f"{e.nombre}: elige al menos un día de la semana.")
-        especiales.append(HorarioEspecial(
-            nombre=e.nombre.strip(), fecha_inicio=e.fecha_inicio, fecha_fin=e.fecha_fin,
-            dias=",".join(str(d) for d in sorted(set(e.dias)) if 0 <= d <= 6), cada_semanas=e.cada_semanas,
-            hora_entrada=e.hora_entrada, hora_salida=e.hora_salida, activo=e.activo))
+        fila = previos.get(e.id) if e.id else None
+        fila = fila or HorarioEspecial()
+        fila.nombre, fila.fecha_inicio, fila.fecha_fin = e.nombre.strip(), e.fecha_inicio, e.fecha_fin
+        fila.dias = ",".join(str(d) for d in sorted(set(e.dias)) if 0 <= d <= 6)
+        fila.cada_semanas, fila.hora_entrada, fila.hora_salida, fila.activo = e.cada_semanas, e.hora_entrada, e.hora_salida, e.activo
+        especiales.append(fila)
     t.especiales = especiales
 
 
