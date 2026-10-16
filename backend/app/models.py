@@ -423,6 +423,48 @@ class Bitacora(Base):
     cambios: Mapped[str] = mapped_column(Text, default="[]")       # JSON: [{campo, antes, despues}]
 
 
+class ListaSharePoint(Base):
+    """Lista de SharePoint a la que se envían las solicitudes de una sede (una para vacaciones y otra para permisos)."""
+    __tablename__ = "sharepoint_listas"
+    __table_args__ = (UniqueConstraint("sede_id", "tipo", name="uq_sharepoint_sede_tipo"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sede_id: Mapped[int] = mapped_column(ForeignKey("sedes.id", ondelete="CASCADE"), index=True)
+    tipo: Mapped[str] = mapped_column(String(20))  # vacaciones | permisos
+    url: Mapped[str] = mapped_column(Text)
+    sitio_id: Mapped[str] = mapped_column(String(300))
+    sitio_nombre: Mapped[str | None] = mapped_column(String(200))
+    lista_id: Mapped[str] = mapped_column(String(80))
+    lista_nombre: Mapped[str | None] = mapped_column(String(200))
+    columnas: Mapped[str] = mapped_column(Text, default="[]")  # columnas editables leídas de la lista (JSON)
+    mapeo: Mapped[str] = mapped_column(Text, default="{}")     # {columna de la lista: dato de SIP-O}
+    valores: Mapped[str] = mapped_column(Text, default="{}")   # {columna: {valor de SIP-O: opción de la lista}}
+    activo: Mapped[bool] = mapped_column(Boolean, default=False)
+    actualizado: Mapped[datetime | None] = mapped_column(DateTime)
+    actualizado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+
+    sede: Mapped[Sede] = relationship()
+
+
+class EnvioSharePoint(Base):
+    """Cola de envío a SharePoint: un renglón por solicitud y lista, con el id del elemento creado en la lista."""
+    __tablename__ = "sharepoint_envios"
+    __table_args__ = (UniqueConstraint("lista_id", "registro_id", name="uq_sharepoint_envio"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    lista_id: Mapped[int] = mapped_column(ForeignKey("sharepoint_listas.id", ondelete="CASCADE"), index=True)
+    registro_id: Mapped[int] = mapped_column(Integer, index=True)  # id de la solicitud de vacaciones o del permiso
+    item_id: Mapped[str | None] = mapped_column(String(40))
+    estado: Mapped[str] = mapped_column(String(12), default="pendiente", index=True)  # pendiente | enviado | error
+    intentos: Mapped[int] = mapped_column(Integer, default=0)
+    eliminado: Mapped[bool] = mapped_column(Boolean, default=False)
+    error: Mapped[str | None] = mapped_column(Text)
+    actualizado: Mapped[datetime | None] = mapped_column(DateTime)
+    enviado: Mapped[datetime | None] = mapped_column(DateTime)
+
+    lista: Mapped[ListaSharePoint] = relationship()
+
+
 class ConfiguracionApp(Base):
     """Valores de configuración editables desde la pantalla de Configuración (tienen prioridad sobre .env).
 

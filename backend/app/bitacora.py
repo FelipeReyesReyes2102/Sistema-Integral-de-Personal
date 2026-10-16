@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, object_session
 
 from .models import (
     AdminSede, Bitacora, ConfiguracionApp, Festivo, Grupo, HorarioEspecial, PeriodoVacaciones, ReglaAntiguedad,
-    RotacionTurnos, Sede, SolicitudVacaciones, TipoJornada, Turno, TurnoDia, Usuario,
+    ListaSharePoint, RotacionTurnos, Sede, SolicitudVacaciones, TipoJornada, Turno, TurnoDia, Usuario,
 )
 
 CONFIG, VACACIONES = "configuracion", "vacaciones"
@@ -33,9 +33,9 @@ PERMISOS = {"llegada_tarde": "Llegada tarde", "salida_temprana": "Salida tempran
 PROPIAS = {
     Sede: (CONFIG, "Sede"), TipoJornada: (CONFIG, "Jornada"), Turno: (CONFIG, "Turno"), Grupo: (CONFIG, "Grupo"),
     Festivo: (CONFIG, "Festivo"), RotacionTurnos: (CONFIG, "Rotación de turnos"),
-    SolicitudVacaciones: (VACACIONES, "Solicitud de vacaciones"),
+    SolicitudVacaciones: (VACACIONES, "Solicitud de vacaciones"), ListaSharePoint: (CONFIG, "Lista de SharePoint"),
 }
-OMITIR = {"id", "creado", "actualizado", "ultimo_aviso", "ultima_sincronizacion", "fecha_revision", "actualizado_por_id",
+OMITIR = {"id", "columnas", "sitio_id", "lista_id", "creado", "actualizado", "ultimo_aviso", "ultima_sincronizacion", "fecha_revision", "actualizado_por_id",
           "cifrado"}
 CAMPOS = {
     "nombre": "Nombre", "ubicacion_microsoft": "Ubicación en Microsoft", "zona_horaria": "Zona horaria", "activa": "Activa",
@@ -54,7 +54,8 @@ CAMPOS = {
     "aviso_activo": "Aviso semanal por correo", "aviso_hora": "Hora del aviso", "dias_habiles": "Días hábiles",
     "horas": "Horas", "estado": "Estado", "comentario": "Comentario", "motivo_rechazo": "Motivo de rechazo", "firma": "Firma",
     "aprobador_id": "Aprobador", "revisado_por_id": "Revisado por", "periodo_id": "Periodo", "usuario_id": "Empleado",
-    "sede_id": "Sede",
+    "sede_id": "Sede", "tipo": "Tipo", "url": "URL", "sitio_nombre": "Sitio", "lista_nombre": "Lista",
+    "mapeo": "Columnas y datos", "valores": "Equivalencia de opciones",
 }
 # Llaves foráneas que se muestran por nombre
 NOMBRES_FK = {"usuarios": "nombre", "turnos": "nombre", "sedes": "nombre", "grupos": "nombre", "tipos_jornada": "nombre"}
@@ -132,6 +133,12 @@ def _valor(ctx: _Ctx, obj, col, v):
         return ", ".join(PERMISOS.get(x, x) for x in v.split(",") if x) or None
     if col.key == "turnos_orden":
         return " → ".join(ctx.nombre("turnos", int(x)) for x in v.split(",") if x.strip().isdigit()) or None
+    if col.key in ("mapeo", "valores"):
+        try:
+            d = json.loads(v or "{}")
+        except ValueError:
+            return _fmt(v)
+        return _fmt("; ".join(f"{k}: {x}" for k, x in d.items())) if d else None
     if col.key == "aviso_hora":
         return f"{int(v):02d}:00"
     fks = list(col.foreign_keys)
@@ -227,6 +234,8 @@ def _descripcion(ctx: _Ctx, obj, viejo=False) -> str:
         return f"{_fmt(g('fecha'))} · {g('nombre')}"
     if isinstance(obj, RotacionTurnos):
         return "Rotación de turnos"
+    if isinstance(obj, ListaSharePoint):
+        return f"{'Vacaciones' if g('tipo') == 'vacaciones' else 'Permisos'} → {g('lista_nombre')}"
     return str(g("nombre"))
 
 

@@ -9,13 +9,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from starlette.concurrency import run_in_threadpool
 
-from . import bitacora, config_dinamica, rotacion
+from . import bitacora, config_dinamica, rotacion, sharepoint
 from .config import settings
 from .database import SessionLocal, engine
 from .migraciones import actualizar_esquema
 from .routers import (
     auth, calendario, catalogos, configuracion, consultas, correo, equipo, permisos,
-    politica, rotacion as rotacion_router, sedes, usuarios, vacaciones, bitacora as bitacora_router,
+    politica, rotacion as rotacion_router, sedes, usuarios, vacaciones, bitacora as bitacora_router, sharepoint as sharepoint_router,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -36,10 +36,11 @@ async def lifespan(_: FastAPI):
 
 
 async def _tareas_programadas():
-    """Cada 10 minutos: sincroniza la rotación de turnos y envía el aviso semanal de los viernes."""
+    """Cada 10 minutos: sincroniza la rotación de turnos, envía el aviso semanal de los viernes y reintenta SharePoint."""
     while True:
         try:
             await run_in_threadpool(rotacion.tarea_programada)
+            await run_in_threadpool(sharepoint.procesar_pendientes)  # reintentos de SharePoint
         except Exception:  # noqa: BLE001 - la tarea nunca debe tumbar el servidor
             logging.getLogger("sip.tareas").exception("Error en tarea programada")
         await asyncio.sleep(600)
@@ -62,9 +63,10 @@ app.add_middleware(
 )
 
 bitacora.activar()
+sharepoint.activar()
 
 for r in (auth, sedes, politica, usuarios, catalogos, vacaciones, permisos, calendario, equipo, configuracion, consultas, correo,
-          rotacion_router, bitacora_router):
+          rotacion_router, bitacora_router, sharepoint_router):
     app.include_router(r.router)
 
 

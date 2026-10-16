@@ -4,6 +4,7 @@ import { api } from '../api'
 import { num } from '../utils'
 import ConfigMicrosoft from '../components/ConfigMicrosoft'
 import ConfigCorreo from '../components/ConfigCorreo'
+import ConfigSharePoint from '../components/ConfigSharePoint'
 import ConfigSedes from '../components/ConfigSedes'
 import ConfigPolitica from '../components/ConfigPolitica'
 import { useAuth } from '../auth'
@@ -92,6 +93,7 @@ export default function Configuracion() {
     </div>
     {esSuperAdmin(user) && <ConfigSedes />}
     <ConfigCorreo />
+    <ConfigSharePoint />
     {esSuperAdmin(user) && <ConfigMicrosoft />}
     </>
   )
