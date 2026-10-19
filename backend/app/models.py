@@ -475,6 +475,46 @@ class EnvioSharePoint(Base):
     lista: Mapped[ListaSharePoint] = relationship()
 
 
+class CanalAprobacion(Base):
+    """Aprobación en Teams por un flujo de Power Automate con disparador HTTP (una configuración por sede)."""
+    __tablename__ = "aprobacion_flujo"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sede_id: Mapped[int] = mapped_column(ForeignKey("sedes.id", ondelete="CASCADE"), unique=True)
+    activo: Mapped[bool] = mapped_column(Boolean, default=False)
+    tipos: Mapped[str] = mapped_column(String(40), default="vacaciones,permisos")
+    flujo_url: Mapped[str | None] = mapped_column(Text)  # cifrada: quien la tenga puede iniciar aprobaciones
+    lista_url: Mapped[str | None] = mapped_column(Text)  # lista "Decisiones SIP-O" donde el flujo deja la respuesta
+    sitio_id: Mapped[str | None] = mapped_column(String(300))
+    lista_id: Mapped[str | None] = mapped_column(String(80))
+    lista_nombre: Mapped[str | None] = mapped_column(String(200))
+    cuenta_flujo: Mapped[str | None] = mapped_column(String(200))
+    actualizado: Mapped[datetime | None] = mapped_column(DateTime)
+    actualizado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+
+    sede: Mapped[Sede] = relationship()
+
+
+class SolicitudAprobacion(Base):
+    """Cada solicitud enviada al flujo de aprobación (con su token de un solo uso)."""
+    __tablename__ = "aprobacion_flujo_envios"
+    __table_args__ = (UniqueConstraint("tipo", "registro_id", name="uq_aprobacion_flujo_registro"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sede_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    tipo: Mapped[str] = mapped_column(String(20))  # vacaciones | permisos
+    registro_id: Mapped[int] = mapped_column(Integer)
+    token: Mapped[str] = mapped_column(String(64), unique=True)
+    estado: Mapped[str] = mapped_column(String(12), default="pendiente", index=True)  # pendiente|enviada|resuelta|cerrada|error
+    intentos: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text)
+    decision_nota: Mapped[str | None] = mapped_column(Text)
+    creado: Mapped[datetime | None] = mapped_column(DateTime)
+    enviado: Mapped[datetime | None] = mapped_column(DateTime)
+    resuelto: Mapped[datetime | None] = mapped_column(DateTime)
+    actualizado: Mapped[datetime | None] = mapped_column(DateTime)
+
+
 class ConfiguracionApp(Base):
     """Valores de configuración editables desde la pantalla de Configuración (tienen prioridad sobre .env).
 

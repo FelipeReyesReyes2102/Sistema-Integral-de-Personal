@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, object_session
 
 from .models import (
     AdminSede, Bitacora, ConfiguracionApp, Festivo, Grupo, HorarioEspecial, PeriodoVacaciones, ReglaAntiguedad,
-    ListaSharePoint, RotacionTurnos, Sede, SolicitudVacaciones, TipoJornada, Turno, TurnoDia, Usuario,
+    CanalAprobacion, ListaSharePoint, RotacionTurnos, Sede, SolicitudVacaciones, TipoJornada, Turno, TurnoDia, Usuario,
 )
 
 CONFIG, VACACIONES = "configuracion", "vacaciones"
@@ -34,6 +34,7 @@ PROPIAS = {
     Sede: (CONFIG, "Sede"), TipoJornada: (CONFIG, "Jornada"), Turno: (CONFIG, "Turno"), Grupo: (CONFIG, "Grupo"),
     Festivo: (CONFIG, "Festivo"), RotacionTurnos: (CONFIG, "Rotación de turnos"),
     SolicitudVacaciones: (VACACIONES, "Solicitud de vacaciones"), ListaSharePoint: (CONFIG, "Lista de SharePoint"),
+    CanalAprobacion: (CONFIG, "Aprobación en Teams"),
 }
 OMITIR = {"id", "columnas", "sitio_id", "lista_id", "creado", "actualizado", "ultimo_aviso", "ultima_sincronizacion", "fecha_revision", "actualizado_por_id",
           "cifrado"}
@@ -57,7 +58,8 @@ CAMPOS = {
     "sede_id": "Sede", "tipo": "Tipo", "url": "URL", "sitio_nombre": "Sitio", "lista_nombre": "Lista",
     "mapeo": "Columnas y datos", "valores": "Equivalencia de opciones", "aprobacion_teams": "Aprobación en Teams",
     "col_decision": "Columna de decisión", "val_aprobado": "Valor de aprobado", "val_rechazado": "Valor de rechazado",
-    "col_comentario": "Columna de comentarios", "col_respondio": "Columna de quién respondió", "cuenta_flujo": "Cuenta del flujo",
+    "col_comentario": "Columna de comentarios", "col_respondio": "Columna de quién respondió", "cuenta_flujo": "Cuenta del flujo", "flujo_url": "URL del flujo", "tipos": "Tipos de solicitud",
+    "lista_url": "Lista de decisiones",
 }
 # Llaves foráneas que se muestran por nombre
 NOMBRES_FK = {"usuarios": "nombre", "turnos": "nombre", "sedes": "nombre", "grupos": "nombre", "tipos_jornada": "nombre"}
@@ -135,6 +137,8 @@ def _valor(ctx: _Ctx, obj, col, v):
         return ", ".join(PERMISOS.get(x, x) for x in v.split(",") if x) or None
     if col.key == "turnos_orden":
         return " → ".join(ctx.nombre("turnos", int(x)) for x in v.split(",") if x.strip().isdigit()) or None
+    if col.key == "flujo_url":
+        return "(valor oculto)"
     if col.key in ("mapeo", "valores"):
         try:
             d = json.loads(v or "{}")
@@ -236,6 +240,8 @@ def _descripcion(ctx: _Ctx, obj, viejo=False) -> str:
         return f"{_fmt(g('fecha'))} · {g('nombre')}"
     if isinstance(obj, RotacionTurnos):
         return "Rotación de turnos"
+    if isinstance(obj, CanalAprobacion):
+        return "Aprobación en Teams (flujo de Power Automate)"
     if isinstance(obj, ListaSharePoint):
         return f"{'Vacaciones' if g('tipo') == 'vacaciones' else 'Permisos'} → {g('lista_nombre')}"
     return str(g("nombre"))

@@ -526,6 +526,8 @@ def revisar_decisiones() -> int:
             filas = db.execute(select(EnvioSharePoint, M).join(M, M.id == EnvioSharePoint.registro_id).where(
                 EnvioSharePoint.lista_id == lista.id, EnvioSharePoint.item_id.is_not(None), M.estado == SOLICITADO)).all()
             pendientes += [(lista, env, reg) for env, reg in filas]
+        from .aprobacion_flujo import canal_activo
+        pendientes = [p for p in pendientes if not canal_activo(db, p[0].sede_id, p[0].tipo)]
         for lista, env, reg in pendientes:
             sel = ",".join(c for c in (lista.col_decision, lista.col_comentario, lista.col_respondio) if c)
             try:

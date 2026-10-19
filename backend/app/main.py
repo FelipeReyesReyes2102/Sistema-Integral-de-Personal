@@ -9,13 +9,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from starlette.concurrency import run_in_threadpool
 
-from . import bitacora, config_dinamica, rotacion, sharepoint
+from . import aprobacion_flujo, bitacora, config_dinamica, rotacion, sharepoint
 from .config import settings
 from .database import SessionLocal, engine
 from .migraciones import actualizar_esquema
 from .routers import (
     auth, calendario, catalogos, configuracion, consultas, correo, equipo, permisos,
     politica, rotacion as rotacion_router, sedes, usuarios, vacaciones, bitacora as bitacora_router, sharepoint as sharepoint_router,
+    aprobacion_flujo as aprobacion_router,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -54,6 +55,7 @@ async def _decisiones_teams():
         await asyncio.sleep(60)
         try:
             await run_in_threadpool(sharepoint.revisar_decisiones)
+            await run_in_threadpool(aprobacion_flujo.tick)
         except Exception:  # noqa: BLE001
             logging.getLogger("sip.tareas").exception("Error al revisar decisiones de Teams")
 
@@ -76,9 +78,10 @@ app.add_middleware(
 
 bitacora.activar()
 sharepoint.activar()
+aprobacion_flujo.activar()
 
 for r in (auth, sedes, politica, usuarios, catalogos, vacaciones, permisos, calendario, equipo, configuracion, consultas, correo,
-          rotacion_router, bitacora_router, sharepoint_router):
+          rotacion_router, bitacora_router, sharepoint_router, aprobacion_router):
     app.include_router(r.router)
 
 

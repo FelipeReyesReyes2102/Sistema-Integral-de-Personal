@@ -5,6 +5,7 @@ import { num } from '../utils'
 import ConfigMicrosoft from '../components/ConfigMicrosoft'
 import ConfigCorreo from '../components/ConfigCorreo'
 import ConfigSharePoint from '../components/ConfigSharePoint'
+import ConfigAprobacionFlujo from '../components/ConfigAprobacionFlujo'
 import ConfigSedes from '../components/ConfigSedes'
 import ConfigPolitica from '../components/ConfigPolitica'
 import { useAuth } from '../auth'
@@ -93,6 +94,7 @@ export default function Configuracion() {
     </div>
     {esSuperAdmin(user) && <ConfigSedes />}
     <ConfigCorreo />
+    <ConfigAprobacionFlujo />
     <ConfigSharePoint />
     {esSuperAdmin(user) && <ConfigMicrosoft />}
     </>
