@@ -94,3 +94,21 @@ def test_vacaciones_y_saldo():
     assert e["accion"] == "estado" and {"campo": "Estado", "antes": "Borrador", "despues": "Solicitado"} in e["cambios"]
     assert ana.post(f"/api/vacaciones/{sid}/cancelar").status_code == 200
     adm.put(f"/api/periodos/{p['id']}/ajuste", json={"ajuste_horas": 0, "nota_ajuste": None})
+
+
+def test_permisos_en_bitacora():
+    from datetime import date, timedelta
+
+    from tests.test_api import FIRMA, login
+    adm, ana = _admin(), login("ana@empresa.com", "Cambiar123")
+    d = date.today() + timedelta(days=10)
+    r = ana.post("/api/permisos", json={"tipo": "home_office", "fecha": str(d), "fecha_fin": str(d), "motivo": "Bitácora",
+                                        "firma": FIRMA, "enviar": True})
+    assert r.status_code == 201, r.text
+    e = _ultima(adm, "vacaciones", entidad="Permiso")
+    assert e["accion"] == "crear" and "Home office" in e["descripcion"]
+    campos = {x["campo"]: x["despues"] for x in e["cambios"]}
+    assert campos["Tipo"] == "Home office" and campos["Estado"] == "Solicitado" and campos["Motivo"] == "Bitácora"
+    assert ana.post(f"/api/permisos/{r.json()['id']}/cancelar").status_code == 200
+    e = _ultima(adm, "vacaciones", entidad="Permiso")
+    assert e["accion"] == "estado" and {"campo": "Estado", "antes": "Solicitado", "despues": "Cancelado"} in e["cambios"]

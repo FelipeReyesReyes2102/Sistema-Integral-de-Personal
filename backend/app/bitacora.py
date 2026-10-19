@@ -17,7 +17,7 @@ from sqlalchemy import event, inspect, select
 from sqlalchemy.orm import Session, object_session
 
 from .models import (
-    AdminSede, Bitacora, ConfiguracionApp, Festivo, Grupo, HorarioEspecial, PeriodoVacaciones, ReglaAntiguedad,
+    PERMISO_CONSULTA_MEDICA, Permiso, AdminSede, Bitacora, ConfiguracionApp, Festivo, Grupo, HorarioEspecial, PeriodoVacaciones, ReglaAntiguedad,
     CanalAprobacion, ListaSharePoint, RotacionTurnos, Sede, SolicitudVacaciones, TipoJornada, Turno, TurnoDia, Usuario,
 )
 
@@ -33,7 +33,7 @@ PERMISOS = {"llegada_tarde": "Llegada tarde", "salida_temprana": "Salida tempran
 PROPIAS = {
     Sede: (CONFIG, "Sede"), TipoJornada: (CONFIG, "Jornada"), Turno: (CONFIG, "Turno"), Grupo: (CONFIG, "Grupo"),
     Festivo: (CONFIG, "Festivo"), RotacionTurnos: (CONFIG, "Rotación de turnos"),
-    SolicitudVacaciones: (VACACIONES, "Solicitud de vacaciones"), ListaSharePoint: (CONFIG, "Lista de SharePoint"),
+    SolicitudVacaciones: (VACACIONES, "Solicitud de vacaciones"), Permiso: (VACACIONES, "Permiso"), ListaSharePoint: (CONFIG, "Lista de SharePoint"),
     CanalAprobacion: (CONFIG, "Aprobación en Teams"),
 }
 OMITIR = {"id", "columnas", "sitio_id", "lista_id", "creado", "actualizado", "ultimo_aviso", "ultima_sincronizacion", "fecha_revision", "actualizado_por_id",
@@ -55,7 +55,8 @@ CAMPOS = {
     "aviso_activo": "Aviso semanal por correo", "aviso_hora": "Hora del aviso", "dias_habiles": "Días hábiles",
     "horas": "Horas", "estado": "Estado", "comentario": "Comentario", "motivo_rechazo": "Motivo de rechazo", "firma": "Firma",
     "aprobador_id": "Aprobador", "revisado_por_id": "Revisado por", "periodo_id": "Periodo", "usuario_id": "Empleado",
-    "sede_id": "Sede", "tipo": "Tipo", "url": "URL", "sitio_nombre": "Sitio", "lista_nombre": "Lista",
+    "sede_id": "Sede", "hora_inicio": "Hora de inicio", "hora_fin": "Hora de fin", "motivo": "Motivo",
+    "observaciones": "Observaciones", "departamento": "Departamento", "tipo_nomina": "Tipo en nómina", "tipo": "Tipo", "url": "URL", "sitio_nombre": "Sitio", "lista_nombre": "Lista",
     "mapeo": "Columnas y datos", "valores": "Equivalencia de opciones", "aprobacion_teams": "Aprobación en Teams",
     "col_decision": "Columna de decisión", "val_aprobado": "Valor de aprobado", "val_rechazado": "Valor de rechazado",
     "col_comentario": "Columna de comentarios", "col_respondio": "Columna de quién respondió", "cuenta_flujo": "Cuenta del flujo", "flujo_url": "URL del flujo", "tipos": "Tipos de solicitud",
@@ -133,6 +134,10 @@ def _valor(ctx: _Ctx, obj, col, v):
         return ESTADOS.get(v, v)
     if col.key in ("dias_semana",):
         return _lista_dias(v)
+    if isinstance(obj, Permiso) and col.key == "tipo":
+        return PERMISOS.get(v, v)
+    if col.key == "tipo_nomina":
+        return {"con_goce": "Con goce de sueldo", "sin_goce": "Sin goce de sueldo", "reposicion": "Reposición de tiempo"}.get(v, v)
     if col.key in ("tipos_permiso", "caseta_tipos"):
         return ", ".join(PERMISOS.get(x, x) for x in v.split(",") if x) or None
     if col.key == "turnos_orden":
@@ -222,11 +227,15 @@ def _hija(ctx: _Ctx, obj, viejo: bool):
 HIJAS = (TurnoDia, HorarioEspecial, ReglaAntiguedad, AdminSede, ConfiguracionApp, PeriodoVacaciones)
 
 
+def _registrable(obj) -> bool:
+    return not (isinstance(obj, Permiso) and obj.tipo == PERMISO_CONSULTA_MEDICA)
+
+
 def _sede_de(ctx: _Ctx, obj, viejo=False):
     g = (lambda k: _viejo(obj, k)) if viejo else (lambda k: getattr(obj, k))
     if isinstance(obj, Sede):
         return obj.id
-    if isinstance(obj, SolicitudVacaciones):
+    if isinstance(obj, (SolicitudVacaciones, Permiso)):
         return ctx.columna(Usuario.__table__, "sede_id", g("usuario_id"))
     return g("sede_id") if hasattr(obj, "sede_id") else None
 
@@ -236,6 +245,12 @@ def _descripcion(ctx: _Ctx, obj, viejo=False) -> str:
     if isinstance(obj, SolicitudVacaciones):
         return (f"{ctx.nombre('usuarios', g('usuario_id'))} · {_fmt(g('fecha_inicio'))} al {_fmt(g('fecha_fin'))}"
                 f" ({g('dias_habiles')} día(s))")
+    if isinstance(obj, Permiso):
+        fin = g("fecha_fin")
+        cuando = f"{_fmt(g('fecha'))} al {_fmt(fin)}" if fin and fin != g("fecha") else _fmt(g("fecha"))
+        if g("tipo") != "home_office" and g("hora_inicio"):
+            cuando += f" {_fmt(g('hora_inicio'))}–{_fmt(g('hora_fin'))}"
+        return f"{ctx.nombre('usuarios', g('usuario_id'))} · {PERMISOS.get(g('tipo'), g('tipo'))} · {cuando}"
     if isinstance(obj, Festivo):
         return f"{_fmt(g('fecha'))} · {g('nombre')}"
     if isinstance(obj, RotacionTurnos):
@@ -276,7 +291,7 @@ def _registrar(session: Session, _ctx_flush):
 
         # 1) Entidades propias
         for obj in nuevos:
-            if type(obj) in PROPIAS:
+            if type(obj) in PROPIAS and _registrable(obj):
                 ap, ent = PROPIAS[type(obj)]
                 e = entrada(ap, ent, obj.id, _sede_de(ctx, obj), _descripcion(ctx, obj), "crear")
                 for c in _columnas(obj):
@@ -284,7 +299,7 @@ def _registrar(session: Session, _ctx_flush):
                     if v is not None and c.key != "sede_id":
                         cambio(e, CAMPOS.get(c.key, c.key), None, v)
         for obj in sucios:
-            if type(obj) in PROPIAS and session.is_modified(obj, include_collections=False):
+            if type(obj) in PROPIAS and _registrable(obj) and session.is_modified(obj, include_collections=False):
                 ap, ent = PROPIAS[type(obj)]
                 cols = [c for c in _columnas(obj) if _cambio(obj, c.key)]
                 difs = [(c, _valor(ctx, obj, c, _viejo(obj, c.key)), _valor(ctx, obj, c, getattr(obj, c.key))) for c in cols]
@@ -296,7 +311,7 @@ def _registrar(session: Session, _ctx_flush):
                 for c, a, d in difs:
                     cambio(e, CAMPOS.get(c.key, c.key), a, d)
         for obj in borrados:
-            if type(obj) in PROPIAS:
+            if type(obj) in PROPIAS and _registrable(obj):
                 ap, ent = PROPIAS[type(obj)]
                 e = entrada(ap, ent, obj.id, _sede_de(ctx, obj, True), _descripcion(ctx, obj, True), "eliminar")
                 for c in _columnas(obj):

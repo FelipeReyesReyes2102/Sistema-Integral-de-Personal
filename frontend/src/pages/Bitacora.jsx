@@ -5,8 +5,8 @@ import { api } from '../api'
 const SECCIONES = {
   configuracion: { titulo: 'Cambios en configuración', icono: Settings,
     ayuda: 'Sedes, política, jornadas, turnos, grupos, festivos, tabla de antigüedad, rotación, correo y Microsoft.' },
-  vacaciones: { titulo: 'Registros de vacaciones', icono: CalendarCheck,
-    ayuda: 'Solicitudes creadas, editadas, enviadas, validadas, rechazadas, canceladas o eliminadas y ajustes de saldo.' },
+  vacaciones: { titulo: 'Registros de vacaciones y permisos', icono: CalendarCheck,
+    ayuda: 'Vacaciones, permisos y home office creados, editados, enviados, validados, rechazados, cancelados o eliminados, y ajustes de saldo.' },
 }
 const ACCIONES = {
   crear: { t: 'Alta', c: 'bt-crear' }, editar: { t: 'Cambio', c: 'bt-editar' },
