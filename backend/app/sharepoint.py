@@ -298,16 +298,14 @@ def _convertir(valor, columna: dict, campo: str, tipo: str, valores: dict, tz: Z
     if t == "boolean":
         return bool(valor)
     if t == "dateTime":
-        if isinstance(valor, datetime):  # en la base van en UTC (sin zona); los calculados traen la de la sede
-            v = valor.astimezone(timezone.utc) if valor.tzinfo else valor.replace(tzinfo=timezone.utc)
-            return v.strftime("%Y-%m-%dT%H:%M:%SZ")
+        if isinstance(valor, datetime):  # sin zona = hora local del servidor (creado, fecha de revisión)
+            return valor.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         if isinstance(valor, date):  # medianoche en la zona de la sede
             local = datetime.combine(valor, time(0), tzinfo=tz)
             return local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         return None
     if isinstance(valor, datetime):
-        v = valor if valor.tzinfo else valor.replace(tzinfo=timezone.utc)
-        return v.astimezone(tz).strftime("%d/%m/%Y %H:%M")
+        return valor.astimezone(tz).strftime("%d/%m/%Y %H:%M")
     if isinstance(valor, date):
         return valor.strftime("%d/%m/%Y")
     if isinstance(valor, float) and valor.is_integer():
