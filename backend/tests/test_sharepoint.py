@@ -220,3 +220,20 @@ def test_aprobacion_en_teams(graph):
 
     adm.put(f"/api/periodos/{p['id']}/ajuste", json={"ajuste_horas": 0, "nota_ajuste": None})
     adm.delete("/api/sharepoint/vacaciones")
+
+
+def test_permiso_fecha_hora_en_zona_de_la_sede():
+    from datetime import time as t_
+    from types import SimpleNamespace as N
+    sede = N(nombre="O-tek México", zona_horaria="America/Mexico_City")
+    u = N(nombre="Ana", numero_empleado="1001", email="ana@empresa.com", email_personal=None, puesto=None,
+          departamento="IT", sede=sede)
+    p = N(id=7, usuario=u, departamento=None, aprobador=None, estado="solicitado", motivo_rechazo=None, creado=None,
+          revisado_por=None, fecha_revision=None, tipo="llegada_tarde", fecha=date(2026, 10, 20), fecha_fin=None,
+          hora_inicio=t_(8, 30), hora_fin=t_(10, 0), horas=1.5, motivo="Cita", tipo_nomina="con_goce", observaciones=None)
+    d = sharepoint.datos_registro("permisos", p)
+    col = {"nombre": "field_9", "tipo": "dateTime", "opciones": []}
+    assert sharepoint._convertir(d["fecha_hora_inicio"], col, "fecha_hora_inicio", "permisos", {}, None) == "2026-10-20T14:30:00Z"
+    assert sharepoint._convertir(d["fecha_hora_fin"], col, "fecha_hora_fin", "permisos", {}, None) == "2026-10-20T16:00:00Z"
+    tipo = {"nombre": "field_8", "tipo": "choice", "opciones": ["Sale Temprano", "Llega Tarde", "Sale y Regresa", "Home office"]}
+    assert sharepoint._convertir("llegada_tarde", tipo, "tipo", "permisos", {"field_8": {"llegada_tarde": "Llega Tarde"}}, None) == "Llega Tarde"

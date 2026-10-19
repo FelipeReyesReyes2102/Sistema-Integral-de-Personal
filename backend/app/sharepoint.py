@@ -66,7 +66,10 @@ CAMPOS = {
         "folio": ("Folio (PER-123)", "texto", None), **_COMUNES_INI,
         "tipo": ("Tipo de permiso", "texto", PERMISOS), "fecha": ("Fecha", "fecha", None),
         "fecha_fin": ("Último día (home office)", "fecha", None), "hora_inicio": ("Hora de inicio", "texto", None),
-        "hora_fin": ("Hora de fin", "texto", None), "horas": ("Horas", "numero", None), "motivo": ("Motivo", "texto", None),
+        "hora_fin": ("Hora de fin", "texto", None),
+        "fecha_hora_inicio": ("Fecha y hora de salida / inicio", "fechahora", None),
+        "fecha_hora_fin": ("Fecha y hora de regreso / fin", "fechahora", None),
+        "horas": ("Horas", "numero", None), "motivo": ("Motivo", "texto", None),
         "tipo_nomina": ("Tipo en nómina", "texto", NOMINA), "observaciones": ("Observaciones", "texto", None),
         **_COMUNES_FIN,
     },
@@ -95,6 +98,9 @@ SINONIMOS = {
     "saldodediasdelperiodoindicado": "saldo_periodo", "saldo": "saldo_periodo", "saldodedias": "saldo_periodo",
     "periodoalquecorrespondenlosdiasatomar": "periodo", "desdeprimerdiadevacaciones": "fecha_inicio",
     "hastaultimodiadevacaciones": "fecha_fin", "numerodediasadisfrutar": "dias", "diasadisfrutar": "dias",
+    "numerodenomina": "numero_empleado", "fechadelpermiso": "fecha", "seleccionalaopcionquecorresponda": "tipo",
+    "seleccionacomoseraconsideradoeltiempoennomina": "tipo_nomina", "fechayhoradesolicitud": "fecha_hora_inicio",
+    "fechayhoradesalida": "fecha_hora_inicio", "fechayhoraderegreso": "fecha_hora_fin",
 }
 TIPOS_COLUMNA = ("text", "number", "currency", "dateTime", "choice", "boolean")
 
@@ -265,7 +271,12 @@ def datos_registro(tipo: str, reg) -> dict:
                 "saldo_periodo": round(saldo.dias_disponible, 2) if saldo else None, "fecha_inicio": reg.fecha_inicio, "fecha_fin": reg.fecha_fin,
                 "dias": reg.dias_habiles, "horas": reg.horas, "periodo": reg.periodo.nombre if reg.periodo else None,
                 "comentario": reg.comentario}
+    tz = ZoneInfo(u.sede.zona_horaria) if u.sede and u.sede.zona_horaria else timezone.utc
+    ho = reg.tipo == "home_office"
+    ini = datetime.combine(reg.fecha, time(0) if ho or not reg.hora_inicio else reg.hora_inicio, tzinfo=tz)
+    fin = datetime.combine(reg.fecha_fin or reg.fecha, time(0) if ho or not reg.hora_fin else reg.hora_fin, tzinfo=tz)
     return {**comunes, "folio": f"PER-{reg.id}", "tipo": reg.tipo, "fecha": reg.fecha, "fecha_fin": reg.fecha_fin,
+            "fecha_hora_inicio": ini, "fecha_hora_fin": fin,
             "hora_inicio": reg.hora_inicio.strftime("%H:%M") if reg.hora_inicio and reg.tipo != "home_office" else None,
             "hora_fin": reg.hora_fin.strftime("%H:%M") if reg.hora_fin and reg.tipo != "home_office" else None,
             "horas": reg.horas, "motivo": reg.motivo, "tipo_nomina": reg.tipo_nomina, "observaciones": reg.observaciones}
@@ -287,14 +298,16 @@ def _convertir(valor, columna: dict, campo: str, tipo: str, valores: dict, tz: Z
     if t == "boolean":
         return bool(valor)
     if t == "dateTime":
-        if isinstance(valor, datetime):  # en la base van en UTC
-            return valor.replace(tzinfo=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        if isinstance(valor, datetime):  # en la base van en UTC (sin zona); los calculados traen la de la sede
+            v = valor.astimezone(timezone.utc) if valor.tzinfo else valor.replace(tzinfo=timezone.utc)
+            return v.strftime("%Y-%m-%dT%H:%M:%SZ")
         if isinstance(valor, date):  # medianoche en la zona de la sede
             local = datetime.combine(valor, time(0), tzinfo=tz)
             return local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         return None
     if isinstance(valor, datetime):
-        return valor.replace(tzinfo=timezone.utc).astimezone(tz).strftime("%d/%m/%Y %H:%M")
+        v = valor if valor.tzinfo else valor.replace(tzinfo=timezone.utc)
+        return v.astimezone(tz).strftime("%d/%m/%Y %H:%M")
     if isinstance(valor, date):
         return valor.strftime("%d/%m/%Y")
     if isinstance(valor, float) and valor.is_integer():
