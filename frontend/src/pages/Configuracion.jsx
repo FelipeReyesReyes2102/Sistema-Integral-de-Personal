@@ -2,14 +2,12 @@ import { useEffect, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { api } from '../api'
 import { num } from '../utils'
-import ConfigMicrosoft from '../components/ConfigMicrosoft'
 import ConfigCorreo from '../components/ConfigCorreo'
 import ConfigSharePoint from '../components/ConfigSharePoint'
 import ConfigAprobacionFlujo from '../components/ConfigAprobacionFlujo'
-import ConfigSedes from '../components/ConfigSedes'
 import ConfigPolitica from '../components/ConfigPolitica'
 import { useAuth } from '../auth'
-import { esAdmin, esSuperAdmin } from '../utils'
+import { esAdmin } from '../utils'
 import SedeActual from '../components/SedeActual'
 
 export default function Configuracion() {
@@ -92,11 +90,9 @@ export default function Configuracion() {
       </div>
       <ConfigPolitica />
     </div>
-    {esSuperAdmin(user) && <ConfigSedes />}
     <ConfigCorreo />
     <ConfigAprobacionFlujo />
     <ConfigSharePoint />
-    {esSuperAdmin(user) && <ConfigMicrosoft />}
     </>
   )
 }

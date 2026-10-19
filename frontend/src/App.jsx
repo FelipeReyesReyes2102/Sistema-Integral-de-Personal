@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { useAuth } from './auth'
-import { esAdmin } from './utils'
+import { esAdmin, esSuperAdmin } from './utils'
 import Layout, { esJefe } from './components/Layout'
 import Login from './pages/Login'
 import CambioObligatorio from './pages/CambioObligatorio'
@@ -13,12 +13,18 @@ import Grupos from './pages/Grupos'
 import Festivos from './pages/Festivos'
 import Configuracion from './pages/Configuracion'
 import Bitacora from './pages/Bitacora'
+import SuperAdmin from './pages/SuperAdmin'
 import CalendarioEquipo from './pages/CalendarioEquipo'
 import Consultas from './pages/Consultas'
 
 function SoloAdmin({ children }) {
   const { user } = useAuth()
   return esAdmin(user) ? children : <Navigate to="/" replace />
+}
+
+function SoloSuperAdmin({ children }) {
+  const { user } = useAuth()
+  return esSuperAdmin(user) ? children : <Navigate to="/" replace />
 }
 
 function SoloMedico({ children }) {
@@ -65,6 +71,7 @@ export default function App() {
         <Route path="/festivos" element={<SoloAdmin><Festivos /></SoloAdmin>} />
         <Route path="/configuracion" element={<SoloAdmin><Configuracion /></SoloAdmin>} />
         <Route path="/bitacora" element={<SoloAdmin><Bitacora /></SoloAdmin>} />
+        <Route path="/super-admin" element={<SoloSuperAdmin><SuperAdmin /></SoloSuperAdmin>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

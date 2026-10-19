@@ -211,3 +211,18 @@ def test_graph_renueva_token_en_cache_sin_mail_send(monkeypatch):
     admin.put("/api/admin/correo", json={**CONFIG, "metodo": "graph"})
     assert admin.post("/api/admin/correo/prueba", json={}).json()["ok"] is True
     assert llamadas == ["Bearer viejo", "Bearer nuevo"]
+
+
+def test_servidor_solo_super_y_caseta_no_lo_toca():
+    su = superadmin()
+    srv = {"metodo": "smtp", "remitente": "avisos@o-tek.com", "remitente_nombre": "SIP-O", "smtp_host": "smtp.o-tek.com",
+           "smtp_puerto": 587, "smtp_seguridad": "starttls", "smtp_usuario": "avisos@o-tek.com", "smtp_password": "x"}
+    r = su.put("/api/admin/correo/servidor", json=srv)
+    assert r.status_code == 200 and r.json()["password_configurada"] and "smtp_password" not in r.json()
+    # GH de la sede guarda solo la caseta: el servidor se conserva
+    caseta = {"caseta_activo": True, "caseta_destinatarios": "caseta@o-tek.com", "caseta_tipos": ["llegada_tarde"]}
+    assert su.put("/api/admin/correo", json=caseta).status_code == 200
+    assert su.get("/api/admin/correo/servidor").json()["smtp_host"] == "smtp.o-tek.com"
+    gh = entrar("admin@empresa.com", "Admin123")
+    if gh.get("/api/auth/me").json()["rol"] != "superadmin":
+        assert gh.get("/api/admin/correo/servidor").status_code == 403

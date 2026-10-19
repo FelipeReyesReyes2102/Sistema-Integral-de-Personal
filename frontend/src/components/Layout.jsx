@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   CalendarDays, ClipboardCheck, Clock, Home, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
-  History, PartyPopper, Settings, Users, UsersRound, X,
+  History, PartyPopper, Settings, ShieldCheck, Users, UsersRound, X,
 } from 'lucide-react'
 import { api, elegirSede, sedeActiva } from '../api'
 import { useAuth } from '../auth'
@@ -118,6 +118,7 @@ export default function Layout() {
               {link('/festivos', PartyPopper, 'Festivos')}
               {link('/configuracion', Settings, 'Configuración')}
               {link('/bitacora', History, 'Bitácora')}
+              {user.rol === 'superadmin' && link('/super-admin', ShieldCheck, 'Super administrador')}
             </>
           )}
         </nav>

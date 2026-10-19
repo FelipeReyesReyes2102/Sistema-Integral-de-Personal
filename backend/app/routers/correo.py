@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from .. import correo
 from ..database import get_db
 from ..models import ROL_SUPERADMIN, TIPOS_PERMISO_SOLICITABLES, NotificacionCorreo, Sede, Usuario
-from ..security import ahora, auditar, require_admin
+from ..security import ahora, auditar, require_admin, require_superadmin
 from ..sedes import Alcance, alcance
 
 router = APIRouter(prefix="/api/admin/correo", tags=["correo y caseta"])
@@ -24,6 +24,19 @@ class CorreoIn(BaseModel):
     caseta_activo: bool = False
     caseta_destinatarios: str = ""
     caseta_tipos: list[str] = Field(default_factory=lambda: list(correo.TIPOS_AVISO_DEFECTO))
+    # Servidor de correo (común): solo lo cambia el super administrador; si no se envía, se conserva el actual
+    metodo: Literal["smtp", "graph"] | None = None
+    remitente: str | None = None
+    remitente_nombre: str | None = None
+    smtp_host: str | None = None
+    smtp_puerto: int | None = Field(None, ge=1, le=65535)
+    smtp_seguridad: Literal["starttls", "ssl", "ninguna"] | None = None
+    smtp_usuario: str | None = None
+    smtp_password: str | None = None   # None o "" = conservar la actual
+    borrar_password: bool = False
+
+
+class ServidorIn(BaseModel):
     metodo: Literal["smtp", "graph"] = "smtp"
     remitente: str = ""
     remitente_nombre: str = "SIP-O Sistema Integral de Personal"
@@ -31,7 +44,7 @@ class CorreoIn(BaseModel):
     smtp_puerto: int = Field(587, ge=1, le=65535)
     smtp_seguridad: Literal["starttls", "ssl", "ninguna"] = "starttls"
     smtp_usuario: str = ""
-    smtp_password: str | None = None   # None o "" = conservar la actual
+    smtp_password: str | None = None
     borrar_password: bool = False
 
 
@@ -75,11 +88,18 @@ def obtener(db: Session = Depends(get_db), user: Usuario = Depends(require_admin
 def guardar(data: CorreoIn, request: Request, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin),
             alc: Alcance = Depends(alcance)):
     sede = _sede(db, alc)
-    super_admin = admin.rol == ROL_SUPERADMIN
     actual = correo.cargar(db)
-    if not super_admin:  # el servidor de correo es común: el administrador conserva el configurado
+    # El servidor es común: solo el super administrador lo cambia, y solo si lo envía (pestaña Super administrador)
+    super_admin = admin.rol == ROL_SUPERADMIN and data.metodo is not None
+    if not super_admin:
         data.metodo, data.remitente = actual["CORREO_METODO"], actual["CORREO_REMITENTE"]
         data.smtp_host = actual["CORREO_SMTP_HOST"]
+        data.remitente_nombre, data.smtp_usuario = actual["CORREO_REMITENTE_NOMBRE"], actual["CORREO_SMTP_USUARIO"]
+        data.smtp_puerto = int(actual["CORREO_SMTP_PUERTO"] or 587)
+        data.smtp_seguridad = actual["CORREO_SMTP_SEGURIDAD"] or "starttls"
+        data.smtp_password, data.borrar_password = None, False
+    data.remitente, data.smtp_host = data.remitente or "", data.smtp_host or ""
+    data.remitente_nombre, data.smtp_usuario = data.remitente_nombre or "", data.smtp_usuario or ""
     destinatarios = correo.lista_correos(data.caseta_destinatarios)
     errores = [f"Correo no válido: {d}" for d in destinatarios if not correo.EMAIL.match(d)]
     remitente = data.remitente.strip().lower()
@@ -92,9 +112,9 @@ def guardar(data: CorreoIn, request: Request, db: Session = Depends(get_db), adm
         if not tipos:
             errores.append("Selecciona al menos un tipo de permiso para avisar.")
         if not remitente:
-            errores.append("Indica el correo remitente.")
+            errores.append("Falta configurar el correo remitente (lo hace el super administrador).")
         if data.metodo == "smtp" and not data.smtp_host.strip():
-            errores.append("Indica el servidor SMTP.")
+            errores.append("Falta configurar el servidor de correo (lo hace el super administrador).")
     if errores:
         raise HTTPException(422, " ".join(errores))
 
@@ -123,6 +143,46 @@ def guardar(data: CorreoIn, request: Request, db: Session = Depends(get_db), adm
             request=request)
     db.commit()
     return _estado(db, sede, admin)
+
+
+def _servidor(db: Session) -> dict:
+    c = correo.cargar(db)
+    return {
+        "metodo": c["CORREO_METODO"], "remitente": c["CORREO_REMITENTE"], "remitente_nombre": c["CORREO_REMITENTE_NOMBRE"],
+        "smtp_host": c["CORREO_SMTP_HOST"], "smtp_puerto": int(c["CORREO_SMTP_PUERTO"] or 587),
+        "smtp_seguridad": c["CORREO_SMTP_SEGURIDAD"], "smtp_usuario": c["CORREO_SMTP_USUARIO"],
+        "password_configurada": bool(c["CORREO_SMTP_PASSWORD"]),
+    }
+
+
+@router.get("/servidor")
+def obtener_servidor(db: Session = Depends(get_db), _=Depends(require_superadmin)):
+    """Servidor de correo común a todas las sedes (pestaña Super administrador)."""
+    return _servidor(db)
+
+
+@router.put("/servidor")
+def guardar_servidor(data: ServidorIn, request: Request, db: Session = Depends(get_db),
+                     su: Usuario = Depends(require_superadmin)):
+    remitente = data.remitente.strip().lower()
+    if remitente and not correo.EMAIL.match(remitente):
+        raise HTTPException(422, "El correo remitente no es válido.")
+    if data.metodo == "smtp" and remitente and not data.smtp_host.strip():
+        raise HTTPException(422, "Indica el servidor SMTP.")
+    cambios = {
+        "CORREO_METODO": data.metodo, "CORREO_REMITENTE": remitente,
+        "CORREO_REMITENTE_NOMBRE": data.remitente_nombre.strip(), "CORREO_SMTP_HOST": data.smtp_host.strip(),
+        "CORREO_SMTP_PUERTO": str(data.smtp_puerto), "CORREO_SMTP_SEGURIDAD": data.smtp_seguridad,
+        "CORREO_SMTP_USUARIO": data.smtp_usuario.strip(),
+    }
+    if data.smtp_password:
+        cambios["CORREO_SMTP_PASSWORD"] = data.smtp_password
+    elif data.borrar_password:
+        cambios["CORREO_SMTP_PASSWORD"] = None
+    correo.guardar(db, cambios, su.id)
+    auditar(db, "config_correo", actor_id=su.id, detalle=f"servidor {data.metodo} · {remitente}", request=request)
+    db.commit()
+    return _servidor(db)
 
 
 @router.post("/prueba")
