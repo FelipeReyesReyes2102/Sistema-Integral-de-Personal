@@ -182,7 +182,9 @@ def pendientes(db: Session = Depends(get_db), user: Usuario = Depends(get_curren
     res["total"] = res["vacaciones"] + res["permisos"]
     if es_admin(user):
         de_sede = lambda m: (m.usuario_id.in_(select(Usuario.id).where(alc.filtro(Usuario.sede_id))),)  # noqa: E731
-        res["todas"] = contar(SolicitudVacaciones, de_sede(SolicitudVacaciones)) + contar(Permiso, de_sede(Permiso))
+        res["todas_vacaciones"] = contar(SolicitudVacaciones, de_sede(SolicitudVacaciones))
+        res["todas_permisos"] = contar(Permiso, de_sede(Permiso))
+        res["todas"] = res["todas_vacaciones"] + res["todas_permisos"]
     return res
 
 

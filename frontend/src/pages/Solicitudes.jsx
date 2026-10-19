@@ -42,6 +42,17 @@ export default function Solicitudes({ modo = 'jefe' }) {
   }
   useEffect(cargar, [tab, estado, modo, tipo])
 
+  // Pendientes por pestaña (círculo rojo), se actualiza al aprobar/rechazar
+  const [pend, setPend] = useState({})
+  useEffect(() => {
+    const leer = () => api('/pendientes').then(setPend).catch(() => {})
+    leer()
+    window.addEventListener('pendientes:refrescar', leer)
+    return () => window.removeEventListener('pendientes:refrescar', leer)
+  }, [])
+  const cuenta = (t) => (admin ? pend[`todas_${t}`] : pend[t]) || 0
+  const marca = (t) => cuenta(t) > 0 && <span className="badge tab-badge" title={`${cuenta(t)} por revisar`}>{cuenta(t)}</span>
+
   async function ejecutar(ruta, body) {
     try {
       await api(ruta, { method: 'POST', body })
@@ -61,9 +72,9 @@ export default function Solicitudes({ modo = 'jefe' }) {
       <div className="fila" style={{ marginBottom: 14 }}>
         <div className="cal-nav">
           <button style={{ fontWeight: tab === 'vacaciones' ? 700 : 400, color: tab === 'vacaciones' ? 'var(--primary)' : '' }}
-            onClick={() => setTab('vacaciones')}>Vacaciones</button>
+            onClick={() => setTab('vacaciones')}>Vacaciones{marca('vacaciones')}</button>
           <button style={{ fontWeight: tab === 'permisos' ? 700 : 400, color: tab === 'permisos' ? 'var(--primary)' : '' }}
-            onClick={() => setTab('permisos')}>Permisos y home office</button>
+            onClick={() => setTab('permisos')}>Permisos y home office{marca('permisos')}</button>
           {admin && (
             <button style={{ fontWeight: tab === 'consultas' ? 700 : 400, color: tab === 'consultas' ? 'var(--primary)' : '' }}
               onClick={() => setTab('consultas')}>Consultas médicas</button>

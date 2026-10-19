@@ -787,3 +787,5 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .sp-guia summary { cursor: pointer; font-weight: 600; color: var(--primary); }
 .sp-guia ol { padding-left: 20px; line-height: 1.6; margin: 8px 0; }
 @media (max-width: 900px) { .sp-teams-grid { grid-template-columns: 1fr; } }
+
+.tab-badge { margin-left: 6px; vertical-align: 1px; }
