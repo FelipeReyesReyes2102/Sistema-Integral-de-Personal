@@ -113,6 +113,11 @@ def test_envio_y_actualizacion(graph):
     assert sharepoint.procesar_pendientes() == 1
     item = graph["items"]["1"]
     assert item["Title"] == f"VAC-{sol['id']}" and item["Empleado"].startswith("Ana") and item["Dias"] == 6.0
+    from app.database import SessionLocal
+    from app.models import SolicitudVacaciones
+    with SessionLocal() as db:
+        datos = sharepoint.datos_registro("vacaciones", db.get(SolicitudVacaciones, sol["id"]))
+    assert datos["fecha_ingreso"] and datos["dias_periodo"] > 0 and datos["saldo_periodo"] is not None
     assert item["Estatus"] == "Pendiente" and item["FechaInicio"] == f"{lunes}T06:00:00Z"  # medianoche en México
 
     # Validar actualiza el mismo elemento

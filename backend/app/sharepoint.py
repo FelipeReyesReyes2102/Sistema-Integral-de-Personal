@@ -57,7 +57,10 @@ CAMPOS = {
         "folio": ("Folio (VAC-123)", "texto", None), **_COMUNES_INI,
         "fecha_inicio": ("Primer día", "fecha", None), "fecha_fin": ("Último día", "fecha", None),
         "dias": ("Días hábiles", "numero", None), "horas": ("Horas", "numero", None),
-        "periodo": ("Periodo vacacional", "texto", None), "comentario": ("Comentario", "texto", None), **_COMUNES_FIN,
+        "periodo": ("Periodo vacacional", "texto", None), "fecha_ingreso": ("Fecha de ingreso", "fecha", None),
+        "dias_periodo": ("Días generados en el periodo", "numero", None),
+        "saldo_periodo": ("Saldo de días del periodo (después de la solicitud)", "numero", None),
+        "comentario": ("Comentario", "texto", None), **_COMUNES_FIN,
     },
     "permisos": {
         "folio": ("Folio (PER-123)", "texto", None), **_COMUNES_INI,
@@ -87,6 +90,11 @@ SINONIMOS = {
     "motivoderechazo": "motivo_rechazo", "fechadesolicitud": "fecha_solicitud", "fechasolicitud": "fecha_solicitud",
     "revisadopor": "revisado_por", "aprobadopor": "revisado_por", "fechaderevision": "fecha_revision",
     "fechaaprobacion": "fecha_revision", "enlace": "enlace", "link": "enlace",
+    "fechaingreso": "fecha_ingreso", "fechadeingreso": "fecha_ingreso", "ingreso": "fecha_ingreso",
+    "diastotalesgeneradosenelperiodo": "dias_periodo", "diasgenerados": "dias_periodo", "diasdelperiodo": "dias_periodo",
+    "saldodediasdelperiodoindicado": "saldo_periodo", "saldo": "saldo_periodo", "saldodedias": "saldo_periodo",
+    "periodoalquecorrespondenlosdiasatomar": "periodo", "desdeprimerdiadevacaciones": "fecha_inicio",
+    "hastaultimodiadevacaciones": "fecha_fin", "numerodediasadisfrutar": "dias", "diasadisfrutar": "dias",
 }
 TIPOS_COLUMNA = ("text", "number", "currency", "dateTime", "choice", "boolean")
 
@@ -247,7 +255,14 @@ def datos_registro(tipo: str, reg) -> dict:
         "enlace": _enlace(tipo, reg),
     }
     if tipo == "vacaciones":
-        return {**comunes, "folio": f"VAC-{reg.id}", "fecha_inicio": reg.fecha_inicio, "fecha_fin": reg.fecha_fin,
+        saldo = None
+        if reg.periodo is not None:
+            from sqlalchemy.orm import object_session
+            from .services import saldo_periodo
+            saldo = saldo_periodo(object_session(reg), reg.periodo)
+        return {**comunes, "folio": f"VAC-{reg.id}", "fecha_ingreso": u.fecha_ingreso,
+                "dias_periodo": round(saldo.dias_total, 2) if saldo else None,
+                "saldo_periodo": round(saldo.dias_disponible, 2) if saldo else None, "fecha_inicio": reg.fecha_inicio, "fecha_fin": reg.fecha_fin,
                 "dias": reg.dias_habiles, "horas": reg.horas, "periodo": reg.periodo.nombre if reg.periodo else None,
                 "comentario": reg.comentario}
     return {**comunes, "folio": f"PER-{reg.id}", "tipo": reg.tipo, "fecha": reg.fecha, "fecha_fin": reg.fecha_fin,
