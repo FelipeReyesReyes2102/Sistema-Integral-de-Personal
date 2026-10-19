@@ -45,7 +45,7 @@ _COMUNES_INI = {
     "empleado": ("Empleado", "texto", None), "numero_empleado": ("No. de nómina", "texto", None),
     "correo": ("Correo del empleado", "texto", None), "puesto": ("Puesto", "texto", None),
     "departamento": ("Departamento", "texto", None), "sede": ("Sede", "texto", None),
-    "jefe": ("Jefe / aprobador", "texto", None),
+    "jefe": ("Jefe / aprobador", "texto", None), "correo_jefe": ("Correo del jefe / aprobador", "texto", None),
 }
 _COMUNES_FIN = {
     "estado": ("Estado", "texto", ESTADOS), "motivo_rechazo": ("Motivo de rechazo", "texto", None),
@@ -75,7 +75,8 @@ SINONIMOS = {
     "numerodeempleado": "numero_empleado", "noempleado": "numero_empleado", "numeroempleado": "numero_empleado",
     "nodenomina": "numero_empleado", "correo": "correo", "email": "correo", "puesto": "puesto",
     "departamento": "departamento", "area": "departamento", "sede": "sede", "ubicacion": "sede", "jefe": "jefe",
-    "jefeinmediato": "jefe", "aprobador": "jefe", "fechainicio": "fecha_inicio", "fechadeinicio": "fecha_inicio",
+    "jefeinmediato": "jefe", "aprobador": "jefe", "correojefe": "correo_jefe", "correodeljefe": "correo_jefe",
+    "emailjefe": "correo_jefe", "correoaprobador": "correo_jefe", "correodelaprobador": "correo_jefe", "fechainicio": "fecha_inicio", "fechadeinicio": "fecha_inicio",
     "desde": "fecha_inicio", "inicio": "fecha_inicio", "fechafin": "fecha_fin", "fechadefin": "fecha_fin",
     "fechatermino": "fecha_fin", "hasta": "fecha_fin", "fin": "fecha_fin", "dias": "dias", "diashabiles": "dias",
     "diassolicitados": "dias", "horas": "horas", "periodo": "periodo", "comentario": "comentario",
@@ -240,6 +241,7 @@ def datos_registro(tipo: str, reg) -> dict:
         "empleado": u.nombre, "numero_empleado": u.numero_empleado, "correo": u.email or u.email_personal,
         "puesto": u.puesto, "departamento": getattr(reg, "departamento", None) or u.departamento,
         "sede": u.sede.nombre if u.sede else None, "jefe": reg.aprobador.nombre if reg.aprobador else None,
+        "correo_jefe": (reg.aprobador.email or reg.aprobador.email_personal) if reg.aprobador else None,
         "estado": reg.estado, "motivo_rechazo": reg.motivo_rechazo, "fecha_solicitud": reg.creado,
         "revisado_por": reg.revisado_por.nombre if reg.revisado_por else None, "fecha_revision": reg.fecha_revision,
         "enlace": _enlace(tipo, reg),
@@ -436,6 +438,101 @@ def encolar_existentes(db: Session, lista: ListaSharePoint, desde: date) -> int:
                                    actualizado=_ahora()))
             n += 1
     return n
+
+
+# ---------------- Aprobación en Teams (Power Automate) ----------------
+APROBADO_DEF, RECHAZADO_DEF = "Approve", "Reject"
+
+
+def _valor_campo(v):
+    if isinstance(v, list):
+        v = v[0] if v else None
+    if isinstance(v, dict):  # columnas de persona o búsqueda devuelven objetos
+        v = v.get("Email") or v.get("LookupValue")
+    return str(v).strip() if v not in (None, "") else None
+
+
+def decision_de(lista: ListaSharePoint, item: dict, reg, db: Session):
+    """(estado nuevo, quién resolvió, comentario, nota) a partir del elemento de la lista. Sin decisión: (None, ...)."""
+    from .models import RECHAZADO, VALIDADO
+    from .services import puede_revisar
+    campos = item.get("fields") or {}
+    valor = _valor_campo(campos.get(lista.col_decision))
+    if not valor:
+        return None, None, None, None
+    v = normalizar(valor)
+    if v in {normalizar(lista.val_aprobado or APROBADO_DEF), "approve", "aprobado", "aprobada", "aprobar"}:
+        nuevo = VALIDADO
+    elif v in {normalizar(lista.val_rechazado or RECHAZADO_DEF), "reject", "rechazado", "rechazada", "rechazar"}:
+        nuevo = RECHAZADO
+    else:
+        return None, None, None, f"Decisión no reconocida en la columna {lista.col_decision}: «{valor[:60]}»."
+    if lista.cuenta_flujo:
+        quien = (item.get("lastModifiedBy") or {}).get("user") or {}
+        if (quien.get("email") or "").lower() != lista.cuenta_flujo.strip().lower():
+            otro = quien.get("displayName") or quien.get("email") or "otra cuenta"
+            return None, None, None, f"Decisión ignorada: la escribió {otro} y no la cuenta del flujo ({lista.cuenta_flujo})."
+    revisor = reg.aprobador
+    correo = _valor_campo(campos.get(lista.col_respondio)) if lista.col_respondio else None
+    if correo:
+        c = correo.lower()
+        revisor = db.scalar(select(Usuario).where((Usuario.email == c) | (Usuario.email_personal == c)))
+        if not revisor or not revisor.activo or not puede_revisar(revisor, reg):
+            return None, None, None, f"Decisión ignorada: {correo} no puede aprobar esta solicitud en SIP-O."
+    if revisor is None:
+        return None, None, None, "Decisión ignorada: la solicitud no tiene jefe aprobador y no se indicó quién respondió."
+    comentario = _valor_campo(campos.get(lista.col_comentario)) if lista.col_comentario else None
+    return nuevo, revisor, comentario, None
+
+
+def revisar_decisiones() -> int:
+    """Lee en las listas con aprobación en Teams la decisión de las solicitudes pendientes y la aplica."""
+    from . import correo
+    from .bitacora import asignar_actor
+    from .database import SessionLocal
+    from .models import RECHAZADO, SOLICITADO, VALIDADO
+    aplicadas = 0
+    with SessionLocal() as db:
+        listas = db.scalars(select(ListaSharePoint).where(ListaSharePoint.activo, ListaSharePoint.aprobacion_teams)).all()
+        pendientes = []
+        for lista in listas:
+            M = _modelo(lista.tipo)
+            filas = db.execute(select(EnvioSharePoint, M).join(M, M.id == EnvioSharePoint.registro_id).where(
+                EnvioSharePoint.lista_id == lista.id, EnvioSharePoint.item_id.is_not(None), M.estado == SOLICITADO)).all()
+            pendientes += [(lista, env, reg) for env, reg in filas]
+        for lista, env, reg in pendientes:
+            sel = ",".join(c for c in (lista.col_decision, lista.col_comentario, lista.col_respondio) if c)
+            try:
+                r = _graph("GET", f"sites/{lista.sitio_id}/lists/{lista.lista_id}/items/{env.item_id}"
+                                  f"?$select=id,lastModifiedBy&$expand=fields($select={sel})")
+            except ErrorSharePoint as e:
+                log.warning("SharePoint: no se pudo leer la decisión de %s: %s", env.item_id, e.mensaje[:200])
+                continue
+            if r.status_code != 200:
+                continue
+            nuevo, revisor, comentario, nota = decision_de(lista, r.json(), reg, db)
+            if nota:
+                if env.decision_nota != nota:
+                    env.decision_nota = nota
+                    db.commit()
+                continue
+            if not nuevo:
+                continue
+            asignar_actor(db, revisor, "Teams (Power Automate)")
+            reg.estado, reg.revisado_por_id, reg.fecha_revision = nuevo, revisor.id, datetime.now()
+            if nuevo == RECHAZADO:
+                reg.motivo_rechazo = comentario or "Rechazado desde Teams"
+            elif comentario and lista.tipo == "permisos":
+                reg.observaciones = comentario
+            env.decision_nota = None
+            db.commit()
+            db.info.pop("bitacora_actor", None)
+            aplicadas += 1
+            if lista.tipo == "permisos" and nuevo == VALIDADO:
+                correo.notificar_permiso(reg.id, "permiso_autorizado")
+    if aplicadas and not SEGUNDO_PLANO:
+        procesar_pendientes()
+    return aplicadas
 
 
 def activar():

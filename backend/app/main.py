@@ -30,9 +30,11 @@ async def lifespan(_: FastAPI):
     tarea = None
     if os.environ.get("SIP_TAREAS", "1") == "1":  # SIP_TAREAS=0 para desactivarlas (p. ej. en workers extra)
         tarea = asyncio.create_task(_tareas_programadas())
+        frecuente = asyncio.create_task(_decisiones_teams())
     yield
     if tarea:
         tarea.cancel()
+        frecuente.cancel()
 
 
 async def _tareas_programadas():
@@ -44,6 +46,16 @@ async def _tareas_programadas():
         except Exception:  # noqa: BLE001 - la tarea nunca debe tumbar el servidor
             logging.getLogger("sip.tareas").exception("Error en tarea programada")
         await asyncio.sleep(600)
+
+
+async def _decisiones_teams():
+    """Cada minuto: aplica las aprobaciones o rechazos hechos en Teams (escritos por Power Automate en SharePoint)."""
+    while True:
+        await asyncio.sleep(60)
+        try:
+            await run_in_threadpool(sharepoint.revisar_decisiones)
+        except Exception:  # noqa: BLE001
+            logging.getLogger("sip.tareas").exception("Error al revisar decisiones de Teams")
 
 
 def _refrescar_config(forzar: bool = False):

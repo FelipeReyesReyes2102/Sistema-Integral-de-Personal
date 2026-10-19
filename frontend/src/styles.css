@@ -779,3 +779,11 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .sp-error { padding: 4px 0; border-top: 1px solid #f9dcdb; }
 .sp-error div { color: #b42318; }
 @media (max-width: 640px) { .sp-url { flex-direction: column; } }
+
+.sp-teams { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: #f3f1fb; border: 1px solid #ddd8f3; }
+.sp-teams .checkbox { display: inline-flex; align-items: center; gap: 6px; }
+.sp-teams-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 12px; }
+.sp-guia { margin-top: 10px; font-size: 13px; }
+.sp-guia summary { cursor: pointer; font-weight: 600; color: var(--primary); }
+.sp-guia ol { padding-left: 20px; line-height: 1.6; margin: 8px 0; }
+@media (max-width: 900px) { .sp-teams-grid { grid-template-columns: 1fr; } }

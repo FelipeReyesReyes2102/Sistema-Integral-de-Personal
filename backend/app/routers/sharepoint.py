@@ -25,6 +25,14 @@ class GuardarIn(BaseModel):
     activo: bool
     mapeo: dict[str, str]
     valores: dict[str, dict[str, str]] = {}
+    # Aprobación en Teams (Power Automate)
+    aprobacion_teams: bool = False
+    col_decision: str | None = None
+    val_aprobado: str | None = None
+    val_rechazado: str | None = None
+    col_comentario: str | None = None
+    col_respondio: str | None = None
+    cuenta_flujo: str | None = None
 
 
 class ExistentesIn(BaseModel):
@@ -64,6 +72,13 @@ def _estado(db: Session, sede: Sede, tipo: str) -> dict:
                     "error": cuentas.get("error", 0)},
         "errores": [{"folio": f"{'VAC' if tipo == 'vacaciones' else 'PER'}-{e.registro_id}", "error": e.error,
                      "intentos": e.intentos, "fecha": e.actualizado} for e in errores],
+        "teams": {"activo": l.aprobacion_teams, "col_decision": l.col_decision,
+                  "val_aprobado": l.val_aprobado or sharepoint.APROBADO_DEF, "val_rechazado": l.val_rechazado or sharepoint.RECHAZADO_DEF,
+                  "col_comentario": l.col_comentario, "col_respondio": l.col_respondio, "cuenta_flujo": l.cuenta_flujo},
+        "notas_teams": [{"folio": f"{'VAC' if tipo == 'vacaciones' else 'PER'}-{e.registro_id}", "nota": e.decision_nota}
+                        for e in db.scalars(select(EnvioSharePoint).where(EnvioSharePoint.lista_id == l.id,
+                                                                          EnvioSharePoint.decision_nota.is_not(None))
+                                            .order_by(EnvioSharePoint.id.desc()).limit(10))],
     }
 
 
@@ -130,12 +145,42 @@ def guardar(tipo: str, data: GuardarIn, db: Session = Depends(get_db), admin: Us
             raise HTTPException(422, f"Asigna un dato a las columnas obligatorias: {', '.join(faltan)}.")
         if not mapeo:
             raise HTTPException(422, "Asigna al menos un dato a una columna.")
+    _validar_teams(data, columnas, mapeo)
     l.mapeo = json.dumps(mapeo, ensure_ascii=False)
     l.valores = json.dumps({k: {a: b for a, b in v.items() if b} for k, v in data.valores.items() if k in mapeo},
                            ensure_ascii=False)
     l.activo, l.actualizado, l.actualizado_por_id = data.activo, ahora(), admin.id
+    l.aprobacion_teams = data.aprobacion_teams
+    l.col_decision, l.col_comentario, l.col_respondio = data.col_decision or None, data.col_comentario or None, data.col_respondio or None
+    l.val_aprobado = (data.val_aprobado or "").strip() or None
+    l.val_rechazado = (data.val_rechazado or "").strip() or None
+    l.cuenta_flujo = (data.cuenta_flujo or "").strip().lower() or None
     db.commit()
     return _estado(db, sede, tipo)
+
+
+def _validar_teams(data: GuardarIn, columnas: dict, mapeo: dict):
+    if not data.aprobacion_teams:
+        return
+    if not data.activo:
+        raise HTTPException(422, "Para aprobar en Teams, activa también el envío de solicitudes a la lista.")
+    if not data.col_decision:
+        raise HTTPException(422, "Elige la columna donde el flujo escribirá la decisión (Approve / Reject).")
+    for etiqueta, col in (("decisión", data.col_decision), ("comentarios", data.col_comentario), ("quién respondió", data.col_respondio)):
+        if not col:
+            continue
+        c = columnas.get(col)
+        if not c or c["tipo"] not in ("text", "choice"):
+            raise HTTPException(422, f"La columna de {etiqueta} debe ser una columna de texto u opción de la lista.")
+        if col in mapeo:
+            raise HTTPException(422, f"La columna «{c['titulo']}» la escribe el flujo: quítale el dato de SIP-O.")
+    if len({data.col_decision, data.col_comentario, data.col_respondio} - {None, ""}) < \
+            len([x for x in (data.col_decision, data.col_comentario, data.col_respondio) if x]):
+        raise HTTPException(422, "Usa una columna distinta para la decisión, los comentarios y quién respondió.")
+    falta = [e for k, e in (("correo_jefe", "Correo del jefe / aprobador"), ("estado", "Estado")) if k not in mapeo.values()]
+    if falta:
+        raise HTTPException(422, f"Para aprobar en Teams, envía a la lista estos datos: {', '.join(falta)} "
+                                 "(el flujo los usa para saber a quién pedir la aprobación y si está pendiente).")
 
 
 @router.post("/{tipo}/existentes")

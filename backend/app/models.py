@@ -442,6 +442,15 @@ class ListaSharePoint(Base):
     activo: Mapped[bool] = mapped_column(Boolean, default=False)
     actualizado: Mapped[datetime | None] = mapped_column(DateTime)
     actualizado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    # Aprobación en Teams: un flujo de Power Automate pide la aprobación al jefe y escribe la decisión en la lista;
+    # SIP-O la lee y la aplica. Columnas de la lista que escribe el flujo (SIP-O no las llena):
+    aprobacion_teams: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    col_decision: Mapped[str | None] = mapped_column(String(120))    # "Approve" / "Reject" (resultado del flujo)
+    val_aprobado: Mapped[str | None] = mapped_column(String(120))
+    val_rechazado: Mapped[str | None] = mapped_column(String(120))
+    col_comentario: Mapped[str | None] = mapped_column(String(120))  # comentarios del jefe
+    col_respondio: Mapped[str | None] = mapped_column(String(120))   # correo de quien respondió
+    cuenta_flujo: Mapped[str | None] = mapped_column(String(200))    # cuenta con la que corre el flujo (verificación)
 
     sede: Mapped[Sede] = relationship()
 
@@ -461,6 +470,7 @@ class EnvioSharePoint(Base):
     error: Mapped[str | None] = mapped_column(Text)
     actualizado: Mapped[datetime | None] = mapped_column(DateTime)
     enviado: Mapped[datetime | None] = mapped_column(DateTime)
+    decision_nota: Mapped[str | None] = mapped_column(Text)  # p. ej. por qué se ignoró una decisión de Teams
 
     lista: Mapped[ListaSharePoint] = relationship()
 

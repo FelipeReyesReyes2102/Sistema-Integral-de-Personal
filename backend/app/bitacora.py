@@ -55,7 +55,9 @@ CAMPOS = {
     "horas": "Horas", "estado": "Estado", "comentario": "Comentario", "motivo_rechazo": "Motivo de rechazo", "firma": "Firma",
     "aprobador_id": "Aprobador", "revisado_por_id": "Revisado por", "periodo_id": "Periodo", "usuario_id": "Empleado",
     "sede_id": "Sede", "tipo": "Tipo", "url": "URL", "sitio_nombre": "Sitio", "lista_nombre": "Lista",
-    "mapeo": "Columnas y datos", "valores": "Equivalencia de opciones",
+    "mapeo": "Columnas y datos", "valores": "Equivalencia de opciones", "aprobacion_teams": "Aprobación en Teams",
+    "col_decision": "Columna de decisión", "val_aprobado": "Valor de aprobado", "val_rechazado": "Valor de rechazado",
+    "col_comentario": "Columna de comentarios", "col_respondio": "Columna de quién respondió", "cuenta_flujo": "Cuenta del flujo",
 }
 # Llaves foráneas que se muestran por nombre
 NOMBRES_FK = {"usuarios": "nombre", "turnos": "nombre", "sedes": "nombre", "grupos": "nombre", "tipos_jornada": "nombre"}

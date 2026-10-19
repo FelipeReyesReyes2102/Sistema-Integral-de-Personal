@@ -18,6 +18,10 @@ COLUMNAS = [
     {"name": "Dias", "displayName": "Días", "number": {}},
     {"name": "Estatus", "displayName": "Estatus", "choice": {"choices": ["Pendiente", "Aprobado", "Rechazado", "Cancelado"]}},
     {"name": "Jefe", "displayName": "Jefe inmediato", "personOrGroup": {}},
+    {"name": "CorreoJefe", "displayName": "Correo del jefe", "text": {}},
+    {"name": "Decision", "displayName": "Decisión Teams", "text": {}},
+    {"name": "ComentarioTeams", "displayName": "Comentario Teams", "text": {}},
+    {"name": "Respondio", "displayName": "Respondió", "text": {}},
     {"name": "Modified", "displayName": "Modificado", "readOnly": True, "dateTime": {}},
 ]
 
@@ -29,7 +33,7 @@ def graph(monkeypatch):
                      microsoft_graph_url="https://graph.test/v1.0").items():
         monkeypatch.setattr(settings, k, v)
     monkeypatch.setattr(sharepoint, "SEGUNDO_PLANO", False)
-    estado = {"items": {}, "llamadas": [], "negar": False}
+    estado = {"items": {}, "llamadas": [], "negar": False, "modificado": {"user": {"email": "flujos@o-tek.com"}}}
 
     def manejador(req: httpx.Request):
         p = req.url.path
@@ -51,6 +55,11 @@ def graph(monkeypatch):
             estado["items"][n] = json.loads(req.content)["fields"]
             estado["llamadas"].append(("POST", n))
             return httpx.Response(201, json={"id": n})
+        if p.startswith("/v1.0/sites/sitio1/lists/lista1/items/") and req.method == "GET":
+            n = p.split("/")[-1]
+            if n not in estado["items"]:
+                return httpx.Response(404)
+            return httpx.Response(200, json={"id": n, "lastModifiedBy": estado["modificado"], "fields": estado["items"][n]})
         if p.startswith("/v1.0/sites/sitio1/lists/lista1/items/") and req.method == "PATCH":
             import json
             n = p.split("/")[-2]
@@ -81,7 +90,7 @@ def test_envio_y_actualizacion(graph):
     assert cfg["lista_nombre"] == "Vacaciones SIP" and "Modified" not in {c["nombre"] for c in cfg["columnas"]}
     # Mapeo sugerido por nombre y equivalencias de opciones (Validado -> Aprobado)
     assert cfg["mapeo"] == {"Title": "folio", "Empleado": "empleado", "FechaInicio": "fecha_inicio", "Dias": "dias",
-                            "Estatus": "estado"}
+                            "Estatus": "estado", "CorreoJefe": "correo_jefe"}
     assert cfg["valores"]["Estatus"]["validado"] == "Aprobado" and cfg["valores"]["Estatus"]["solicitado"] == "Pendiente"
 
     # Columna de persona no se puede llenar; Título es obligatoria
@@ -133,3 +142,76 @@ def test_envio_y_actualizacion(graph):
 
     adm.put(f"/api/periodos/{p['id']}/ajuste", json={"ajuste_horas": 0, "nota_ajuste": None})
     assert adm.delete("/api/sharepoint/vacaciones").json()["conectada"] is False
+
+
+def _solicitud(adm, ana, semanas):
+    p = ana.get("/api/periodos").json()[0]
+    adm.put(f"/api/periodos/{p['id']}/ajuste", json={"ajuste_horas": 80, "nota_ajuste": "prueba teams"})
+    d = date.today() + timedelta(weeks=semanas)
+    lunes = d - timedelta(days=d.weekday())
+    r = ana.post("/api/vacaciones", json={"periodo_id": p["id"], "fecha_inicio": str(lunes),
+                                          "fecha_fin": str(lunes + timedelta(days=7)), "firma": FIRMA, "enviar": True})
+    assert r.status_code == 201, r.text
+    sharepoint.procesar_pendientes()
+    return r.json(), p
+
+
+def test_aprobacion_en_teams(graph):
+    adm, ana = login("admin@empresa.com", "Admin123"), login("ana@empresa.com", "Cambiar123")
+    cfg = adm.put("/api/sharepoint/vacaciones/conectar", json={"url": URL}).json()
+    teams = {"aprobacion_teams": True, "col_decision": "Decision", "col_comentario": "ComentarioTeams",
+             "col_respondio": "Respondio", "cuenta_flujo": "Flujos@o-tek.com"}
+    base = {"activo": True, "mapeo": cfg["mapeo"], "valores": cfg["valores"]}
+    # Validaciones: la columna de decisión no puede llevar datos de SIP-O; se necesita el correo del jefe
+    malo = adm.put("/api/sharepoint/vacaciones", json={**base, **teams, "mapeo": {**cfg["mapeo"], "Decision": "comentario"}})
+    assert malo.status_code == 422 and "flujo" in malo.json()["detail"]
+    sin_correo = {k: v for k, v in cfg["mapeo"].items() if v != "correo_jefe"}
+    assert "Correo del jefe" in adm.put("/api/sharepoint/vacaciones", json={**base, **teams, "mapeo": sin_correo}).json()["detail"]
+    r = adm.put("/api/sharepoint/vacaciones", json={**base, **teams})
+    assert r.status_code == 200, r.text
+    assert r.json()["teams"]["activo"] and r.json()["teams"]["val_aprobado"] == "Approve"
+
+    # 1) Se aprueba en Teams: el flujo escribe Approve y el correo del jefe
+    sol, p = _solicitud(adm, ana, 14)
+    item_id = next(k for k, v in graph["items"].items() if v["Title"] == f"VAC-{sol['id']}")
+    jefe = adm.get(f"/api/usuarios/{sol['aprobador_id']}").json()
+    assert graph["items"][item_id]["CorreoJefe"] == jefe["email"]
+    assert sharepoint.revisar_decisiones() == 0  # aún sin decisión
+    graph["items"][item_id].update({"Decision": "Approve", "Respondio": jefe["email"], "ComentarioTeams": "Disfruta"})
+    assert sharepoint.revisar_decisiones() == 1
+    s = adm.get(f"/api/vacaciones/{sol['id']}").json()
+    assert s["estado"] == "validado"
+    assert graph["items"][item_id]["Estatus"] == "Aprobado"  # SIP-O actualizó la lista
+    e = adm.get("/api/bitacora", params={"seccion": "vacaciones", "entidad": "Solicitud de vacaciones"}).json()["items"][0]
+    assert e["accion"] == "estado" and e["actor_nombre"] == jefe["nombre"] and e["ip"] == "Teams (Power Automate)"
+    adm.post(f"/api/vacaciones/{sol['id']}/cancelar")
+    sharepoint.procesar_pendientes()
+
+    # 2) Rechazo en Teams con comentario
+    sol, _ = _solicitud(adm, ana, 20)
+    item_id = next(k for k, v in graph["items"].items() if v["Title"] == f"VAC-{sol['id']}")
+    graph["items"][item_id].update({"Decision": "Reject", "Respondio": jefe["email"], "ComentarioTeams": "Cierre de mes"})
+    sharepoint.revisar_decisiones()
+    s = adm.get(f"/api/vacaciones/{sol['id']}").json()
+    assert s["estado"] == "rechazado" and s["motivo_rechazo"] == "Cierre de mes"
+
+    # 3) Seguridad: alguien edita la columna a mano (no es la cuenta del flujo) o responde otra persona
+    sol, _ = _solicitud(adm, ana, 26)
+    item_id = next(k for k, v in graph["items"].items() if v["Title"] == f"VAC-{sol['id']}")
+    graph["items"][item_id].update({"Decision": "Approve", "Respondio": jefe["email"]})
+    graph["modificado"] = {"user": {"email": "ana@empresa.com", "displayName": "Ana"}}
+    assert sharepoint.revisar_decisiones() == 0
+    assert adm.get(f"/api/vacaciones/{sol['id']}").json()["estado"] == "solicitado"
+    notas = adm.get("/api/sharepoint").json()["listas"]["vacaciones"]["notas_teams"]
+    assert "no la cuenta del flujo" in notas[0]["nota"]
+    graph["modificado"] = {"user": {"email": "flujos@o-tek.com"}}
+    graph["items"][item_id]["Respondio"] = "ana@empresa.com"  # la propia empleada no puede aprobarse
+    assert sharepoint.revisar_decisiones() == 0
+    assert "no puede aprobar" in adm.get("/api/sharepoint").json()["listas"]["vacaciones"]["notas_teams"][0]["nota"]
+    # Aprobada desde SIP-O mientras tanto: la decisión de Teams ya no se aplica
+    adm.post(f"/api/vacaciones/{sol['id']}/cancelar")
+    graph["items"][item_id]["Respondio"] = jefe["email"]
+    assert sharepoint.revisar_decisiones() == 0
+
+    adm.put(f"/api/periodos/{p['id']}/ajuste", json={"ajuste_horas": 0, "nota_ajuste": None})
+    adm.delete("/api/sharepoint/vacaciones")

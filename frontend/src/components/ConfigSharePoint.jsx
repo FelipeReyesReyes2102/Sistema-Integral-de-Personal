@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CalendarCheck, Clock, ExternalLink, Link2, RefreshCw, Save, Send, Share2, Unlink } from 'lucide-react'
+import { CalendarCheck, Clock, ExternalLink, Link2, MessageSquareMore, RefreshCw, Save, Send, Share2, Unlink } from 'lucide-react'
 import { api } from '../api'
 import { fmtFecha } from '../utils'
 
@@ -12,12 +12,14 @@ function Lista({ datos, onCambio }) {
   const [mapeo, setMapeo] = useState(datos.mapeo || {})
   const [valores, setValores] = useState(datos.valores || {})
   const [activo, setActivo] = useState(!!datos.activo)
+  const [teams, setTeams] = useState(datos.teams || {})
   const [desde, setDesde] = useState(`${new Date().getFullYear()}-01-01`)
   const [msg, setMsg] = useState(null)
   const [ocupado, setOcupado] = useState('')
 
   useEffect(() => {
     setUrl(datos.url || ''); setMapeo(datos.mapeo || {}); setValores(datos.valores || {}); setActivo(!!datos.activo)
+    setTeams(datos.teams || {})
   }, [datos])
 
   const campos = Object.fromEntries(datos.campos.map((c) => [c.clave, c]))
@@ -37,7 +39,10 @@ function Lista({ datos, onCambio }) {
   }
   const conectar = () => correr('conectar', () => api(`/sharepoint/${tipo}/conectar`, { method: 'PUT', body: { url } }),
     'Lista conectada. Revisa qué dato va en cada columna, activa el envío y guarda.')
-  const guardar = () => correr('guardar', () => api(`/sharepoint/${tipo}`, { method: 'PUT', body: { activo, mapeo, valores } }),
+  const guardar = () => correr('guardar', () => api(`/sharepoint/${tipo}`, { method: 'PUT', body: {
+    activo, mapeo, valores, aprobacion_teams: !!teams.activo, col_decision: teams.col_decision || null,
+    val_aprobado: teams.val_aprobado, val_rechazado: teams.val_rechazado, col_comentario: teams.col_comentario || null,
+    col_respondio: teams.col_respondio || null, cuenta_flujo: teams.cuenta_flujo || null } }),
     activo ? 'Guardado. Las solicitudes se enviarán a la lista al enviarse y se actualizarán con cada cambio.' : 'Guardado (envío desactivado).')
   const existentes = () => correr('existentes', () => api(`/sharepoint/${tipo}/existentes`, { method: 'POST', body: { desde } }),
     (r) => (r.encolados ? `${r.encolados} solicitud(es) en cola; se envían en segundo plano.` : 'No hay solicitudes nuevas que enviar desde esa fecha.'))
@@ -124,6 +129,8 @@ function Lista({ datos, onCambio }) {
             <button className="btn btn-primary btn-sm" onClick={guardar} disabled={!!ocupado}><Save size={14} /> Guardar</button>
           </div>
 
+          <AprobacionTeams datos={datos} teams={teams} setTeams={setTeams} mapeo={mapeo} valores={valores} />
+
           {datos.activo && (
             <div className="sp-existentes">
               <span>Enviar también las solicitudes que ya existen desde</span>
@@ -145,6 +152,83 @@ function Lista({ datos, onCambio }) {
         </>
       )}
       {msg && <div className={`alerta ${msg.ok ? 'ok' : 'error'}`}>{msg.t}</div>}
+    </div>
+  )
+}
+
+/** Aprobación desde Teams: Power Automate pide la aprobación al jefe y escribe la decisión en la lista; SIP-O la aplica. */
+function AprobacionTeams({ datos, teams, setTeams, mapeo, valores }) {
+  const set = (k) => (e) => setTeams({ ...teams, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
+  const libres = datos.columnas.filter((c) => ['text', 'choice'].includes(c.tipo) && !mapeo[c.nombre])
+  const titulo = (n) => datos.columnas.find((c) => c.nombre === n)?.titulo || n
+  const colDe = (campo) => Object.entries(mapeo).find(([, v]) => v === campo)?.[0]
+  const colEstado = colDe('estado')
+  const pendiente = (colEstado && valores[colEstado]?.solicitado) || 'Solicitado'
+  const selCol = (k, opcional) => (
+    <select value={teams[k] || ''} onChange={set(k)}>
+      <option value="">{opcional ? '— No usar —' : '— Elige una columna —'}</option>
+      {libres.map((c) => <option key={c.nombre} value={c.nombre}>{c.titulo}</option>)}
+    </select>
+  )
+  const nombre = datos.tipo === 'vacaciones' ? 'Vacaciones' : 'Permiso'
+  return (
+    <div className="sp-teams">
+      <label className="checkbox"><input type="checkbox" checked={!!teams.activo} onChange={set('activo')} />
+        <MessageSquareMore size={15} /> <b>El jefe aprueba o rechaza desde Teams</b> (con un flujo de Power Automate)</label>
+      {teams.activo && (
+        <>
+          <p className="muted" style={{ fontSize: 12, margin: '6px 0 8px' }}>
+            El flujo pide la aprobación en Teams (y Outlook) al <b>correo del jefe</b> y escribe la respuesta en la lista. SIP-O la lee
+            cada minuto, la aplica como si el jefe la hubiera aprobado en la aplicación y la registra en la bitácora. También se puede seguir
+            aprobando desde SIP-O; si se resuelve primero aquí, la respuesta de Teams se ignora.
+          </p>
+          <div className="sp-teams-grid">
+            <label className="campo">Columna donde el flujo escribe la decisión *{selCol('col_decision')}</label>
+            <label className="campo">Valor de aprobado<input value={teams.val_aprobado || ''} onChange={set('val_aprobado')} placeholder="Approve" /></label>
+            <label className="campo">Valor de rechazado<input value={teams.val_rechazado || ''} onChange={set('val_rechazado')} placeholder="Reject" /></label>
+            <label className="campo">Columna de comentarios del jefe{selCol('col_comentario', true)}</label>
+            <label className="campo">Columna de quién respondió (correo) — recomendada{selCol('col_respondio', true)}</label>
+            <label className="campo">Cuenta con la que corre el flujo — recomendada
+              <input type="email" value={teams.cuenta_flujo || ''} onChange={set('cuenta_flujo')} placeholder="flujos@o-tek.com" />
+            </label>
+          </div>
+          <p className="muted" style={{ fontSize: 11, margin: '4px 0 0' }}>
+            Por seguridad, SIP-O solo acepta la decisión si la escribió la cuenta del flujo y si quien respondió es el jefe aprobador
+            (o GH de la sede). Da permiso de edición de la lista solo a esa cuenta y a GH.
+          </p>
+          {!libres.length && <div className="alerta error">Crea en la lista columnas de texto para la decisión, los comentarios y quién respondió.</div>}
+          {datos.notas_teams?.length > 0 && (
+            <div className="sp-errores">
+              <b>Decisiones de Teams no aplicadas</b>
+              {datos.notas_teams.map((n) => <div key={n.folio} className="sp-error"><b>{n.folio}</b><div>{n.nota}</div></div>)}
+            </div>
+          )}
+          <details className="sp-guia">
+            <summary>Cómo crear el flujo en Power Automate (paso a paso)</summary>
+            <ol>
+              <li>En la lista <b>{datos.lista_nombre}</b> crea columnas de <i>una línea de texto</i> para la decisión, los comentarios y
+                quién respondió (p. ej. «Decisión Teams», «Comentario Teams», «Respondió») y elígelas arriba. Asegúrate de que SIP-O
+                envíe <b>Correo del jefe / aprobador</b> y <b>Estado</b> a alguna columna.</li>
+              <li>En <b>make.powerautomate.com</b>: Crear → <i>Flujo de nube automatizado</i> → disparador de SharePoint
+                <b> «Cuando se crea un elemento»</b>, con el sitio <b>{datos.sitio_nombre}</b> y la lista <b>{datos.lista_nombre}</b>.</li>
+              <li>Agrega una <b>Condición</b>: <i>{colEstado ? titulo(colEstado) : 'Estado'}</i> es igual a <b>{pendiente}</b>
+                (así no se piden aprobaciones del historial ya resuelto). Lo siguiente va en la rama <i>Sí</i>.</li>
+              <li>Acción <b>Aprobaciones → «Iniciar y esperar una aprobación»</b>: tipo <i>Aprobar/Rechazar: primero en responder</i>;
+                Título <i>{nombre} · {titulo(colDe('empleado') || 'Empleado')} · {titulo(colDe('folio') || 'Title')}</i>; Asignado a: la
+                columna <b>{colDe('correo_jefe') ? titulo(colDe('correo_jefe')) : 'Correo del jefe'}</b>; en Detalles pon las fechas y los
+                días; Vínculo del elemento: <i>https://sip-o.otek.internal/</i> con el texto «Abrir SIP-O».</li>
+              <li>Acción <b>SharePoint → «Actualizar elemento»</b> (mismo sitio, lista e <i>Id</i> del disparador):
+                {' '}<b>{teams.col_decision ? titulo(teams.col_decision) : 'Decisión'}</b> = <i>Resultado</i> (Outcome)
+                {teams.col_comentario && <>; <b>{titulo(teams.col_comentario)}</b> = <i>Respuestas Comentarios</i></>}
+                {teams.col_respondio && <>; <b>{titulo(teams.col_respondio)}</b> = <i>Respuestas Correo electrónico del aprobador</i></>}.
+                Si pide Título, usa el Título del disparador. Power Automate puede envolverlo en «Aplicar a cada uno»: es normal.</li>
+              <li>Guarda y prueba con una solicitud real. La cuenta de la conexión de SharePoint del flujo es la <b>cuenta del flujo</b> de arriba.
+                El resultado llega en inglés (<i>Approve</i>/<i>Reject</i>); si lo traduces, cambia aquí los valores.</li>
+            </ol>
+            <p className="muted" style={{ fontSize: 11 }}>Una aprobación de Power Automate espera hasta 30 días; si vence, la solicitud sigue pendiente en SIP-O.</p>
+          </details>
+        </>
+      )}
     </div>
   )
 }

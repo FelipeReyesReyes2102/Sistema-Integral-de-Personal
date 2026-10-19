@@ -89,13 +89,13 @@ def test_jefe_aprueba_y_ve_su_equipo():
     # Busca 4 días laborales seguidos dentro del ciclo 4x4 de Carlos
     periodo = carlos.get("/api/periodos").json()[0]
     inicio = date.today() + timedelta(days=20)
-    for _ in range(8):
+    for _ in range(40):
         calc = carlos.post("/api/vacaciones/calcular", json={
             "periodo_id": periodo["id"], "fecha_inicio": str(inicio), "fecha_fin": str(inicio + timedelta(days=3))}).json()
         if not calc["errores"] and calc["dias_habiles"] == 4:  # 4 días laborales seguidos del ciclo 4x4
             break
         inicio += timedelta(days=1)
-    assert not calc["errores"], calc
+    assert not calc["errores"] and calc["dias_habiles"] == 4, calc
     r = carlos.post("/api/vacaciones", json={
         "periodo_id": periodo["id"], "fecha_inicio": str(inicio), "fecha_fin": str(inicio + timedelta(days=3)),
         "enviar": True})
