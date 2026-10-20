@@ -111,7 +111,7 @@ a { color: var(--primary); }
 <header class="portada">
   <div class="marca"><span class="sol" aria-hidden="true"></span> SIP-O · Sistema Integral de Personal · O-tek</div>
   <h1>Manual de administración</h1>
-  <p class="lead">Para Gestión Humana: alta de empleados, aprobación de solicitudes, planeación de vacaciones, turnos, festivos, políticas por sede, bitácora e integraciones con Microsoft 365.</p>
+  <p class="lead">Para Gestión Humana: alta de empleados, aprobación de solicitudes, tipos de permiso, turnos, festivos, políticas por sede, bitácora e integraciones con Microsoft 365.</p>
   <div class="para"><span class="chip">GH</span><span class="chip">Gerencia GH</span><span class="chip">Super administrador</span></div>
 </header>
 
@@ -123,11 +123,11 @@ a { color: var(--primary); }
       <li><a href="#empleados">Empleados</a></li>
       <li><a href="#solicitudes">Todas las solicitudes</a></li>
       <li><a href="#calendario">Calendario general</a></li>
-      <li><a href="#planeacion">Planear vacaciones</a></li>
       <li><a href="#grupos">Grupos y ciclos</a></li>
       <li><a href="#turnos">Turnos y rotación</a></li>
       <li><a href="#festivos">Festivos</a></li>
       <li><a href="#configuracion">Configuración de la sede</a></li>
+      <li><a href="#tipospermiso">Tipos de permiso</a></li>
       <li><a href="#bitacora">Bitácora</a></li>
       <li><a href="#superadmin">Super administrador</a></li>
       <li><a href="#teams">Aprobación en Teams y SharePoint</a></li>
@@ -177,28 +177,16 @@ a { color: var(--primary); }
         <li><span class="ui">Cancelar</span> (validadas): devuelve el saldo y, si era un permiso con aviso a caseta, se avisa la cancelación.</li>
         <li><span class="ui">Firma</span>: muestra la firma del empleado.</li>
       </ul>
-      <p>Con aprobación <b>jefe + GH</b>, las que ya aprobó el jefe aparecen como <span class="estado e-jefe">Aprobada por el jefe</span> con su nombre y "falta GH". Las vacaciones programadas por GH llevan la etiqueta <i>Planeada por GH</i>, y las de un solo día por horas muestran las horas.</p>
+      <p>Con aprobación <b>jefe + GH</b>, las que ya aprobó el jefe aparecen como <span class="estado e-jefe">Aprobada por el jefe</span> con su nombre y "falta GH". Las de un solo día por horas muestran las horas.</p>
     </section>
 
     <section id="calendario">
       <h2><span class="n">04</span>Calendario general</h2>
-      <p>Vista de las ausencias de la sede: vacaciones, home office y permisos por persona y por día. Úsalo para detectar cruces antes de aprobar o de planear.</p>
-    </section>
-
-    <section id="planeacion">
-      <h2><span class="n">05</span>Planear vacaciones</h2>
-      <p>Para programar vacaciones a varias personas a la vez, por ejemplo un paro de planta o un cierre de fin de año.</p>
-      <ol class="pasos">
-        <li><span>Elige <b>desde</b> y <b>hasta</b>, y escribe el motivo.</span></li>
-        <li><span>Filtra (solo planta, por grupo o por nombre) y marca a los empleados. La tabla muestra su saldo actual.</span></li>
-        <li><span>Pulsa <span class="ui">Vista previa</span>: por persona verás los días que se le descuentan según <b>su ciclo y los festivos</b>, el saldo antes y después, y quién quedaría negativo.</span></li>
-        <li><span>Pulsa <span class="ui">Programar vacaciones</span> y confirma. Quedan <b>validadas</b> de inmediato.</span></li>
-      </ol>
-      <div class="nota aviso"><strong>Saldo negativo</strong><p>A quien no le alcance el saldo se le programan igual y queda en negativo. Se le descuenta de los próximos días que genere: el siguiente periodo (aniversario o 1 de enero) o lo que acumule cada mes, según la sede. A quien ya tiene vacaciones en esas fechas no se le programa.</p></div>
+      <p>Vista de las ausencias de la sede: vacaciones, home office y permisos por persona y por día. Úsalo para detectar cruces antes de aprobar.</p>
     </section>
 
     <section id="grupos">
-      <h2><span class="n">06</span>Grupos y ciclos</h2>
+      <h2><span class="n">05</span>Grupos y ciclos</h2>
       <p>Los grupos definen qué días trabaja el personal de planta:</p>
       <ul>
         <li><b>Semanal:</b> días fijos de la semana (por ejemplo lunes a jueves).</li>
@@ -208,7 +196,7 @@ a { color: var(--primary); }
     </section>
 
     <section id="turnos">
-      <h2><span class="n">07</span>Turnos y rotación</h2>
+      <h2><span class="n">06</span>Turnos y rotación</h2>
       <h3>Horario del turno</h3>
       <ul>
         <li><b>Horario general:</b> entrada, salida y horas por jornada.</li>
@@ -221,12 +209,12 @@ a { color: var(--primary); }
     </section>
 
     <section id="festivos">
-      <h2><span class="n">08</span>Festivos</h2>
+      <h2><span class="n">07</span>Festivos</h2>
       <p>Cada sede tiene sus festivos. Indica si aplica a <i>todos</i>, solo a <i>oficina</i> o solo a <i>planta</i>. Los festivos no se descuentan de las vacaciones y se ven en el calendario de cada empleado.</p>
     </section>
 
     <section id="configuracion">
-      <h2><span class="n">09</span>Configuración de la sede</h2>
+      <h2><span class="n">08</span>Configuración de la sede</h2>
       <h3>Días por antigüedad</h3>
       <p>Tabla de días por años de servicio. Si la sede no tiene tabla propia usa la de la sede principal; al guardar se crea la suya y los saldos se recalculan.</p>
       <h3>Política de vacaciones y permisos</h3>
@@ -238,8 +226,7 @@ a { color: var(--primary); }
           <tr><td>Cuándo se generan los días</td><td><b>Aniversario</b>, <b>año calendario</b> (cada 1 de enero; el primero proporcional) o <b>mes a mes</b> (se acumulan durante el año de servicio).</td></tr>
           <tr><td>Aprobación</td><td>Por separado para vacaciones y permisos: solo el jefe, o jefe y después GH.</td></tr>
           <tr><td>Cómo se otorgan los días</td><td>Por defecto de la sede: <b>equivalencia en horas</b> (tabla × 8 h, que cada jornada consume según sus horas) o <b>días completos</b>.</td></tr>
-          <tr><td>Permisos habilitados</td><td>Qué tipos pueden pedir (llegada tarde, salida temprana, salida durante la jornada, home office) y el máximo de días de home office.</td></tr>
-          <tr><td>Módulos</td><td>Servicio médico y cumpleaños en el calendario.</td></tr>
+                    <tr><td>Módulos</td><td>Servicio médico y cumpleaños en el calendario.</td></tr>
         </tbody>
       </table></div>
       <h3>Tipos de jornada</h3>
@@ -250,6 +237,28 @@ a { color: var(--primary); }
         <li><b>Avisos a caseta:</b> actívalos, escribe los correos de caseta y elige qué permisos se avisan.</li>
         <li>Usa <span class="ui">Enviar correo de prueba</span> después de guardar. En <i>Últimos envíos</i> puedes reintentar los que fallaron.</li>
       </ul>
+    </section>
+
+    <section id="tipospermiso">
+      <h2><span class="n">09</span>Tipos de permiso</h2>
+      <p>En <span class="ui">Configuración</span> → <b>Tipos de permiso</b> están los permisos que puede pedir el personal de la sede. Hay cuatro <b>tipos base</b> (llegada tarde, salida temprana, salida durante la jornada y home office) que no se eliminan, solo se activan o desactivan, y puedes agregar los que necesites (por ejemplo <i>Día de cumpleaños</i>, <i>Trámite personal</i> o <i>Paternidad</i>).</p>
+      <ol class="pasos">
+        <li><span>Pulsa <span class="ui">Agregar tipo de permiso</span> y escribe el nombre. El color es el que tendrá en el calendario.</span></li>
+        <li><span>Elige cómo se pide: <b>Horas</b> (un solo día, con horario) o <b>Días</b> (un rango de fechas, como el home office).</span></li>
+        <li><span>En los permisos por horas decide si se pide el <b>tiempo en nómina</b> (con goce, sin goce o reposición).</span></li>
+        <li><span>Define el <b>límite</b>: una cantidad y si es <b>por mes</b>, <b>por año</b> o en total. Déjalo vacío para que no tenga límite.</span></li>
+        <li><span>En los permisos por días indica el <b>máximo de días naturales por solicitud</b> (31 si lo dejas vacío). Guarda con el ícono verde.</span></li>
+      </ol>
+      <div class="tabla"><table>
+        <thead><tr><th>Se pide por</th><th>El límite cuenta</th><th>Ejemplo</th></tr></thead>
+        <tbody>
+          <tr><td>Días</td><td>Días laborales del empleado (sin descansos ni festivos).</td><td>Día de cumpleaños: 1 día por año.</td></tr>
+          <tr><td>Horas, en <i>permisos</i></td><td>Cada solicitud cuenta como uno.</td><td>Llegada tarde: 3 permisos por mes.</td></tr>
+          <tr><td>Horas, en <i>horas</i></td><td>Las horas de cada permiso.</td><td>Trámite personal: 8 h por año.</td></tr>
+        </tbody>
+      </table></div>
+      <p>El límite toma en cuenta los borradores, los pendientes y los validados; los cancelados y rechazados no cuentan. Si una solicitud lo rebasa, SIP-O la rechaza y le dice al empleado cuánto lleva y cuánto le queda. En el formulario el empleado ve su límite y su uso antes de enviar.</p>
+      <div class="nota"><strong>Eliminar o desactivar</strong><p>Un tipo agregado se puede eliminar mientras no tenga solicitudes; si ya las tiene, desactívalo y dejará de aparecer para pedirlo, pero su historial se conserva. Los tipos nuevos también aparecen en los avisos a caseta, la bitácora, Teams y SharePoint con su nombre.</p></div>
     </section>
 
     <section id="bitacora">

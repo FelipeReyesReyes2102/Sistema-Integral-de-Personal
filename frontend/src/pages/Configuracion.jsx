@@ -4,6 +4,7 @@ import { api } from '../api'
 import { num } from '../utils'
 import ConfigCorreo from '../components/ConfigCorreo'
 import ConfigPolitica from '../components/ConfigPolitica'
+import ConfigTiposPermiso from '../components/ConfigTiposPermiso'
 import { useAuth } from '../auth'
 import { esAdmin } from '../utils'
 import SedeActual from '../components/SedeActual'
@@ -88,6 +89,7 @@ export default function Configuracion() {
       </div>
       <ConfigPolitica />
     </div>
+    <ConfigTiposPermiso />
     <ConfigCorreo />
     </>
   )

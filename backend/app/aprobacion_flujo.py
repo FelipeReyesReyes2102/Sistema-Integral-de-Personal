@@ -85,8 +85,11 @@ def contenido(tipo: str, reg) -> dict:
             lineas.append(f"**Comentario:** {reg.comentario}")
         titulo = f"Vacaciones de {u.nombre} ({base['folio']})"
     else:
-        ho = reg.tipo == "home_office"
-        lineas = [f"**Empleado:** {u.nombre}", f"**Tipo:** {PERMISOS.get(reg.tipo, reg.tipo)}"]
+        from sqlalchemy.orm import object_session
+        from . import tipos_permiso as _tp
+        nombre_tipo = _tp.nombre(object_session(reg), u.sede_id, reg.tipo)
+        ho = _tp.por_dias(object_session(reg), u.sede_id, reg.tipo)
+        lineas = [f"**Empleado:** {u.nombre}", f"**Tipo:** {nombre_tipo}"]
         if ho:
             lineas.append(f"**Del** {_f(reg.fecha)} **al** {_f(reg.fecha_fin or reg.fecha)}")
         else:
@@ -95,7 +98,7 @@ def contenido(tipo: str, reg) -> dict:
             lineas.append(f"**Nómina:** {NOMINA.get(reg.tipo_nomina, reg.tipo_nomina)}")
         if reg.motivo:
             lineas.append(f"**Motivo:** {reg.motivo}")
-        titulo = f"Permiso de {u.nombre} ({base['folio']}): {PERMISOS.get(reg.tipo, reg.tipo)}"
+        titulo = f"Permiso de {u.nombre} ({base['folio']}): {nombre_tipo}"
     lineas.append("También puedes resolverla en SIP-O.")
     return {**base, "titulo": titulo[:250], "detalles": "\n\n".join(lineas)}
 

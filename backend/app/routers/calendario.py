@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import reglas
+from .. import tipos_permiso
 from ..database import get_db
 from ..models import (
     ESTADOS_ACTIVOS, PERMISO_HOME_OFFICE, ROL_ADMIN, ROL_MEDICO, SOLICITADO, TIPOS_PERMISO, VALIDADO, ConsultaMedica, Festivo, Permiso,
@@ -43,9 +44,10 @@ def _permisos_por_dia(db: Session, u: Usuario, desde: date, hasta: date) -> list
         Permiso.usuario_id == u.id, Permiso.estado.in_(ESTADOS_ACTIVOS),
         Permiso.fecha <= hasta, func.coalesce(Permiso.fecha_fin, Permiso.fecha) >= desde)
     for p in db.scalars(q):
-        base = {"tipo": p.tipo, "estado": p.estado, "id": p.id,
+        base = {"tipo": p.tipo, "estado": p.estado, "id": p.id, "tipo_nombre": tipos_permiso.nombre(db, u.sede_id, p.tipo),
+                "cat": tipos_permiso.categoria(p.tipo),
                 "hora_inicio": p.hora_inicio.strftime("%H:%M"), "hora_fin": p.hora_fin.strftime("%H:%M")}
-        if p.tipo == PERMISO_HOME_OFFICE:
+        if tipos_permiso.por_dias(db, u.sede_id, p.tipo):
             for d in reglas.dias_laborales(max(p.fecha, desde), min(p.fecha_fin or p.fecha, hasta), ciclo, fest):
                 res.append({**base, "fecha": d.isoformat()})
         elif desde <= p.fecha <= hasta:
@@ -128,7 +130,7 @@ def calendario_equipo(anio: int, mes: int, grupo_id: int | None = None, rol: str
             dias[f]["eventos"].append({"cat": "vacaciones", "estado": v["estado"], "id": v["id"]})
             totales["vacaciones"] += 1
         for p in _permisos_por_dia(db, u, desde, hasta):
-            cat = "home_office" if p["tipo"] == PERMISO_HOME_OFFICE else p["tipo"]
+            cat = p["cat"]
             dias[p["fecha"]]["eventos"].append({"cat": cat, "estado": p["estado"], "id": p["id"],
                                                  "hora_inicio": p["hora_inicio"], "hora_fin": p["hora_fin"]})
             totales["home_office" if cat == "home_office" else "permiso"] += 1
@@ -155,8 +157,10 @@ def resumen_permisos(anio: int | None = None, db: Session = Depends(get_db), use
         .where(Permiso.usuario_id == user.id, Permiso.fecha >= date(anio, 1, 1), Permiso.fecha <= date(anio, 12, 31))
         .group_by(Permiso.tipo, Permiso.estado)
     ).all()
-    por_tipo = {t: {"borrador": 0.0, "solicitado": 0.0, "validado": 0.0, "eventos": 0} for t in TIPOS_PERMISO}
+    por_tipo = {t: {"borrador": 0.0, "solicitado": 0.0, "validado": 0.0, "eventos": 0}
+                for t in [*TIPOS_PERMISO, tipos_permiso.OTRO]}
     for tipo, estado, horas, n in rows:
+        tipo = tipos_permiso.categoria(tipo)
         if tipo in por_tipo and estado in por_tipo[tipo]:
             por_tipo[tipo][estado] += float(horas)
             por_tipo[tipo]["eventos"] += n

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Clock3, Pencil, Plus, Save, Scale, Trash2, X } from 'lucide-react'
 import { api } from '../api'
-import { TIPOS_PERMISO_SOLICITABLES, num } from '../utils'
+import { num, textoLimite } from '../utils'
 
 const JORNADA_NUEVA = { nombre: '', horas_dia: 8, bloque_minimo: 6, usa_ciclo_grupo: false, activo: true, descuento: '', por_horas: false, minimo_horas: 1 }
 const GENERACION = {
@@ -20,22 +20,25 @@ export default function ConfigPolitica() {
 
   const aplicar = (p) => {
     setPol(p)
-    const { meses_vigencia, equivalencia_horas, dias_anticipacion, tipos_permiso, home_office_max_dias, modulo_consultas, modulo_cumpleanos,
+    const { meses_vigencia, equivalencia_horas, dias_anticipacion, modulo_consultas, modulo_cumpleanos,
       generacion_dias, aprobacion_gh_vacaciones, aprobacion_gh_permisos } = p
-    setForm({ meses_vigencia, equivalencia_horas, dias_anticipacion, tipos_permiso, home_office_max_dias, modulo_consultas, modulo_cumpleanos,
+    setForm({ meses_vigencia, equivalencia_horas, dias_anticipacion, modulo_consultas, modulo_cumpleanos,
       generacion_dias, aprobacion_gh_vacaciones, aprobacion_gh_permisos })
   }
   const cargar = () => api('/politica').then(aplicar).catch((e) => setMsg({ ok: false, t: e.message }))
-  useEffect(() => { cargar() }, [])
+  useEffect(() => {
+    cargar()
+    window.addEventListener('politica:refrescar', cargar)  // al cambiar los tipos de permiso
+    return () => window.removeEventListener('politica:refrescar', cargar)
+  }, [])
   if (!pol || !form) return <div className="card">{msg ? <div className="alerta error">{msg.t}</div> : 'Cargando…'}</div>
 
   const set = (k, conv = (v) => v) => (e) => setForm({ ...form, [k]: conv(e.target.type === 'checkbox' ? e.target.checked : e.target.value) })
-  const toggleTipo = (t) => setForm({ ...form, tipos_permiso: form.tipos_permiso.includes(t) ? form.tipos_permiso.filter((x) => x !== t) : [...form.tipos_permiso, t] })
 
   async function guardar() {
     setMsg(null)
     try {
-      aplicar(await api('/politica', { method: 'PUT', body: { ...form, meses_vigencia: Number(form.meses_vigencia), dias_anticipacion: Number(form.dias_anticipacion), home_office_max_dias: Number(form.home_office_max_dias) } }))
+      aplicar(await api('/politica', { method: 'PUT', body: { ...form, meses_vigencia: Number(form.meses_vigencia), dias_anticipacion: Number(form.dias_anticipacion) } }))
       setMsg({ ok: true, t: `Política de ${pol.sede_nombre} guardada. Los saldos se recalculan automáticamente.` })
     } catch (e) {
       setMsg({ ok: false, t: e.message })
@@ -102,19 +105,6 @@ export default function ConfigPolitica() {
             <option value="false">Días completos: cada día de la tabla es un día de la jornada del empleado</option>
           </select>
         </label>
-        <div className="campo full">
-          <span>Permisos habilitados en la sede</span>
-          <div className="fila">
-            {Object.entries(TIPOS_PERMISO_SOLICITABLES).map(([k, v]) => (
-              <label key={k} className="checkbox"><input type="checkbox" checked={form.tipos_permiso.includes(k)} onChange={() => toggleTipo(k)} /> {v}</label>
-            ))}
-          </div>
-        </div>
-        {form.tipos_permiso.includes('home_office') && (
-          <label className="campo">Home office: máximo de días por solicitud
-            <input type="number" min={1} max={365} value={form.home_office_max_dias} onChange={set('home_office_max_dias')} />
-          </label>
-        )}
         <div className="campo">
           <span>Módulos</span>
           <label className="checkbox"><input type="checkbox" checked={form.modulo_consultas} onChange={set('modulo_consultas')} /> Servicio médico (consultas)</label>
@@ -194,8 +184,7 @@ export default function ConfigPolitica() {
           : pol.generacion_dias === 'mensual' ? 'mes a mes durante cada año de servicio' : 'al cumplir cada año de servicio'} según la tabla de antigüedad{pol.tabla_propia ? ' de la sede' : ' (heredada de la sede principal)'} y se pierden a los <b>{pol.meses_vigencia} meses</b>.</li>
         <li>Mientras no se haya solicitado el bloque obligatorio, no se pueden pedir días sueltos que dejen el saldo por debajo de él.</li>
         {pol.dias_anticipacion > 0 && <li>Las vacaciones se piden con al menos <b>{pol.dias_anticipacion} día(s)</b> de anticipación.</li>}
-        <li>Permisos habilitados: {pol.tipos_permiso.length ? pol.tipos_permiso.map((t) => TIPOS_PERMISO_SOLICITABLES[t]).join(', ') : 'ninguno'}
-          {pol.tipos_permiso.includes('home_office') && ` (home office hasta ${pol.home_office_max_dias} días por solicitud)`}.</li>
+        <li>Permisos habilitados: {pol.permisos_tipos?.length ? pol.permisos_tipos.map((t) => `${t.nombre}${t.limite_cantidad ? ` (${textoLimite(t)})` : ''}`).join(', ') : 'ninguno'}.</li>
         <li>Estados: Borrador → Solicitado → {pol.aprobacion_gh_vacaciones ? 'Aprobado por el jefe → ' : ''}Validado / Rechazado. Borrador y Solicitado ya apartan saldo.</li>
         {pol.jornadas.some((j) => j.por_horas) && <li>Vacaciones por horas: {pol.jornadas.filter((j) => j.por_horas).map((j) => `${j.nombre} (mín. ${j.minimo_horas} h)`).join(', ')}.</li>}
       </ul>

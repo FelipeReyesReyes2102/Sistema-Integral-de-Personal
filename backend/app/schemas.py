@@ -381,25 +381,23 @@ class VacacionesOut(ORM):
     falta_gh: bool = False
 
 
-class PlaneacionIn(BaseModel):
-    """GH programa vacaciones a varios empleados (p. ej. planta); si no tienen saldo, queda negativo."""
-    usuario_ids: list[int] = Field(min_length=1, max_length=500)
-    fecha_inicio: date
-    fecha_fin: date
-    comentario: str | None = Field(None, max_length=300)
+class TipoPermisoIn(BaseModel):
+    nombre: str = Field(min_length=2, max_length=80)
+    modalidad: Literal["horas", "dias"] = "horas"
+    pide_nomina: bool = True
+    limite_cantidad: float | None = Field(None, gt=0, le=2000)
+    limite_unidad: Literal["dias", "horas"] = "dias"
+    limite_periodo: Literal["mes", "anio"] | None = None
+    max_dias_solicitud: int | None = Field(None, ge=1, le=365)
+    color: str = Field("#6d4c41", pattern=r"^#[0-9a-fA-F]{6}$")
+    activo: bool = True
 
 
-class PlaneacionFila(BaseModel):
-    usuario_id: int
-    nombre: str
-    grupo: str | None = None
-    dias: int = 0
-    horas: float = 0
-    saldo_antes: float = 0   # días
-    saldo_despues: float = 0
-    negativo: float = 0      # días que quedan a deber
-    error: str | None = None
-    solicitudes: list[int] = []
+class TipoPermisoOut(TipoPermisoIn, ORM):
+    id: int
+    clave: str
+    base: bool
+    en_uso: int = 0
 
 
 class RechazoIn(BaseModel):
@@ -408,7 +406,7 @@ class RechazoIn(BaseModel):
 
 # ---------- Permisos ----------
 class PermisoIn(BaseModel):
-    tipo: TipoPermiso
+    tipo: str = Field(min_length=2, max_length=30, pattern=r"^[a-z0-9_]+$")
     fecha: date
     fecha_fin: date | None = None       # solo home office
     hora_inicio: time | None = None     # obligatorias salvo en home office
@@ -427,6 +425,8 @@ class PermisoOut(ORM):
     usuario_id: int
     usuario_nombre: str | None = None
     tipo: str
+    tipo_nombre: str | None = None
+    por_dias: bool = False
     fecha: date
     fecha_fin: date | None = None
     dias: int | None = None             # home office: días laborales del rango
@@ -537,8 +537,9 @@ class PoliticaIn(BaseModel):
     meses_vigencia: int = Field(18, ge=1, le=60)
     equivalencia_horas: bool = True
     dias_anticipacion: int = Field(0, ge=0, le=90)
-    tipos_permiso: list[TipoPermisoSolicitable] = []
-    home_office_max_dias: int = Field(31, ge=1, le=365)
+    # Compatibilidad: si se envían, activan/desactivan los tipos base (la gestión completa está en /tipos-permiso)
+    tipos_permiso: list[str] | None = None
+    home_office_max_dias: int | None = Field(None, ge=1, le=365)
     modulo_consultas: bool = True
     modulo_cumpleanos: bool = True
     generacion_dias: Literal["aniversario", "calendario", "mensual"] = "aniversario"

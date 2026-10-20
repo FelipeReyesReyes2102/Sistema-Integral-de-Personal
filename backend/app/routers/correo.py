@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from .. import correo
 from ..database import get_db
 from ..models import TIPOS_PERMISO_SOLICITABLES, NotificacionCorreo, Sede, Usuario
+from .. import tipos_permiso
 from ..config_dinamica import cifrar
 from ..security import ahora, auditar, require_admin
 from ..sedes import Alcance, alcance
@@ -54,7 +55,7 @@ def _estado(db: Session, sede: Sede, user: Usuario) -> dict:
         "smtp_seguridad": c["CORREO_SMTP_SEGURIDAD"],
         "smtp_usuario": c["CORREO_SMTP_USUARIO"],
         "password_configurada": bool(c["CORREO_SMTP_PASSWORD"]),
-        "tipos_disponibles": {t: correo.NOMBRES_TIPO[t] for t in TIPOS_PERMISO_SOLICITABLES},
+        "tipos_disponibles": {t.clave: t.nombre for t in tipos_permiso.de_sede(db, sede.id, solo_activos=True)},
     }
 
 
@@ -87,7 +88,8 @@ def guardar(data: CorreoIn, request: Request, db: Session = Depends(get_db), adm
     remitente = data.remitente.strip().lower()
     if remitente and not correo.EMAIL.match(remitente):
         errores.append("El correo remitente no es válido.")
-    tipos = [t for t in data.caseta_tipos if t in TIPOS_PERMISO_SOLICITABLES]
+    validos = {t.clave for t in tipos_permiso.de_sede(db, sede.id)}
+    tipos = [t for t in data.caseta_tipos if t in validos]
     if data.caseta_activo:
         if not destinatarios:
             errores.append("Agrega al menos un correo del personal de caseta.")
@@ -151,7 +153,7 @@ def historial(limite: int = 50, db: Session = Depends(get_db), _=Depends(require
             "id": n.id, "fecha": n.fecha, "evento": n.evento, "asunto": n.asunto, "destinatarios": n.destinatarios,
             "estado": n.estado, "error": n.error, "intentos": n.intentos,
             "empleado": p.usuario.nombre if p and p.usuario else None,
-            "tipo": correo.NOMBRES_TIPO.get(p.tipo) if p else None,
+            "tipo": tipos_permiso.nombre(db, p.usuario.sede_id if p.usuario else None, p.tipo) if p else None,
         })
     return res
 

@@ -360,6 +360,27 @@ class SolicitudVacaciones(Base):
     aprobado_jefe: Mapped[Usuario | None] = relationship(foreign_keys=[aprobado_jefe_id])
 
 
+class TipoPermisoSede(Base):
+    """Tipo de permiso de una sede (los 4 base y los que agregue GH), con su límite por mes, año o sin límite."""
+    __tablename__ = "tipos_permiso"
+    __table_args__ = (UniqueConstraint("sede_id", "clave", name="uq_tipos_permiso_sede_clave"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sede_id: Mapped[int] = mapped_column(ForeignKey("sedes.id", ondelete="CASCADE"), index=True)
+    clave: Mapped[str] = mapped_column(String(30))
+    nombre: Mapped[str] = mapped_column(String(80))
+    modalidad: Mapped[str] = mapped_column(String(10), default="horas")  # horas (un día con horario) | dias (rango)
+    pide_nomina: Mapped[bool] = mapped_column(Boolean, default=True)    # con goce / sin goce / reposición
+    limite_cantidad: Mapped[float | None] = mapped_column(Float)        # vacío = sin límite
+    limite_unidad: Mapped[str] = mapped_column(String(10), default="dias")   # dias | horas
+    limite_periodo: Mapped[str | None] = mapped_column(String(10))      # mes | anio | vacío = en total
+    max_dias_solicitud: Mapped[int | None] = mapped_column(Integer)     # por días: máximo de días naturales por solicitud
+    color: Mapped[str] = mapped_column(String(9), default="#6d4c41")
+    base: Mapped[bool] = mapped_column(Boolean, default=False)          # los 4 tipos originales: no se borran
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    orden: Mapped[int] = mapped_column(Integer, default=100)
+
+
 class Permiso(Base):
     """Permisos de llegada tarde, salida temprana, salida intermedia y consulta con el médico de planta."""
     __tablename__ = "permisos"

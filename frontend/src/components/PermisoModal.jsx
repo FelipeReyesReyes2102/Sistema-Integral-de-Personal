@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useAuth } from '../auth'
-import { esAdmin, TIPOS_NOMINA, TIPOS_PERMISO_SOLICITABLES, fmtFecha, hhmm, horasEntre, hoyISO, num } from '../utils'
+import { esAdmin, TIPOS_NOMINA, TIPOS_PERMISO_SOLICITABLES, fmtFecha, hhmm, horasEntre, hoyISO, num, textoLimite } from '../utils'
 import FormularioOtek, { Campo } from './FormularioOtek'
 import SelectorJefe from './SelectorJefe'
 
@@ -21,9 +21,11 @@ const TITULOS = {
   home_office: 'SOLICITUD DE HOME OFFICE',
 }
 
-/** Permisos de salida o ingreso (formato O-tek): llegada tarde, salida temprana, salida intermedia y consulta médica. */
+/** Permisos de salida o ingreso (formato O-tek): los tipos base y los que agregue GH en la sede (por horas o por días). */
 export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinInicial, usuario, permiso, onClose, onSaved,
-  tiposHabilitados = null }) {
+  tipos: tiposProp = null }) {
+  const [tiposSede, setTiposSede] = useState(tiposProp)
+  const [uso, setUso] = useState(null)
   const [turno, setTurno] = useState(null)
   const [departamentos, setDepartamentos] = useState([])
   const [form, setForm] = useState({
@@ -46,6 +48,12 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
     api('/departamentos').then(setDepartamentos).catch(() => {})
   }, [usuario?.id])
 
+  // Tipos de permiso de la sede (los base y los agregados por GH)
+  useEffect(() => {
+    if (tiposProp) { setTiposSede(tiposProp); return }
+    api('/politica').then((p) => setTiposSede(p.permisos_tipos || null)).catch(() => setTiposSede(null))
+  }, [tiposProp])
+
   // Horario del turno en la fecha del permiso (horario por día y horarios especiales como Short Friday)
   useEffect(() => {
     if (!form.fecha) return
@@ -64,17 +72,31 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
   const horas = horasEntre(form.hora_inicio, form.hora_fin)
   const requiereJefe = !esAdmin(usuario)
-  const esHO = form.tipo === 'home_office'
+  const lista = tiposSede
+    ? tiposSede.map((t) => [t.clave, t.nombre])
+    : Object.entries(TIPOS_PERMISO_SOLICITABLES)
+  if (permiso && !lista.some(([k]) => k === permiso.tipo)) lista.push([permiso.tipo, permiso.tipo_nombre || permiso.tipo])
+  const cfg = tiposSede?.find((t) => t.clave === form.tipo)
+    || { clave: form.tipo, nombre: permiso?.tipo_nombre, modalidad: form.tipo === 'home_office' || permiso?.por_dias ? 'dias' : 'horas', pide_nomina: form.tipo !== 'home_office' }
+  const esHO = cfg.modalidad === 'dias'  // por días (home office u otro tipo de la sede)
+  const pideNomina = !esHO && cfg.pide_nomina !== false
   const completo = form.tipo && form.fecha && form.motivo.trim() && form.departamento && (!requiereJefe || form.aprobador_id)
-    && (esHO ? form.fecha_fin >= form.fecha : form.hora_inicio && form.hora_fin && form.tipo_nomina)
+    && (esHO ? form.fecha_fin >= form.fecha : form.hora_inicio && form.hora_fin && (!pideNomina || form.tipo_nomina))
   const naturales = esHO && form.fecha && form.fecha_fin ? Math.round((new Date(form.fecha_fin) - new Date(form.fecha)) / 864e5) + 1 : 0
+
+  // Cuánto lleva usado del límite del tipo (mes, año o en total)
+  useEffect(() => {
+    if (!cfg.limite_cantidad || !form.tipo || !form.fecha) { setUso(null); return }
+    api('/permisos/uso', { query: { tipo: form.tipo, fecha: form.fecha, ...(usuario?.id ? { usuario_id: usuario.id } : {}),
+      ...(permiso ? { excluir_id: permiso.id } : {}) } }).then(setUso).catch(() => setUso(null))
+  }, [form.tipo, form.fecha, cfg.limite_cantidad, usuario?.id])
 
   async function guardar(enviar) {
     setError('')
     setGuardando(true)
     const body = {
       ...form, enviar, usuario_id: usuario?.id, firma,
-      tipo_nomina: esHO ? null : form.tipo_nomina || null,
+      tipo_nomina: pideNomina ? form.tipo_nomina || null : null,
       fecha_fin: esHO ? form.fecha_fin : null,
       hora_inicio: esHO ? null : form.hora_inicio || null,
       hora_fin: esHO ? null : form.hora_fin || null,
@@ -96,7 +118,7 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
     ? [form.departamento, ...departamentos] : departamentos
 
   const paraOtro = usuario && user && usuario.id !== user.id
-  const titulo = TITULOS[form.tipo] || 'PERMISO DE SALIDA O INGRESO'
+  const titulo = TITULOS[form.tipo] || (cfg.nombre ? `PERMISO: ${cfg.nombre.toUpperCase()}` : 'PERMISO DE SALIDA O INGRESO')
 
   return (
     <FormularioOtek titulo={titulo.charAt(0) + titulo.slice(1).toLowerCase()} subtitulo={paraOtro ? `Para: ${usuario.nombre}` : null}
@@ -109,9 +131,7 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
       <Campo label="Tipo de permiso" requerido full>
         <select value={form.tipo} onChange={set('tipo')}>
           <option value="">Selecciona…</option>
-          {Object.entries(TIPOS_PERMISO_SOLICITABLES)
-            .filter(([k]) => !tiposHabilitados || tiposHabilitados.includes(k) || k === permiso?.tipo)
-            .map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          {lista.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
       </Campo>
 
@@ -134,13 +154,13 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
         </Campo>
       )}
 
-      <Campo label="Departamento" requerido full={esHO}>
+      <Campo label="Departamento" requerido full={!pideNomina}>
         <select value={form.departamento} onChange={set('departamento')}>
           <option value="">Selecciona…</option>
           {deptos.map((d) => <option key={d} value={d}>{d}</option>)}
         </select>
       </Campo>
-      {!esHO && (
+      {pideNomina && (
         <Campo label="Tiempo en nómina" requerido>
           <select value={form.tipo_nomina} onChange={set('tipo_nomina')}>
             <option value="">Selecciona…</option>
@@ -158,7 +178,13 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
       </Campo>
 
       <div className="full fo-mensajes">
-        {esHO && <div className="fo-ayuda">El home office no descuenta vacaciones ni horas; requiere la aprobación de tu jefe.</div>}
+        {esHO && <div className="fo-ayuda">{cfg.nombre || 'Este permiso'} no descuenta vacaciones; requiere la aprobación de tu jefe.
+          {cfg.max_dias_solicitud ? ` Máximo ${cfg.max_dias_solicitud} día(s) naturales por solicitud.` : ''}</div>}
+        {cfg.limite_cantidad && (
+          <div className={`fo-ayuda ${uso && uso.usado >= uso.limite ? 'error-texto' : ''}`}>
+            Límite: {textoLimite(cfg)}{uso ? ` · llevas ${num(uso.usado)}, te quedan ${num(Math.max(uso.limite - uso.usado, 0))}` : ''}.
+          </div>
+        )}
         {form.tipo && !esHO && <div className="fo-ayuda">{etiquetas[0]} → {etiquetas[1]}.</div>}
         {error && <div className="alerta error">{error}</div>}
         {completo && !firma && <div className="fo-ayuda">Firma en el recuadro de la derecha para enviar.</div>}

@@ -13,11 +13,11 @@ from ..models import (
 from ..models import ROLES_ADMIN, es_admin  # noqa: F401
 from ..models import Festivo
 from ..schemas import (
-    CalculoIn, CalculoOut, DiaExcluido, DiasLaboralesIn, DiasLaboralesOut, PlaneacionFila, PlaneacionIn, RechazoIn,
+    CalculoIn, CalculoOut, DiaExcluido, DiasLaboralesIn, DiasLaboralesOut, RechazoIn,
     TramoPeriodo, VacacionesIn,
     VacacionesOut,
 )
-from ..security import get_current_user, require_admin
+from ..security import get_current_user
 from ..sedes import Alcance, admin_permite, alcance, hoy_de
 from ..services import (
     aprobar, ciclo_de, consulta_festivos, jornada_de, empleado_visible, festivos_de, hay_traslape, puede_revisar, resolver_aprobador, saldo_periodo,
@@ -439,113 +439,3 @@ def rechazar(sid: int, data: RechazoIn, db: Session = Depends(get_db), user: Usu
     db.commit()
     return _out(s)
 
-
-# ---------------- Planeación general de vacaciones (GH) ----------------
-def _planear(db: Session, actor: Usuario, data: PlaneacionIn, aplicar: bool) -> list[PlaneacionFila]:
-    """Reparte los días laborales del rango de cada empleado entre sus periodos vigentes (primero el más antiguo).
-    Lo que no alcanza queda como saldo negativo y se descuenta de los próximos días que genere (siguiente periodo,
-    o el periodo en curso si la sede genera los días cada mes)."""
-    from ..services import generacion, meses_vigencia, usa_horas
-    from ..config import settings
-    if data.fecha_fin < data.fecha_inicio:
-        raise HTTPException(422, "La fecha final no puede ser anterior a la inicial.")
-    if (data.fecha_fin - data.fecha_inicio).days > 120:
-        raise HTTPException(422, "El rango de la planeación no puede ser mayor a 120 días.")
-    filas: list[PlaneacionFila] = []
-    for uid in dict.fromkeys(data.usuario_ids):
-        u = db.get(Usuario, uid)
-        if not u or not u.activo or not admin_permite(actor, u.sede_id):
-            continue
-        fila = PlaneacionFila(usuario_id=u.id, nombre=u.nombre, grupo=u.grupo.nombre if u.grupo else None)
-        filas.append(fila)
-        jornada = jornada_de(u)
-        hd = jornada.horas_dia
-        periodos = sincronizar_periodos(db, u)
-        hoy = hoy_de(u)
-        fechas = reglas.dias_laborales(data.fecha_inicio, data.fecha_fin, ciclo_de(u),
-                                       festivos_de(db, u, data.fecha_inicio, data.fecha_fin))
-        fila.dias, fila.horas = len(fechas), float(len(fechas) * hd)
-        vigentes = [p for p in periodos if p.fecha_inicio <= hoy <= p.fecha_vencimiento or p.fecha_inicio > hoy]
-        fila.saldo_antes = round(sum(saldo_periodo(db, p).horas_disponible for p in vigentes) / hd, 2)
-        if not fechas:
-            fila.error = "No tiene días laborales en ese rango."
-            continue
-        if hay_traslape(db, u.id, data.fecha_inicio, data.fecha_fin, None):
-            fila.error = "Ya tiene otra solicitud de vacaciones en esas fechas."
-            continue
-        # Capacidad por periodo (en días completos) de los periodos ya iniciados y vigentes en cada fecha
-        capacidad = {p.id: max(int(saldo_periodo(db, p).horas_disponible // hd + 1e-9), 0) for p in periodos
-                     if p.fecha_inicio <= hoy}
-        tramos: list[list] = []
-        deuda: list = []
-        for d in fechas:
-            p = next((p for p in periodos if capacidad.get(p.id, 0) > 0 and p.fecha_inicio <= max(d, hoy)
-                      and d <= p.fecha_vencimiento), None)
-            if p is None:
-                deuda.append(d)
-                continue
-            capacidad[p.id] -= 1
-            if tramos and tramos[-1][0].id == p.id:
-                tramos[-1][2] = d
-            else:
-                tramos.append([p, d, d])
-        fila.negativo = float(len(deuda))
-        fila.saldo_despues = round(fila.saldo_antes - fila.dias, 2)
-        if not aplicar:
-            continue
-        if deuda:
-            destino = _periodo_para_deuda(db, u, periodos, hoy, generacion(u), meses_vigencia(u), usa_horas(u), hd,
-                                          settings.vacaciones_al_cumplir_anio)
-            for d in deuda:
-                if tramos and tramos[-1][0].id == destino.id and (d - tramos[-1][2]).days <= 7:
-                    tramos[-1][2] = d
-                else:
-                    tramos.append([destino, d, d])
-        comentario = f"[Planeación GH] {data.comentario or ''}".strip()
-        for p, desde, hasta in tramos:
-            dias = len([f for f in fechas if desde <= f <= hasta])
-            s = SolicitudVacaciones(usuario_id=u.id, periodo_id=p.id, fecha_inicio=desde, fecha_fin=hasta,
-                                    dias_habiles=dias, horas=float(dias * hd), comentario=comentario, planeada=True,
-                                    estado=VALIDADO, aprobador_id=u.jefe_id, revisado_por_id=actor.id,
-                                    fecha_revision=datetime.now())
-            db.add(s)
-            db.flush()
-            fila.solicitudes.append(s.id)
-    if aplicar:
-        db.commit()
-    return filas
-
-
-def _periodo_para_deuda(db: Session, u: Usuario, periodos, hoy: date, modo: str, meses: int, en_horas: bool, hd: int,
-                        al_cumplir: bool) -> PeriodoVacaciones:
-    """Mensual: el periodo en curso (sus días se siguen acumulando). Aniversario/calendario: el siguiente periodo,
-    que se crea por adelantado con 0 h y recibe sus días cuando inicia."""
-    from ..services import tabla_antiguedad
-    if modo == "mensual":
-        en_curso = [p for p in periodos if p.fecha_inicio <= hoy]
-        if en_curso:
-            return en_curso[-1]
-    futuros = [p for p in periodos if p.fecha_inicio > hoy]
-    if futuros:
-        return futuros[0]
-    numero = (periodos[-1].numero + 1) if periodos else 1
-    pc = reglas.siguiente_periodo(u.fecha_ingreso, numero, modo, meses, al_cumplir)
-    dias = reglas.dias_por_antiguedad(numero, tabla_antiguedad(db, u.sede_id))
-    p = PeriodoVacaciones(usuario_id=u.id, numero=numero, fecha_inicio=pc.fecha_inicio,
-                          fecha_vencimiento=pc.fecha_vencimiento, dias_ley=dias, horas_otorgadas=0.0, horas_por_dia=hd,
-                          ajuste_horas=0, nota_ajuste="Periodo futuro: descuenta vacaciones planeadas sin saldo")
-    db.add(p)
-    db.flush()
-    return p
-
-
-@router.post("/planeacion/previa", response_model=list[PlaneacionFila])
-def planeacion_previa(data: PlaneacionIn, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin)):
-    """Vista previa: días que se descontarían a cada empleado y quién quedaría con saldo negativo."""
-    return _planear(db, admin, data, aplicar=False)
-
-
-@router.post("/planeacion", response_model=list[PlaneacionFila])
-def planeacion(data: PlaneacionIn, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin)):
-    """Programa las vacaciones (quedan validadas) y descuenta los días; sin saldo, queda negativo."""
-    return _planear(db, admin, data, aplicar=True)

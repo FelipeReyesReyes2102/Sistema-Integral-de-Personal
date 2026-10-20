@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 from sqlalchemy import event, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from . import microsoft
 from .config import settings
@@ -249,6 +249,13 @@ def _enlace(tipo: str, reg) -> str | None:
     return f"{base.rstrip('/')}/" if base else None
 
 
+def _sesion(reg):
+    try:
+        return object_session(reg)
+    except Exception:  # registros sueltos (p. ej. en pruebas)
+        return None
+
+
 def datos_registro(tipo: str, reg) -> dict:
     u: Usuario = reg.usuario
     comunes = {
@@ -263,7 +270,6 @@ def datos_registro(tipo: str, reg) -> dict:
     if tipo == "vacaciones":
         saldo = None
         if reg.periodo is not None:
-            from sqlalchemy.orm import object_session
             from .services import saldo_periodo
             saldo = saldo_periodo(object_session(reg), reg.periodo)
         return {**comunes, "folio": f"VAC-{reg.id}", "fecha_ingreso": u.fecha_ingreso,
@@ -272,10 +278,13 @@ def datos_registro(tipo: str, reg) -> dict:
                 "dias": reg.dias_habiles, "horas": reg.horas, "periodo": reg.periodo.nombre if reg.periodo else None,
                 "comentario": reg.comentario}
     tz = ZoneInfo(u.sede.zona_horaria) if u.sede and u.sede.zona_horaria else timezone.utc
-    ho = reg.tipo == "home_office"
+    from . import tipos_permiso as _tp
+    ho = _tp.por_dias(_sesion(reg), getattr(u, "sede_id", None), reg.tipo)
     ini = datetime.combine(reg.fecha, time(0) if ho or not reg.hora_inicio else reg.hora_inicio, tzinfo=tz)
     fin = datetime.combine(reg.fecha_fin or reg.fecha, time(0) if ho or not reg.hora_fin else reg.hora_fin, tzinfo=tz)
-    return {**comunes, "folio": f"PER-{reg.id}", "tipo": reg.tipo, "fecha": reg.fecha, "fecha_fin": reg.fecha_fin,
+    from . import tipos_permiso as _tp
+    tipo_valor = reg.tipo if reg.tipo in PERMISOS else _tp.nombre(_sesion(reg), getattr(u, "sede_id", None), reg.tipo)
+    return {**comunes, "folio": f"PER-{reg.id}", "tipo": tipo_valor, "fecha": reg.fecha, "fecha_fin": reg.fecha_fin,
             "fecha_hora_inicio": ini, "fecha_hora_fin": fin,
             "hora_inicio": reg.hora_inicio.strftime("%H:%M") if reg.hora_inicio and reg.tipo != "home_office" else None,
             "hora_fin": reg.hora_fin.strftime("%H:%M") if reg.hora_fin and reg.tipo != "home_office" else None,

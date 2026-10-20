@@ -10,7 +10,7 @@ import PermisoModal from '../components/PermisoModal'
 import VacacionesModal from '../components/VacacionesModal'
 import YearCalendar from '../components/YearCalendar'
 import {
-  CATEGORIAS, esAdmin as esAdminFn, ESTADOS, ROLES, TIPOS_NOMINA, TIPOS_PERMISO, TIPOS_PERMISO_SOLICITABLES, diaMes, eventosPorFecha, estiloEvento, fmtFecha, hhmm, hoyISO, num,
+  CATEGORIAS, esAdmin as esAdminFn, ESTADOS, ROLES, TIPOS_NOMINA, TIPOS_PERMISO_SOLICITABLES, diaMes, nombreTipo, eventosPorFecha, estiloEvento, fmtFecha, hhmm, hoyISO, num,
   parseISO, toISO,
 } from '../utils'
 import EventosDia from '../components/EventosDia'
@@ -69,6 +69,8 @@ export default function MisVacaciones({ usuarioId }) {
   }, [usuarioId])
   const tiposPermiso = politica?.tipos_permiso || null
   const permisoHabilitado = (t) => !tiposPermiso || tiposPermiso.includes(t)
+  const tiposSede = politica?.permisos_tipos || null
+  const hayOtros = (tiposSede || []).some((t) => !t.base)
 
   const cargar = useCallback(async () => {
     try {
@@ -219,8 +221,9 @@ export default function MisVacaciones({ usuarioId }) {
       }
     }
     for (const pm of permisos) {
-      if (pm.fecha.startsWith(String(anio)) && r[pm.tipo] && pm.tipo !== 'home_office' && ['solicitado', 'validado'].includes(pm.estado)) {
-        r[pm.tipo].horas += pm.horas
+      const k = CATEGORIAS[pm.tipo] ? pm.tipo : 'otro_permiso'
+      if (pm.fecha.startsWith(String(anio)) && r[k] && !pm.por_dias && pm.tipo !== 'home_office' && ['solicitado', 'validado'].includes(pm.estado)) {
+        r[k].horas += pm.horas
       }
     }
     r.festivo.dias = (calendario?.festivos || []).length
@@ -340,6 +343,7 @@ export default function MisVacaciones({ usuarioId }) {
       <div className="card ps-registros">
         <PanelRegistros anio={anio} registros={registros} franjas={franjasDelAnio} foco={foco}
           visible={(k) => (['llegada_tarde', 'salida_temprana', 'salida_intermedia', 'home_office'].includes(k) ? permisoHabilitado(k)
+            : k === 'otro_permiso' ? hayOtros
             : k === 'consulta' ? politica?.modulo_consultas !== false : k === 'cumpleanos' ? politica?.modulo_cumpleanos !== false : true)
             || (registros[k]?.dias || 0) > 0}
           ocultos={ocultos} onPeriodo={alternarPeriodo}
@@ -366,9 +370,11 @@ export default function MisVacaciones({ usuarioId }) {
             periodos={periodosConSaldo} periodoId={periodoSolicitud} onPeriodo={setPeriodoSolicitud}
             hayGeneral={hayGeneral} diasGeneral={diasGeneral} maxDias={maxDias} fechaMax={fechaMax}
             homeOffice={permisoHabilitado('home_office')}
-            permisos={['llegada_tarde', 'salida_temprana', 'salida_intermedia'].some(permisoHabilitado)}
+            permisos={tiposSede ? tiposSede.some((t) => t.clave !== 'home_office')
+              : ['llegada_tarde', 'salida_temprana', 'salida_intermedia'].some(permisoHabilitado)}
+            permisoPorDias={(tiposSede || []).some((t) => t.modalidad === 'dias' && t.clave !== 'home_office')}
             onVacaciones={() => setModal({ tipo: 'vac', inicial: { fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin || seleccion.inicio, periodo_id: esGeneral ? null : periodoSolicitud } })}
-            onPermiso={() => setModal({ tipo: 'perm', fechaInicial: seleccion.inicio })}
+            onPermiso={() => setModal({ tipo: 'perm', fechaInicial: seleccion.inicio, fechaFinInicial: seleccion.fin || seleccion.inicio })}
             onHomeOffice={() => setModal({ tipo: 'perm', tipoPermiso: 'home_office', fechaInicial: seleccion.inicio, fechaFinInicial: seleccion.fin || seleccion.inicio })} />
         )}
         <YearCalendar anio={anio} onAnio={setAnio} datos={calendario} seleccion={seleccion} compacto
@@ -393,7 +399,7 @@ export default function MisVacaciones({ usuarioId }) {
       )}
       {modal?.tipo === 'perm' && (
         <PermisoModal usuario={empleado} tipoInicial={modal.tipoPermiso} permiso={modal.item} fechaInicial={modal.fechaInicial}
-          tiposHabilitados={tiposPermiso}
+          tipos={tiposSede}
           fechaFinInicial={modal.fechaFinInicial}
           onClose={() => setModal(null)} onSaved={refrescar} />
       )}
@@ -485,7 +491,7 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
 
   const items = useMemo(() => {
     const vs = vacaciones.map((v) => ({ ...v, cat: 'vacaciones', orden: v.fecha_inicio, fin: v.fecha_fin }))
-    const ps = permisos.map((p) => ({ ...p, cat: p.tipo, orden: p.fecha, fin: p.fecha_fin || p.fecha }))
+    const ps = permisos.map((p) => ({ ...p, cat: CATEGORIAS[p.tipo] ? p.tipo : 'otro_permiso', orden: p.fecha, fin: p.fecha_fin || p.fecha }))
     const cs = consultas.map((c) => ({ ...c, cat: 'consulta', orden: `${c.fecha}T${c.hora_inicio}`, fin: c.fecha }))
     return [...vs, ...ps, ...cs]
       .filter((i) => !estado || i.estado === estado)
@@ -535,6 +541,7 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
           <option value="vacaciones">Vacaciones</option>
           <option value="permisos">Todos los permisos</option>
           {Object.entries(TIPOS_PERMISO_SOLICITABLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          <option value="otro_permiso">Otros permisos</option>
           <option value="consulta">Consultas médicas</option>
         </select>
         <select value={estado} onChange={(e) => setEstado(e.target.value)}>
@@ -552,14 +559,14 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
                 <span className="reg-icono" style={{ background: CATEGORIAS[i.cat]?.color, marginRight: 6 }}><IconoCategoria cat={i.cat} size={12} /></span>
                 {i.cat === 'vacaciones' ? 'Vacaciones' : i.cat === 'consulta'
                   ? <span className="fila" style={{ gap: 6 }}><Stethoscope size={16} color="#00796b" /> Consulta médica</span>
-                  : TIPOS_PERMISO[i.tipo]}
+                  : nombreTipo(i)}
               </div>
               <div className="detalle">
                 {i.cat === 'vacaciones'
                   ? `${fmtFecha(i.fecha_inicio)} - ${fmtFecha(i.fecha_fin)} (${i.dias_habiles} d) · ${i.periodo_nombre}`
                   : i.cat === 'consulta'
                     ? `${fmtFecha(i.fecha)} ${hhmm(i.hora_inicio)}${i.hora_fin ? ` - ${hhmm(i.hora_fin)}` : ''} · Atendió: ${i.medico_nombre || 'Servicio médico'}`
-                    : i.tipo === 'home_office'
+                    : i.por_dias || i.tipo === 'home_office'
                       ? `${fmtFecha(i.fecha)} - ${fmtFecha(i.fecha_fin || i.fecha)} (${i.dias ?? '—'} d laborales)`
                       : `${fmtFecha(i.fecha)} ${hhmm(i.hora_inicio)} - ${hhmm(i.hora_fin)} (${num(i.horas)} h)`}
               </div>
@@ -594,7 +601,7 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
 }
 
 function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, hayGeneral, diasGeneral, maxDias, fechaMax, onLimpiar,
-  homeOffice = true, permisos = true,
+  homeOffice = true, permisos = true, permisoPorDias = false,
   onVacaciones, onPermiso, onHomeOffice }) {
   // Periodo del que se tomarán los días (General: primero el más antiguo)
   const selectorPeriodo = periodos.length > 0 && (
@@ -654,7 +661,7 @@ function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, hayGe
         <TreePalm size={14} /> Solicitar vacaciones
       </button>
       {homeOffice && <button className="btn btn-sm" onClick={onHomeOffice} disabled={!seleccion.fin}><Laptop size={14} /> Home office</button>}
-      {unDia && permisos && <button className="btn btn-sm" onClick={onPermiso}><Clock size={14} /> Solicitar permiso</button>}
+      {permisos && (unDia || permisoPorDias) && <button className="btn btn-sm" onClick={onPermiso}><Clock size={14} /> Solicitar permiso</button>}
       <button className="icon-btn plain" title="Cancelar selección (Esc)" onClick={onLimpiar}><X size={16} /></button>
       <kbd className="tecla" title="Presiona Esc para cancelar la selección">Esc</kbd>
     </div>
@@ -688,8 +695,9 @@ function Detalle({ item, onClose }) {
   const filas = vac
     ? [['Periodo', item.periodo_nombre], ['Desde', fmtFecha(item.fecha_inicio)], ['Hasta', fmtFecha(item.fecha_fin)],
        ['Días laborales', item.dias_habiles], ['Horas', num(item.horas)], ['Comentario', item.comentario]]
-    : [['Tipo', TIPOS_PERMISO[item.tipo]], ['Fecha', fmtFecha(item.fecha)],
-       ['Horario', `${hhmm(item.hora_inicio)} - ${hhmm(item.hora_fin)}`], ['Horas', num(item.horas)],
+    : [['Tipo', nombreTipo(item)], ...(item.por_dias
+      ? [['Desde', fmtFecha(item.fecha)], ['Hasta', fmtFecha(item.fecha_fin || item.fecha)], ['Días laborales', item.dias]]
+      : [['Fecha', fmtFecha(item.fecha)], ['Horario', `${hhmm(item.hora_inicio)} - ${hhmm(item.hora_fin)}`], ['Horas', num(item.horas)]]),
        ['Departamento', item.departamento], ['Tiempo en nómina', TIPOS_NOMINA[item.tipo_nomina]],
        ['Motivo', item.motivo], ['Observaciones', item.observaciones]]
   filas.push(['Jefe que aprueba', item.aprobador_nombre || 'Administración'])

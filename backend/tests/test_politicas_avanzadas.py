@@ -95,31 +95,3 @@ def test_aprobacion_jefe_mas_gh():
     assert p["estado"] == "validado" and not p["falta_gh"]
     adm.post(f"/api/permisos/{pid}/cancelar")
     adm.put("/api/politica", json=base)
-
-
-def test_planeacion_con_saldo_negativo():
-    ingreso = date.today() - timedelta(days=200)  # aún sin periodo: todo queda a deber
-    uid = _usuario("Rosa Planeada", "rosa.planeada@empresa.com", ingreso)
-    adm = login("admin@empresa.com", "Admin123")
-    d = date.today() + timedelta(days=20)
-    while d.weekday() != 0:
-        d += timedelta(days=1)
-    plan = {"usuario_ids": [uid], "fecha_inicio": str(d), "fecha_fin": str(d + timedelta(days=2)), "comentario": "Paro de planta"}
-    previa = adm.post("/api/vacaciones/planeacion/previa", json=plan).json()[0]
-    assert previa["dias"] == 3 and previa["negativo"] == 3 and previa["saldo_despues"] == -3 and not previa["error"]
-    fila = adm.post("/api/vacaciones/planeacion", json=plan).json()[0]
-    assert fila["solicitudes"] and not fila["error"]
-    sol = adm.get(f"/api/vacaciones/{fila['solicitudes'][0]}").json()
-    assert sol["estado"] == "validado" and sol["planeada"] and "[Planeación GH]" in sol["comentario"]
-    with SessionLocal() as db:
-        u = db.get(Usuario, uid)
-        periodos = sincronizar_periodos(db, u)
-        assert len(periodos) == 1 and periodos[0].fecha_inicio > date.today() and periodos[0].horas_otorgadas == 0
-        assert saldo_periodo(db, periodos[0]).dias_disponible == -3  # saldo negativo
-        # Al cumplir el aniversario se generan sus días y ahí se descuenta lo que debía
-        p = sincronizar_periodos(db, u, hoy=reglas.sumar_anios(ingreso, 1) + timedelta(days=1))[0]
-        assert p.horas_otorgadas == 12 * 8
-        assert saldo_periodo(db, p, hoy=reglas.sumar_anios(ingreso, 1) + timedelta(days=1)).dias_disponible == 12 - 3
-    # No se planea dos veces sobre las mismas fechas
-    assert "Ya tiene otra solicitud" in adm.post("/api/vacaciones/planeacion/previa", json=plan).json()[0]["error"]
-    assert login("ana@empresa.com", "Cambiar123").post("/api/vacaciones/planeacion/previa", json=plan).status_code == 403

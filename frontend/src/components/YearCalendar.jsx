@@ -3,7 +3,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, LayoutGrid } from 'lucide-reac
 import IconoCategoria from './IconoCategoria'
 import { CATEGORIAS, DIAS_SEMANA, ESTADOS, MESES, eventosPorFecha, estiloEvento, fmtFecha, hoyISO, parseISO, toISO } from '../utils'
 
-const PRIORIDAD = ['vacaciones', 'home_office', 'salida_intermedia', 'salida_temprana', 'llegada_tarde', 'consulta', 'consulta_medica']
+const PRIORIDAD = ['vacaciones', 'home_office', 'otro_permiso', 'salida_intermedia', 'salida_temprana', 'llegada_tarde', 'consulta', 'consulta_medica']
 
 /**
  * Calendario interactivo.
@@ -119,7 +119,7 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
     cumples[f] && `🎂 Cumpleaños: ${cumples[f].map((c) => c.nombre).join(', ')}`,
     festivos[f] && `Festivo: ${festivos[f]}`,
     noLab.has(f) && 'Día de descanso',
-    ...evs.map((e) => `${CATEGORIAS[e.cat]?.label}${e.estado && e.estado !== 'registrada' ? ` · ${ESTADOS[e.estado]}` : ''}${e.hora_inicio && e.cat !== 'home_office' ? ` · ${e.hora_inicio}` : ''}`),
+    ...evs.map((e) => `${e.tipo_nombre && e.cat === 'otro_permiso' ? e.tipo_nombre : CATEGORIAS[e.cat]?.label}${e.estado && e.estado !== 'registrada' ? ` · ${ESTADOS[e.estado]}` : ''}${e.hora_inicio && e.cat !== 'home_office' ? ` · ${e.hora_inicio}` : ''}`),
   ].filter(Boolean).join('\n')
 
   // ---------- Celda pequeña (vista anual) ----------

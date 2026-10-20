@@ -4,7 +4,7 @@ import { Check, Eye, PenLine, X } from 'lucide-react'
 import { api } from '../api'
 import DetalleConsulta from '../components/DetalleConsulta'
 import Modal from '../components/Modal'
-import { ESTADOS, RESULTADOS_CONSULTA, ROLES, TIPOS_NOMINA, TIPOS_PERMISO, TIPOS_PERMISO_SOLICITABLES, fmtFecha, hhmm, num } from '../utils'
+import { ESTADOS, RESULTADOS_CONSULTA, ROLES, TIPOS_NOMINA, TIPOS_PERMISO_SOLICITABLES, fmtFecha, nombreTipo, hhmm, num } from '../utils'
 
 /**
  * Bandeja para aprobar o rechazar vacaciones y permisos.
@@ -41,6 +41,12 @@ export default function Solicitudes({ modo = 'jefe' }) {
     api(`/${tab}`, { query }).then(setLista).catch((e) => setError(e.message))
   }
   useEffect(cargar, [tab, estado, modo, tipo])
+
+  // Tipos de permiso de la sede (base y agregados por GH) para el filtro
+  const [tiposFiltro, setTiposFiltro] = useState(null)
+  useEffect(() => {
+    api('/politica').then((p) => p.permisos_tipos && setTiposFiltro(p.permisos_tipos.map((t) => [t.clave, t.nombre]))).catch(() => {})
+  }, [])
 
   // Pendientes por pestaña (círculo rojo), se actualiza al aprobar/rechazar
   const [pend, setPend] = useState({})
@@ -89,7 +95,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
         {tab === 'permisos' && (
           <select style={{ width: 200 }} value={tipo} onChange={(e) => setTipo(e.target.value)}>
             <option value="">Todos los tipos</option>
-            {Object.entries(TIPOS_PERMISO_SOLICITABLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            {(tiposFiltro || Object.entries(TIPOS_PERMISO_SOLICITABLES)).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         )}
         <input style={{ width: 220 }} placeholder="Buscar empleado…" value={buscar} onChange={(e) => setBuscar(e.target.value)} />
@@ -150,9 +156,9 @@ export default function Solicitudes({ modo = 'jefe' }) {
                   </>
                 ) : (
                   <>
-                    <td>{TIPOS_PERMISO[s.tipo]}</td>
-                    <td>{fmtFecha(s.fecha)}{s.tipo === 'home_office' && s.fecha_fin && s.fecha_fin !== s.fecha ? ` → ${fmtFecha(s.fecha_fin)}` : ''}</td>
-                    <td>{s.tipo === 'home_office'
+                    <td>{nombreTipo(s)}</td>
+                    <td>{fmtFecha(s.fecha)}{s.por_dias && s.fecha_fin && s.fecha_fin !== s.fecha ? ` → ${fmtFecha(s.fecha_fin)}` : ''}</td>
+                    <td>{s.por_dias
                       ? <span className="muted">{s.dias ?? '—'} día(s) laborales</span>
                       : <>{hhmm(s.hora_inicio)} - {hhmm(s.hora_fin)} <span className="muted">({num(s.horas)} h)</span></>}</td>
                     <td className="muted">
@@ -219,7 +225,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
             <button className="btn btn-success"
               onClick={() => ejecutar(`/permisos/${validarPermiso.id}/validar`, { observaciones: validarPermiso.obs || null })}>Validar</button>
           </>}>
-          <p><b>{validarPermiso.usuario_nombre}</b> · {TIPOS_PERMISO[validarPermiso.tipo]} · {fmtFecha(validarPermiso.fecha)} {hhmm(validarPermiso.hora_inicio)}-{hhmm(validarPermiso.hora_fin)}</p>
+          <p><b>{validarPermiso.usuario_nombre}</b> · {nombreTipo(validarPermiso)} · {fmtFecha(validarPermiso.fecha)} {hhmm(validarPermiso.hora_inicio)}-{hhmm(validarPermiso.hora_fin)}</p>
           <label className="campo">
             {validarPermiso.tipo === 'consulta_medica' ? 'Observaciones del médico de planta (opcional)' : 'Observaciones (opcional)'}
             <textarea rows={3} value={validarPermiso.obs || ''} onChange={(e) => setValidarPermiso({ ...validarPermiso, obs: e.target.value })} />

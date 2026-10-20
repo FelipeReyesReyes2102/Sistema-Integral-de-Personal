@@ -5,7 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, object_session
 
-from .. import correo, horarios, reglas
+from .. import correo, horarios, reglas, tipos_permiso
 from ..database import get_db
 from ..models import (
     BORRADOR, CANCELADO, ESTADOS_ACTIVOS, PERMISO_CONSULTA_MEDICA, PERMISO_HOME_OFFICE, RECHAZADO, ROL_ADMIN,
@@ -26,8 +26,11 @@ def _out(p: Permiso) -> PermisoOut:
     o.aprobador_nombre = p.aprobador.nombre if p.aprobador else None
     o.revisado_por_nombre = p.revisado_por.nombre if p.revisado_por else None
     o.tiene_firma = bool(p.firma)
-    if p.tipo == PERMISO_HOME_OFFICE and p.usuario:
-        db = object_session(p)
+    db = object_session(p)
+    sede_id = p.usuario.sede_id if p.usuario else None
+    o.tipo_nombre = tipos_permiso.nombre(db, sede_id, p.tipo)
+    o.por_dias = tipos_permiso.por_dias(db, sede_id, p.tipo)
+    if o.por_dias and p.usuario:
         fin = p.fecha_fin or p.fecha
         o.dias = len(reglas.dias_laborales(p.fecha, fin, ciclo_de(p.usuario), festivos_de(db, p.usuario, p.fecha, fin)))
     o.aprobado_jefe_nombre = p.aprobado_jefe.nombre if p.aprobado_jefe else None
@@ -35,24 +38,24 @@ def _out(p: Permiso) -> PermisoOut:
     return o
 
 
-def _validar_envio(motivo, tipo_nomina, firma, tipo=None):
-    nomina = tipo_nomina if tipo != PERMISO_HOME_OFFICE else "n/a"  # home office no es ausencia
+def _validar_envio(motivo, tipo_nomina, firma, pide_nomina: bool = True):
+    nomina = tipo_nomina if pide_nomina else "n/a"  # p. ej. home office no es ausencia
     faltan = [n for n, v in (("motivo", motivo), ("cómo se considera el tiempo en nómina", nomina),
                              ("firma", firma)) if not v]
     if faltan:
         raise HTTPException(422, f"Para enviar el permiso falta: {', '.join(faltan)}.")
 
 
-def _home_office(db: Session, data: PermisoIn, empleado: Usuario, actor: Usuario, excluir_id: int | None) -> dict:
-    """Home office: rango de días laborales; no descuenta horas ni vacaciones."""
+def _por_dias(db: Session, data: PermisoIn, empleado: Usuario, actor: Usuario, excluir_id: int | None, cfg) -> dict:
+    """Permiso por días (home office u otro): rango de días laborales; no descuenta vacaciones."""
     fin = data.fecha_fin or data.fecha
     if fin < data.fecha:
-        raise HTTPException(422, "La fecha final del home office no puede ser anterior a la inicial.")
-    maximo = empleado.sede.home_office_max_dias if empleado.sede else 31
+        raise HTTPException(422, f"La fecha final de {cfg.nombre} no puede ser anterior a la inicial.")
+    maximo = cfg.max_dias_solicitud or 31
     if (fin - data.fecha).days > maximo - 1:
-        raise HTTPException(422, f"El home office puede solicitarse por máximo {maximo} días naturales a la vez.")
+        raise HTTPException(422, f"{cfg.nombre} puede solicitarse por máximo {maximo} días naturales a la vez.")
     if not es_admin(actor) and data.fecha < hoy_de(empleado):
-        raise HTTPException(422, "No es posible solicitar home office en fechas pasadas.")
+        raise HTTPException(422, f"No es posible solicitar {cfg.nombre.lower()} en fechas pasadas.")
     dias = reglas.dias_laborales(data.fecha, fin, ciclo_de(empleado), festivos_de(db, empleado, data.fecha, fin))
     if not dias:
         raise HTTPException(422, "El rango no contiene días laborales.")
@@ -62,33 +65,38 @@ def _home_office(db: Session, data: PermisoIn, empleado: Usuario, actor: Usuario
     if choca_vac:
         raise HTTPException(422, "Ya tienes vacaciones en esas fechas.")
     q = select(Permiso.id).where(
-        Permiso.usuario_id == empleado.id, Permiso.tipo == PERMISO_HOME_OFFICE, Permiso.estado.in_(ESTADOS_ACTIVOS),
+        Permiso.usuario_id == empleado.id, Permiso.tipo == cfg.clave, Permiso.estado.in_(ESTADOS_ACTIVOS),
         Permiso.fecha <= fin, func.coalesce(Permiso.fecha_fin, Permiso.fecha) >= data.fecha)
     if excluir_id:
         q = q.where(Permiso.id != excluir_id)
     if db.scalar(q.limit(1)):
-        raise HTTPException(422, "Ya tienes home office solicitado en alguno de esos días.")
+        raise HTTPException(422, f"Ya tienes {cfg.nombre.lower()} solicitado en alguno de esos días.")
+    tipos_permiso.validar_limite(db, empleado, cfg, data.fecha, fin, 0.0, len(dias), excluir_id)
     t = empleado.turno
     return {"horas": 0.0, "fecha_fin": fin,
             "hora_inicio": data.hora_inicio or (t.hora_entrada if t else time(8)),
             "hora_fin": data.hora_fin or (t.hora_salida if t else time(17))}
 
 
-def _tipo_habilitado(empleado: Usuario, tipo: str):
-    """Cada sede decide qué tipos de permiso usa."""
-    habilitados = (empleado.sede.tipos_permiso or "").split(",") if empleado.sede else None
-    if habilitados is not None and tipo != PERMISO_CONSULTA_MEDICA and tipo not in habilitados:
+def _tipo_habilitado(db: Session, empleado: Usuario, tipo: str):
+    """Cada sede decide qué tipos de permiso usa (los base y los que agregue GH)."""
+    if tipo == PERMISO_CONSULTA_MEDICA:
+        raise HTTPException(422, "Las consultas médicas ya no se solicitan: las registra el médico de planta.")
+    cfg = tipos_permiso.obtener(db, empleado.sede_id, tipo)
+    if cfg is None or not cfg.activo:
         raise HTTPException(422, "Ese tipo de permiso no está habilitado en tu sede.")
+    return cfg
 
 
 def _preparar(db: Session, data: PermisoIn, empleado: Usuario, actor: Usuario, excluir_id: int | None = None) -> dict:
-    _tipo_habilitado(empleado, data.tipo)
-    if data.tipo == PERMISO_HOME_OFFICE:
-        return _home_office(db, data, empleado, actor, excluir_id)
+    cfg = _tipo_habilitado(db, empleado, data.tipo)
+    if cfg.modalidad == "dias":
+        return {**_por_dias(db, data, empleado, actor, excluir_id, cfg), "cfg": cfg}
     if not data.hora_inicio or not data.hora_fin:
         raise HTTPException(422, "Indica el horario del permiso.")
-    return {"horas": _validar(data, empleado, actor), "fecha_fin": None,
-            "hora_inicio": data.hora_inicio, "hora_fin": data.hora_fin}
+    horas = _validar(data, empleado, actor)
+    tipos_permiso.validar_limite(db, empleado, cfg, data.fecha, None, horas, 1, excluir_id)
+    return {"horas": horas, "fecha_fin": None, "hora_inicio": data.hora_inicio, "hora_fin": data.hora_fin, "cfg": cfg}
 
 
 def _validar(data: PermisoIn, empleado: Usuario, actor: Usuario) -> float:
@@ -135,11 +143,11 @@ def crear(data: PermisoIn, db: Session = Depends(get_db), user: Usuario = Depend
         empleado = db.get(Usuario, data.usuario_id) or _404()
         if not admin_permite(user, empleado.sede_id):
             _404()
-    _tipo_habilitado(empleado, data.tipo)
+    _tipo_habilitado(db, empleado, data.tipo)
     aprobador_id = resolver_aprobador(db, empleado, data.aprobador_id)
     v = _preparar(db, data, empleado, user)
     if data.enviar:
-        _validar_envio(data.motivo, data.tipo_nomina, data.firma, data.tipo)
+        _validar_envio(data.motivo, data.tipo_nomina, data.firma, v["cfg"].pide_nomina)
     p = Permiso(usuario_id=empleado.id, tipo=data.tipo, fecha=data.fecha, fecha_fin=v["fecha_fin"],
                 hora_inicio=v["hora_inicio"], hora_fin=v["hora_fin"], horas=v["horas"], motivo=data.motivo,
                 aprobador_id=aprobador_id,
@@ -179,7 +187,7 @@ def editar(pid: int, data: PermisoIn, db: Session = Depends(get_db), user: Usuar
     if data.firma:
         p.firma = data.firma
     if data.enviar:
-        _validar_envio(p.motivo, p.tipo_nomina, p.firma, p.tipo)
+        _validar_envio(p.motivo, p.tipo_nomina, p.firma, v["cfg"].pide_nomina)
         p.estado = SOLICITADO
     db.commit()
     return _out(p)
@@ -191,11 +199,23 @@ def enviar(pid: int, db: Session = Depends(get_db), user: Usuario = Depends(get_
     _es_dueno_o_admin(p, user)
     if p.estado != BORRADOR:
         raise HTTPException(400, "El permiso ya fue enviado")
-    _validar_envio(p.motivo, p.tipo_nomina, p.firma, p.tipo)
+    cfg = tipos_permiso.obtener(db, p.usuario.sede_id, p.tipo)
+    _validar_envio(p.motivo, p.tipo_nomina, p.firma, cfg.pide_nomina if cfg else True)
     p.aprobador_id = resolver_aprobador(db, p.usuario, p.aprobador_id)
     p.estado = SOLICITADO
     db.commit()
     return _out(p)
+
+
+@router.get("/uso")
+def uso(tipo: str, fecha: date, usuario_id: int | None = None, excluir_id: int | None = None,
+        db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
+    """Cuánto lleva usado el empleado del límite del tipo (en el mes o año de la fecha)."""
+    u = empleado_visible(db, user, usuario_id)
+    t = tipos_permiso.obtener(db, u.sede_id, tipo)
+    if not t:
+        _404()
+    return tipos_permiso.uso(db, u, t, fecha, excluir_id)
 
 
 @router.get("/{pid}", response_model=PermisoOut)

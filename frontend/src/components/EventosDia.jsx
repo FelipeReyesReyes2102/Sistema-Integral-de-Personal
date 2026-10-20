@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Lock } from 'lucide-react'
 import { api } from '../api'
-import { CATEGORIAS, ESTADOS, RESULTADOS_CONSULTA, TIPOS_NOMINA, TIPOS_PERMISO, fmtFecha, hhmm, num } from '../utils'
+import { CATEGORIAS, ESTADOS, RESULTADOS_CONSULTA, TIPOS_NOMINA, fmtFecha, nombreTipo, hhmm, num } from '../utils'
 import Modal from './Modal'
 import Avatar from './Avatar'
 import IconoCategoria from './IconoCategoria'
@@ -15,7 +15,7 @@ function Fila({ k, v }) {
 function Evento({ e }) {
   const [d, setD] = useState(null)
   const [error, setError] = useState('')
-  const cat = CATEGORIAS[e.cat] || { label: e.cat, color: '#888' }
+  const cat = { ...(CATEGORIAS[e.cat] || { label: e.cat, color: '#888' }), ...(e.cat === 'otro_permiso' && e.tipo_nombre ? { label: e.tipo_nombre } : {}) }
 
   useEffect(() => {
     if (!e.id) return
@@ -49,8 +49,8 @@ function Evento({ e }) {
       )}
       {d && e.cat !== 'vacaciones' && e.cat !== 'consulta' && (
         <>
-          <Fila k="Tipo" v={TIPOS_PERMISO[d.tipo]} />
-          {d.tipo === 'home_office'
+          <Fila k="Tipo" v={nombreTipo(d)} />
+          {d.por_dias || d.tipo === 'home_office'
             ? <Fila k="Fechas" v={`${fmtFecha(d.fecha)} → ${fmtFecha(d.fecha_fin || d.fecha)} (${d.dias ?? '—'} días laborales)`} />
             : <Fila k="Horario" v={`${fmtFecha(d.fecha)} · ${hhmm(d.hora_inicio)} - ${hhmm(d.hora_fin)} (${num(d.horas)} h)`} />}
           <Fila k="Motivo" v={d.motivo} />

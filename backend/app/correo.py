@@ -221,9 +221,12 @@ def _turno_txt(u, fecha) -> str:
 
 
 def mensaje_permiso(p: Permiso, evento: str) -> tuple[str, str, str]:
+    from sqlalchemy.orm import object_session
+    from . import tipos_permiso
     u = p.usuario
-    tipo = NOMBRES_TIPO.get(p.tipo, p.tipo)
-    if p.tipo == PERMISO_HOME_OFFICE:
+    db = object_session(p)
+    tipo = tipos_permiso.nombre(db, u.sede_id, p.tipo)
+    if tipos_permiso.por_dias(db, u.sede_id, p.tipo):
         cuando = f"{p.fecha:%d/%m/%Y} al {(p.fecha_fin or p.fecha):%d/%m/%Y}"
         horario = "Día completo (trabajo remoto)"
     else:

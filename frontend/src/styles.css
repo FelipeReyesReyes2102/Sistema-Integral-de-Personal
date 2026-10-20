@@ -793,6 +793,5 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .sa-sede { border-left: 4px solid var(--primary); }
 
 /* ---------- Planeación de vacaciones ---------- */
-.pl-grid { display: grid; grid-template-columns: 170px 170px 1fr; gap: 10px 14px; }
-.pl-deuda { color: #a35d00; font-weight: 600; }
-@media (max-width: 760px) { .pl-grid { grid-template-columns: 1fr 1fr; } .pl-com { grid-column: 1 / -1; } }
+
+.fo-ayuda.error-texto { color: var(--danger); }

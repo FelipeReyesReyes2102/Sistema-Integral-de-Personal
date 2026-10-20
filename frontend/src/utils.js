@@ -44,11 +44,23 @@ export const CATEGORIAS = {
   llegada_tarde: { label: 'Llegada tarde', color: '#8e44ad' },
   salida_temprana: { label: 'Salida temprana', color: '#e67e22' },
   salida_intermedia: { label: 'Salida durante la jornada', color: '#c2185b' },
+  otro_permiso: { label: 'Otros permisos', color: '#6d4c41' },
   consulta: { label: 'Consulta médica', color: '#00897b' },
   consulta_medica: { label: 'Consulta médica (permiso)', color: '#00897b' },
   festivo: { label: 'Festivo', color: '#e53935' },
   cumpleanos: { label: 'Cumpleaños', color: '#ec407a' },
   aniversario: { label: 'Aniversario', color: '#c99a06' },
+}
+
+/** Nombre visible del tipo de un permiso (los agregados por la sede traen su nombre del backend). */
+export const nombreTipo = (p) => p?.tipo_nombre || TIPOS_PERMISO[p?.tipo] || p?.tipo || ''
+
+/** "2 día(s) por mes", "8 h por año", "3 día(s) en total". */
+export function textoLimite(t) {
+  if (!t?.limite_cantidad) return 'Sin límite'
+  const unidad = t.limite_unidad === 'horas' ? 'h' : t.modalidad === 'horas' ? 'permiso(s)' : 'día(s)'
+  const periodo = { mes: 'por mes', anio: 'por año' }[t.limite_periodo] || 'en total'
+  return `${Number(t.limite_cantidad).toLocaleString('es-MX')} ${unidad} ${periodo}`
 }
 
 /** Estilo de un evento según su estado: validado = sólido, solicitado = tenue, borrador = contorno. */
@@ -64,7 +76,7 @@ export function eventosPorFecha(datos) {
   const mapa = {}
   const agregar = (f, e) => (mapa[f] ||= []).push(e)
   for (const [f, v] of Object.entries(datos?.vacaciones || {})) agregar(f, { cat: 'vacaciones', estado: v.estado, id: v.id })
-  for (const p of datos?.permisos || []) agregar(p.fecha, { cat: p.tipo, estado: p.estado, id: p.id, hora_inicio: p.hora_inicio, hora_fin: p.hora_fin })
+  for (const p of datos?.permisos || []) agregar(p.fecha, { cat: p.cat || p.tipo, tipo_nombre: p.tipo_nombre, estado: p.estado, id: p.id, hora_inicio: p.hora_inicio, hora_fin: p.hora_fin })
   for (const c of datos?.consultas || []) agregar(c.fecha, { cat: 'consulta', estado: 'registrada', id: c.id, hora_inicio: c.hora_inicio, hora_fin: c.hora_fin })
   return mapa
 }

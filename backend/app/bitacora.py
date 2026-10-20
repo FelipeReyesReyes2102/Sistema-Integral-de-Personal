@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, object_session
 
 from .models import (
     PERMISO_CONSULTA_MEDICA, Permiso, AdminSede, Bitacora, ConfiguracionApp, Festivo, Grupo, HorarioEspecial, PeriodoVacaciones, ReglaAntiguedad,
-    CanalAprobacion, ListaSharePoint, RotacionTurnos, Sede, SolicitudVacaciones, TipoJornada, Turno, TurnoDia, Usuario,
+    CanalAprobacion, ListaSharePoint, RotacionTurnos, Sede, SolicitudVacaciones, TipoJornada, TipoPermisoSede, Turno, TurnoDia, Usuario,
 )
 
 CONFIG, VACACIONES = "configuracion", "vacaciones"
@@ -34,7 +34,7 @@ PROPIAS = {
     Sede: (CONFIG, "Sede"), TipoJornada: (CONFIG, "Jornada"), Turno: (CONFIG, "Turno"), Grupo: (CONFIG, "Grupo"),
     Festivo: (CONFIG, "Festivo"), RotacionTurnos: (CONFIG, "Rotación de turnos"),
     SolicitudVacaciones: (VACACIONES, "Solicitud de vacaciones"), Permiso: (VACACIONES, "Permiso"), ListaSharePoint: (CONFIG, "Lista de SharePoint"),
-    CanalAprobacion: (CONFIG, "Aprobación en Teams"),
+    CanalAprobacion: (CONFIG, "Aprobación en Teams"), TipoPermisoSede: (CONFIG, "Tipo de permiso"),
 }
 OMITIR = {"id", "columnas", "sitio_id", "lista_id", "creado", "actualizado", "ultimo_aviso", "ultima_sincronizacion", "fecha_revision", "actualizado_por_id",
           "cifrado"}
@@ -59,7 +59,9 @@ CAMPOS = {
     "observaciones": "Observaciones", "departamento": "Departamento", "tipo_nomina": "Tipo en nómina", "aprobado_jefe_id": "Aprobó el jefe",
     "fecha_aprobado_jefe": "Fecha de aprobación del jefe", "por_horas": "Por horas", "planeada": "Planeada por GH",
     "generacion_dias": "Generación de días", "aprobacion_gh_vacaciones": "Vacaciones: aprobación jefe + GH",
-    "aprobacion_gh_permisos": "Permisos: aprobación jefe + GH", "descuento": "Saldo en", "minimo_horas": "Mínimo de horas", "tipo": "Tipo", "url": "URL", "sitio_nombre": "Sitio", "lista_nombre": "Lista",
+    "aprobacion_gh_permisos": "Permisos: aprobación jefe + GH", "modalidad": "Se pide por",
+    "pide_nomina": "Pide tipo de nómina", "limite_cantidad": "Límite", "limite_unidad": "Unidad del límite",
+    "limite_periodo": "Periodo del límite", "max_dias_solicitud": "Máximo de días por solicitud", "descuento": "Saldo en", "minimo_horas": "Mínimo de horas", "tipo": "Tipo", "url": "URL", "sitio_nombre": "Sitio", "lista_nombre": "Lista",
     "mapeo": "Columnas y datos", "valores": "Equivalencia de opciones", "aprobacion_teams": "Aprobación en Teams",
     "col_decision": "Columna de decisión", "val_aprobado": "Valor de aprobado", "val_rechazado": "Valor de rechazado",
     "col_comentario": "Columna de comentarios", "col_respondio": "Columna de quién respondió", "cuenta_flujo": "Cuenta del flujo", "flujo_url": "URL del flujo", "tipos": "Tipos de solicitud",
@@ -129,6 +131,13 @@ def Base_tabla(nombre):
     return Base.metadata.tables[nombre]
 
 
+def _nombre_tipo(ctx: "_Ctx", usuario_id, clave: str) -> str:
+    """Nombre de un tipo de permiso agregado por la sede (consulta directa, sin disparar el flush)."""
+    t = TipoPermisoSede.__table__
+    sede = ctx.columna(Usuario.__table__, "sede_id", usuario_id)
+    return ctx.con.execute(select(t.c.nombre).where(t.c.sede_id == sede, t.c.clave == clave)).scalar() or clave
+
+
 def _valor(ctx: _Ctx, obj, col, v):
     """Valor legible de una columna."""
     if v is None:
@@ -140,7 +149,7 @@ def _valor(ctx: _Ctx, obj, col, v):
     if col.key in ("dias_semana",):
         return _lista_dias(v)
     if isinstance(obj, Permiso) and col.key == "tipo":
-        return PERMISOS.get(v, v)
+        return PERMISOS.get(v) or _nombre_tipo(ctx, obj.usuario_id, v)
     if col.key == "tipo_nomina":
         return {"con_goce": "Con goce de sueldo", "sin_goce": "Sin goce de sueldo", "reposicion": "Reposición de tiempo"}.get(v, v)
     if col.key in ("tipos_permiso", "caseta_tipos"):
@@ -255,7 +264,8 @@ def _descripcion(ctx: _Ctx, obj, viejo=False) -> str:
         cuando = f"{_fmt(g('fecha'))} al {_fmt(fin)}" if fin and fin != g("fecha") else _fmt(g("fecha"))
         if g("tipo") != "home_office" and g("hora_inicio"):
             cuando += f" {_fmt(g('hora_inicio'))}–{_fmt(g('hora_fin'))}"
-        return f"{ctx.nombre('usuarios', g('usuario_id'))} · {PERMISOS.get(g('tipo'), g('tipo'))} · {cuando}"
+        tipo = PERMISOS.get(g("tipo")) or _nombre_tipo(ctx, g("usuario_id"), g("tipo"))
+        return f"{ctx.nombre('usuarios', g('usuario_id'))} · {tipo} · {cuando}"
     if isinstance(obj, Festivo):
         return f"{_fmt(g('fecha'))} · {g('nombre')}"
     if isinstance(obj, RotacionTurnos):

@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from .. import tipos_permiso
 from ..models import TIPOS_PERMISO_SOLICITABLES, Sede, TipoJornada, Usuario
 from ..schemas import JornadaIn, JornadaOut, PoliticaIn
 from ..security import auditar, get_current_user, require_admin
@@ -26,7 +27,11 @@ def _politica(db: Session, sede: Sede) -> dict:
         "sede_id": sede.id, "sede_nombre": sede.nombre, "zona_horaria": sede.zona_horaria,
         "meses_vigencia": sede.meses_vigencia, "equivalencia_horas": sede.equivalencia_horas,
         "dias_anticipacion": sede.dias_anticipacion,
-        "tipos_permiso": [t for t in (sede.tipos_permiso or "").split(",") if t],
+        "tipos_permiso": [t.clave for t in tipos_permiso.de_sede(db, sede.id, solo_activos=True)],
+        "permisos_tipos": [{"clave": t.clave, "nombre": t.nombre, "modalidad": t.modalidad, "pide_nomina": t.pide_nomina,
+                            "limite_cantidad": t.limite_cantidad, "limite_unidad": t.limite_unidad,
+                            "limite_periodo": t.limite_periodo, "max_dias_solicitud": t.max_dias_solicitud,
+                            "color": t.color, "base": t.base} for t in tipos_permiso.de_sede(db, sede.id, solo_activos=True)],
         "home_office_max_dias": sede.home_office_max_dias,
         "modulo_consultas": sede.modulo_consultas, "modulo_cumpleanos": sede.modulo_cumpleanos,
         "generacion_dias": sede.generacion_dias or "aniversario",
@@ -69,8 +74,17 @@ def guardar(data: PoliticaIn, request: Request, db: Session = Depends(get_db), a
             alc: Alcance = Depends(alcance)):
     sede = _sede(db, alc.defecto)
     sede.meses_vigencia, sede.equivalencia_horas = data.meses_vigencia, data.equivalencia_horas
-    sede.dias_anticipacion, sede.home_office_max_dias = data.dias_anticipacion, data.home_office_max_dias
-    sede.tipos_permiso = ",".join(t for t in TIPOS_PERMISO_SOLICITABLES if t in data.tipos_permiso)
+    sede.dias_anticipacion = data.dias_anticipacion
+    tipos = tipos_permiso.de_sede(db, sede.id)
+    if data.tipos_permiso is not None:  # compatibilidad: activa o desactiva los tipos base
+        for t in tipos:
+            if t.base:
+                t.activo = t.clave in data.tipos_permiso
+    if data.home_office_max_dias:
+        for t in tipos:
+            if t.clave == "home_office":
+                t.max_dias_solicitud = data.home_office_max_dias
+    tipos_permiso.sincronizar_sede(db, sede)
     sede.modulo_consultas, sede.modulo_cumpleanos = data.modulo_consultas, data.modulo_cumpleanos
     sede.generacion_dias = data.generacion_dias
     sede.aprobacion_gh_vacaciones, sede.aprobacion_gh_permisos = data.aprobacion_gh_vacaciones, data.aprobacion_gh_permisos
