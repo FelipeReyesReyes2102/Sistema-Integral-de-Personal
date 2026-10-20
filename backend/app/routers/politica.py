@@ -29,6 +29,8 @@ def _politica(db: Session, sede: Sede) -> dict:
         "tipos_permiso": [t for t in (sede.tipos_permiso or "").split(",") if t],
         "home_office_max_dias": sede.home_office_max_dias,
         "modulo_consultas": sede.modulo_consultas, "modulo_cumpleanos": sede.modulo_cumpleanos,
+        "generacion_dias": sede.generacion_dias or "aniversario",
+        "aprobacion_gh_vacaciones": sede.aprobacion_gh_vacaciones, "aprobacion_gh_permisos": sede.aprobacion_gh_permisos,
         "caseta_activo": sede.caseta_activo,
         "jornadas": jornadas,
         "tabla_propia": propia, "tabla": [{"anios_desde": r.anios_desde, "anios_hasta": r.anios_hasta, "dias": r.dias}
@@ -70,6 +72,8 @@ def guardar(data: PoliticaIn, request: Request, db: Session = Depends(get_db), a
     sede.dias_anticipacion, sede.home_office_max_dias = data.dias_anticipacion, data.home_office_max_dias
     sede.tipos_permiso = ",".join(t for t in TIPOS_PERMISO_SOLICITABLES if t in data.tipos_permiso)
     sede.modulo_consultas, sede.modulo_cumpleanos = data.modulo_consultas, data.modulo_cumpleanos
+    sede.generacion_dias = data.generacion_dias
+    sede.aprobacion_gh_vacaciones, sede.aprobacion_gh_permisos = data.aprobacion_gh_vacaciones, data.aprobacion_gh_permisos
     auditar(db, "politica_sede", actor_id=admin.id,
             detalle=f"{sede.nombre}: vigencia {data.meses_vigencia} meses · anticipación {data.dias_anticipacion} d · "
                     f"permisos {sede.tipos_permiso or 'ninguno'} · "

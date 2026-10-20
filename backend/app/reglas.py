@@ -107,6 +107,7 @@ class PeriodoCalc:
     numero: int
     fecha_inicio: date
     fecha_vencimiento: date
+    fraccion: float = 1.0  # parte de los días del periodo que ya se generó (mensual / primer año calendario)
 
 
 def periodos_hasta(ingreso: date, hoy: date, al_cumplir_anio: bool, meses_vigencia: int) -> list[PeriodoCalc]:
@@ -120,6 +121,65 @@ def periodos_hasta(ingreso: date, hoy: date, al_cumplir_anio: bool, meses_vigenc
         res.append(PeriodoCalc(n, inicio, venc))
         n += 1
     return res
+
+
+GENERACIONES = ("aniversario", "calendario", "mensual")
+
+
+def meses_completos(desde: date, hasta: date) -> int:
+    r = relativedelta(hasta, desde)
+    return r.years * 12 + r.months
+
+
+def periodos_generados(ingreso: date, hoy: date, modo: str, meses_vigencia: int,
+                       al_cumplir_anio: bool = True) -> list[PeriodoCalc]:
+    """Periodos disponibles a la fecha `hoy` según cómo genera la sede los días.
+
+    - aniversario: el periodo n (año de servicio n) se otorga completo al cumplirlo.
+    - calendario: el periodo n se otorga el 1 de enero del año (ingreso + n); el primero es proporcional a los meses
+      que se trabajaron en el año de ingreso. Los días son los de los años de servicio que se cumplen en ese año.
+    - mensual: el periodo n empieza al iniciar el año de servicio n y sus días se acumulan cada mes cumplido; vence
+      `meses_vigencia` después de completarse.
+    """
+    if modo == "calendario":
+        res, n = [], 1
+        while True:
+            inicio = date(ingreso.year + n, 1, 1)
+            if inicio > hoy:
+                break
+            fraccion = 1.0
+            if n == 1:  # meses trabajados en el año de ingreso (el mes de ingreso cuenta si entró antes del día 16)
+                meses = 12 - ingreso.month + (1 if ingreso.day <= 15 else 0)
+                fraccion = round(max(0, min(12, meses)) / 12, 4)
+            venc = inicio + relativedelta(months=meses_vigencia) - timedelta(days=1)
+            res.append(PeriodoCalc(n, inicio, venc, fraccion))
+            n += 1
+        return res
+    if modo == "mensual":
+        res, n = [], 1
+        while True:
+            inicio = sumar_anios(ingreso, n - 1)
+            if inicio > hoy:
+                break
+            completo = sumar_anios(ingreso, n)
+            fraccion = 1.0 if completo <= hoy else round(min(meses_completos(inicio, hoy), 12) / 12, 4)
+            venc = completo + relativedelta(months=meses_vigencia) - timedelta(days=1)
+            res.append(PeriodoCalc(n, inicio, venc, fraccion))
+            n += 1
+        return res
+    return periodos_hasta(ingreso, hoy, al_cumplir_anio, meses_vigencia)
+
+
+def siguiente_periodo(ingreso: date, numero: int, modo: str, meses_vigencia: int, al_cumplir_anio: bool = True) -> PeriodoCalc:
+    """Datos del periodo `numero` aunque aún no empiece (para descontar ahí un saldo negativo)."""
+    if modo == "calendario":
+        inicio = date(ingreso.year + numero, 1, 1)
+        completo = inicio
+    elif modo == "mensual":
+        inicio, completo = sumar_anios(ingreso, numero - 1), sumar_anios(ingreso, numero)
+    else:
+        inicio = completo = sumar_anios(ingreso, numero if al_cumplir_anio else numero - 1)
+    return PeriodoCalc(numero, inicio, completo + relativedelta(months=meses_vigencia) - timedelta(days=1), 0.0)
 
 
 @dataclass
@@ -214,6 +274,36 @@ def validar_vacaciones(
         advertencias.append(f"Te quedará un remanente de {restante:g} h que no completa un día.")
 
     return ResultadoValidacion(n, horas, errores, advertencias, fechas)
+
+
+def validar_por_horas(*, fecha: date, horas: float, horas_dia: int, minimo_horas: int, bloque_minimo: int,
+                      ciclo: Ciclo, festivos: set[date], horas_disponibles: float, periodo_inicio: date,
+                      periodo_vencimiento: date, hoy: date, permitir_pasado: bool = False, tiene_bloque: bool = False,
+                      dias_anticipacion: int = 0) -> ResultadoValidacion:
+    """Vacaciones por horas: parte de una jornada en un solo día laboral."""
+    errores: list[str] = []
+    advertencias: list[str] = []
+    laborales = dias_laborales(fecha, fecha, ciclo, festivos)
+    if not laborales:
+        errores.append("Ese día no es laboral para el empleado.")
+    if horas < minimo_horas:
+        errores.append(f"Por horas, el mínimo es {minimo_horas} h.")
+    if horas >= horas_dia:
+        errores.append(f"Para {horas_dia} h o más, solicita el día completo.")
+    if not permitir_pasado and fecha < hoy:
+        errores.append("No es posible solicitar vacaciones en fechas pasadas.")
+    elif not permitir_pasado and dias_anticipacion and fecha < hoy + timedelta(days=dias_anticipacion):
+        errores.append(f"Las vacaciones se solicitan con al menos {dias_anticipacion} día(s) de anticipación.")
+    if fecha < periodo_inicio:
+        errores.append(f"El periodo seleccionado está disponible a partir del {periodo_inicio:%d/%m/%Y}.")
+    if fecha > periodo_vencimiento:
+        errores.append(f"El periodo seleccionado vence el {periodo_vencimiento:%d/%m/%Y}.")
+    if horas > horas_disponibles + 1e-9:
+        errores.append(f"Saldo insuficiente: solicitas {horas:g} h y tienes {max(horas_disponibles, 0):g} h.")
+    elif not tiene_bloque and horas_disponibles - horas < bloque_minimo * horas_dia:
+        errores.append(f"En este periodo aún no tomas tus {bloque_minimo} días seguidos; si tomas {horas:g} h ya no "
+                       "podrías completarlos.")
+    return ResultadoValidacion(0, float(horas), errores, advertencias, laborales)
 
 
 def horas_permiso(hora_inicio: time, hora_fin: time) -> float:

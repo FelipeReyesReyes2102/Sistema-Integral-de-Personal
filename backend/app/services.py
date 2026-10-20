@@ -44,6 +44,9 @@ class Jornada:
     horas_dia: int
     bloque_minimo: int
     usa_ciclo_grupo: bool
+    descuento: str | None = None   # horas | dias | None (lo que diga la sede)
+    por_horas: bool = False
+    minimo_horas: int = 1
 
     @property
     def categoria(self) -> str:
@@ -54,10 +57,25 @@ class Jornada:
 def jornada_de(usuario: Usuario) -> Jornada:
     t = usuario.tipo_jornada
     if t is not None:
-        return Jornada(t.nombre, t.horas_dia, t.bloque_minimo, t.usa_ciclo_grupo)
+        return Jornada(t.nombre, t.horas_dia, t.bloque_minimo, t.usa_ciclo_grupo, t.descuento, bool(t.por_horas),
+                       t.minimo_horas or 1)
     cat = reglas.categoria(usuario.rol)
     return Jornada("Planta" if cat == "planta" else "Oficina", reglas.HORAS_DIA[cat], reglas.MIN_DIAS_SEGUIDOS[cat],
                    cat == "planta")
+
+
+def usa_horas(usuario: Usuario) -> bool:
+    """¿El saldo se lleva en horas (tabla × 8 h, cada día descuenta las horas de su jornada) o en días completos?
+    Lo define el tipo de jornada; si no, la política de la sede."""
+    d = jornada_de(usuario).descuento
+    if d in ("horas", "dias"):
+        return d == "horas"
+    return usuario.sede.equivalencia_horas if usuario.sede is not None else True
+
+
+def generacion(usuario: Usuario) -> str:
+    g = usuario.sede.generacion_dias if usuario.sede is not None else None
+    return g if g in reglas.GENERACIONES else "aniversario"
 
 
 def meses_vigencia(usuario: Usuario) -> int:
@@ -94,17 +112,16 @@ def sincronizar_periodos(db: Session, usuario: Usuario, hoy: date | None = None)
     hoy = hoy or date.today()
     tabla = tabla_antiguedad(db, usuario.sede_id)
     jornada = jornada_de(usuario)
-    # México: se otorgan las horas de la tabla × 8 h; si la sede no usa equivalencia, cada día es un día de la jornada
-    equivalencia = usuario.sede.equivalencia_horas if usuario.sede is not None else True
+    equivalencia = usa_horas(usuario)
     existentes = {p.numero: p for p in usuario.periodos}
     cambios = False
-    for pc in reglas.periodos_hasta(usuario.fecha_ingreso, hoy, settings.vacaciones_al_cumplir_anio,
-                                    meses_vigencia(usuario)):
+    for pc in reglas.periodos_generados(usuario.fecha_ingreso, hoy, generacion(usuario), meses_vigencia(usuario),
+                                        settings.vacaciones_al_cumplir_anio):
         dias = reglas.dias_por_antiguedad(pc.numero, tabla)
+        horas = reglas.horas_otorgadas(dias) if equivalencia else float(dias * jornada.horas_dia)
         valores = dict(
             fecha_inicio=pc.fecha_inicio, fecha_vencimiento=pc.fecha_vencimiento, dias_ley=dias,
-            horas_otorgadas=reglas.horas_otorgadas(dias) if equivalencia else float(dias * jornada.horas_dia),
-            horas_por_dia=jornada.horas_dia,
+            horas_otorgadas=round(horas * pc.fraccion, 2), horas_por_dia=jornada.horas_dia,
         )
         p = existentes.get(pc.numero)
         if p is None:
@@ -125,7 +142,8 @@ def asignar_dias_disponibles(db: Session, usuario: Usuario, dias: float, hoy: da
     """Fija el saldo disponible del empleado: primero el periodo actual (hasta sus días de ley) y el resto en los
     anteriores que sigan vigentes. Ajusta `ajuste_horas` de cada periodo; no hace commit. Devuelve el reparto."""
     hoy = hoy or date.today()
-    vigentes = sorted((p for p in sincronizar_periodos(db, usuario, hoy) if p.fecha_vencimiento >= hoy),
+    vigentes = sorted((p for p in sincronizar_periodos(db, usuario, hoy) if p.fecha_vencimiento >= hoy
+                       and p.fecha_inicio <= hoy),  # los periodos futuros solo guardan saldo negativo planeado
                       key=lambda p: p.fecha_inicio, reverse=True)
     hd = jornada_de(usuario).horas_dia
     if dias > 0 and not vigentes:
@@ -199,6 +217,27 @@ def saldo_periodo(db: Session, p: PeriodoVacaciones, excluir_id: int | None = No
     out.bloque_cumplido = tiene_bloque_minimo(db, p.id, out.minimo_dias, excluir_id)
     out.vigente = p.fecha_vencimiento >= hoy
     return out
+
+
+def requiere_gh(registro) -> bool:
+    """¿La sede del empleado pide que GH valide después del jefe?"""
+    sede = registro.usuario.sede if registro.usuario is not None else None
+    if sede is None:
+        return False
+    return bool(sede.aprobacion_gh_permisos if isinstance(registro, Permiso) else sede.aprobacion_gh_vacaciones)
+
+
+def aprobar(registro, actor: Usuario) -> bool:
+    """Aprueba una solicitud de vacaciones o un permiso. Con dos niveles, la aprobación del jefe deja la solicitud
+    pendiente de GH. Devuelve True si quedó validada (False si solo la aprobó el jefe)."""
+    from datetime import datetime as _dt
+    if requiere_gh(registro) and not es_admin(actor):
+        if registro.aprobado_jefe_id:
+            raise HTTPException(400, "Ya la aprobaste; falta la validación de GH.")
+        registro.aprobado_jefe_id, registro.fecha_aprobado_jefe = actor.id, _dt.now()
+        return False
+    registro.estado, registro.revisado_por_id, registro.fecha_revision = VALIDADO, actor.id, _dt.now()
+    return True
 
 
 def usuario_out(u: Usuario) -> UsuarioOut:

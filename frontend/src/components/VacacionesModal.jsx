@@ -22,11 +22,15 @@ export default function VacacionesModal({ periodos, usuarioId, empleado, solicit
     aprobador_id: solicitud?.aprobador_id || null,
   })
   const [firma, setFirma] = useState(null)
+  // Vacaciones por horas (si la jornada del empleado lo permite y es un solo día)
+  const [porHoras, setPorHoras] = useState(!!solicitud?.por_horas)
+  const [horas, setHoras] = useState(solicitud?.por_horas ? solicitud.horas : 4)
   const [calc, setCalc] = useState(null)
   const [dias, setDias] = useState(null) // días laborales del rango (no depende del periodo)
   const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
+  const unDia = !!form.fecha_inicio && form.fecha_inicio === form.fecha_fin
   const requiereJefe = !esAdmin(empleado)
   const { user } = useAuth()
 
@@ -55,17 +59,18 @@ export default function VacacionesModal({ periodos, usuarioId, empleado, solicit
         method: 'POST',
         body: {
           periodo_id: general ? null : Number(form.periodo_id), fecha_inicio: form.fecha_inicio, fecha_fin: form.fecha_fin,
-          usuario_id: usuarioId, excluir_id: solicitud?.id,
+          usuario_id: usuarioId, excluir_id: solicitud?.id, horas: unDia && porHoras ? Number(horas) || null : null,
         },
       }).then((c) => { setCalc(c); setError('') }).catch((e) => setError(e.message))
     }, 250)
     return () => clearTimeout(t)
-  }, [form.periodo_id, form.fecha_inicio, form.fecha_fin])
+  }, [form.periodo_id, form.fecha_inicio, form.fecha_fin, porHoras, horas])
 
   async function guardar(enviar) {
     setError('')
     setGuardando(true)
-    const body = { ...form, periodo_id: form.periodo_id ? Number(form.periodo_id) : null, enviar, usuario_id: usuarioId, firma }
+    const body = { ...form, periodo_id: form.periodo_id ? Number(form.periodo_id) : null, enviar, usuario_id: usuarioId, firma,
+      horas: unDia && porHoras ? Number(horas) : null }
     try {
       if (solicitud) await api(`/vacaciones/${solicitud.id}`, { method: 'PUT', body })
       else await api('/vacaciones', { method: 'POST', body })
@@ -129,10 +134,27 @@ export default function VacacionesModal({ periodos, usuarioId, empleado, solicit
         <input type="date" value={form.fecha_fin} min={form.fecha_inicio} onChange={set('fecha_fin')} />
       </Campo>
 
+      {unDia && (calc?.permite_horas || porHoras) && (
+        <Campo label="Duración" full ayuda={`Tu jornada es de ${calc?.horas_dia || hd} h; por horas, mínimo ${calc?.minimo_horas || 1} h.`}>
+          <div className="fila" style={{ gap: 10 }}>
+            <label className="checkbox"><input type="radio" checked={!porHoras} onChange={() => setPorHoras(false)} /> Día completo</label>
+            <label className="checkbox"><input type="radio" checked={porHoras} onChange={() => setPorHoras(true)} /> Por horas</label>
+            {porHoras && (
+              <span className="fila" style={{ gap: 4 }}>
+                <input type="number" style={{ width: 80 }} min={calc?.minimo_horas || 1} max={(calc?.horas_dia || hd) - 0.5} step={0.5}
+                  value={horas} onChange={(e) => setHoras(e.target.value)} /> h
+              </span>
+            )}
+          </div>
+        </Campo>
+      )}
+
       <div className="fo-resumen full">
         {dias?.error ? <span className="texto-error">{dias.error}</span> : nDias !== undefined ? (
           <>
-            <div><b>{nDias}</b> día{nDias === 1 ? '' : 's'} laborable{nDias === 1 ? '' : 's'} <span className="muted">({num(nHoras)} h)</span></div>
+            {unDia && porHoras
+              ? <div><b>{num(Number(horas) || 0)} h</b> de vacaciones <span className="muted">({num((Number(horas) || 0) / hd)} d)</span></div>
+              : <div><b>{nDias}</b> día{nDias === 1 ? '' : 's'} laborable{nDias === 1 ? '' : 's'} <span className="muted">({num(nHoras)} h)</span></div>}
             {calc && (
               <div className="muted">
                 Saldo {num(calc.dias_disponible)} d{restante !== null && <> · te quedarán <b>{num(restante)} d</b></>}

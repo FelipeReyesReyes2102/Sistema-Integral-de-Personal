@@ -14,6 +14,7 @@ import Festivos from './pages/Festivos'
 import Configuracion from './pages/Configuracion'
 import Bitacora from './pages/Bitacora'
 import SuperAdmin from './pages/SuperAdmin'
+import Planeacion from './pages/Planeacion'
 import CalendarioEquipo from './pages/CalendarioEquipo'
 import Consultas from './pages/Consultas'
 
@@ -71,6 +72,7 @@ export default function App() {
         <Route path="/festivos" element={<SoloAdmin><Festivos /></SoloAdmin>} />
         <Route path="/configuracion" element={<SoloAdmin><Configuracion /></SoloAdmin>} />
         <Route path="/bitacora" element={<SoloAdmin><Bitacora /></SoloAdmin>} />
+        <Route path="/planeacion" element={<SoloAdmin><Planeacion /></SoloAdmin>} />
         <Route path="/super-admin" element={<SoloSuperAdmin><SuperAdmin /></SoloSuperAdmin>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

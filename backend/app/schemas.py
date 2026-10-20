@@ -298,6 +298,7 @@ class VacacionesIn(BaseModel):
     aprobador_id: int | None = None  # jefe que aprobará; por defecto el jefe directo
     firma: Firma | None = None       # obligatoria al enviar
     usuario_id: int | None = None  # solo admin: crear a nombre de otro empleado
+    horas: float | None = Field(None, gt=0, le=24)  # vacaciones por horas (un solo día)
 
 
 class CalculoIn(BaseModel):
@@ -306,6 +307,7 @@ class CalculoIn(BaseModel):
     fecha_fin: date
     usuario_id: int | None = None
     excluir_id: int | None = None
+    horas: float | None = Field(None, gt=0, le=24)
 
 
 class DiasLaboralesIn(BaseModel):
@@ -347,6 +349,10 @@ class CalculoOut(BaseModel):
     dias_disponible: float
     minimo_dias: int
     reparto: list[TramoPeriodo] = []  # modo general: de qué periodo sale cada parte
+    # Vacaciones por horas según la jornada del empleado
+    permite_horas: bool = False
+    horas_dia: int = 8
+    minimo_horas: int = 1
 
 
 class VacacionesOut(ORM):
@@ -368,6 +374,32 @@ class VacacionesOut(ORM):
     revisado_por_nombre: str | None = None
     fecha_revision: datetime | None
     creado: datetime | None
+    por_horas: bool = False
+    planeada: bool = False
+    aprobado_jefe_nombre: str | None = None
+    fecha_aprobado_jefe: datetime | None = None
+    falta_gh: bool = False
+
+
+class PlaneacionIn(BaseModel):
+    """GH programa vacaciones a varios empleados (p. ej. planta); si no tienen saldo, queda negativo."""
+    usuario_ids: list[int] = Field(min_length=1, max_length=500)
+    fecha_inicio: date
+    fecha_fin: date
+    comentario: str | None = Field(None, max_length=300)
+
+
+class PlaneacionFila(BaseModel):
+    usuario_id: int
+    nombre: str
+    grupo: str | None = None
+    dias: int = 0
+    horas: float = 0
+    saldo_antes: float = 0   # días
+    saldo_despues: float = 0
+    negativo: float = 0      # días que quedan a deber
+    error: str | None = None
+    solicitudes: list[int] = []
 
 
 class RechazoIn(BaseModel):
@@ -413,6 +445,9 @@ class PermisoOut(ORM):
     revisado_por_nombre: str | None = None
     fecha_revision: datetime | None
     creado: datetime | None
+    aprobado_jefe_nombre: str | None = None
+    fecha_aprobado_jefe: datetime | None = None
+    falta_gh: bool = False
 
 
 class ValidarPermisoIn(BaseModel):
@@ -506,6 +541,9 @@ class PoliticaIn(BaseModel):
     home_office_max_dias: int = Field(31, ge=1, le=365)
     modulo_consultas: bool = True
     modulo_cumpleanos: bool = True
+    generacion_dias: Literal["aniversario", "calendario", "mensual"] = "aniversario"
+    aprobacion_gh_vacaciones: bool = False
+    aprobacion_gh_permisos: bool = False
 
 
 class JornadaIn(BaseModel):
@@ -514,6 +552,9 @@ class JornadaIn(BaseModel):
     bloque_minimo: int = Field(6, ge=1, le=30)
     usa_ciclo_grupo: bool = False
     activo: bool = True
+    descuento: Literal["horas", "dias"] | None = None  # None = como la sede
+    por_horas: bool = False
+    minimo_horas: int = Field(1, ge=1, le=24)
 
 
 class JornadaOut(JornadaIn, ORM):

@@ -15,7 +15,7 @@ from ..models import ROLES_ADMIN, es_admin  # noqa: F401
 from ..schemas import PermisoIn, PermisoOut, RechazoIn, ValidarPermisoIn
 from ..security import get_current_user
 from ..sedes import Alcance, admin_permite, alcance, hoy_de
-from ..services import ciclo_de, empleado_visible, festivos_de, jornada_de, puede_revisar, resolver_aprobador
+from ..services import  aprobar,ciclo_de, empleado_visible, festivos_de, jornada_de, puede_revisar, resolver_aprobador
 
 router = APIRouter(prefix="/api/permisos", tags=["permisos"])
 
@@ -30,6 +30,8 @@ def _out(p: Permiso) -> PermisoOut:
         db = object_session(p)
         fin = p.fecha_fin or p.fecha
         o.dias = len(reglas.dias_laborales(p.fecha, fin, ciclo_de(p.usuario), festivos_de(db, p.usuario, p.fecha, fin)))
+    o.aprobado_jefe_nombre = p.aprobado_jefe.nombre if p.aprobado_jefe else None
+    o.falta_gh = p.estado == SOLICITADO and p.aprobado_jefe_id is not None
     return o
 
 
@@ -111,6 +113,8 @@ def listar(estado: str | None = None, tipo: str | None = None, usuario_id: int |
         q = q.where(Permiso.usuario_id.in_(select(Usuario.id).where(alc.filtro(Usuario.sede_id))))
     elif por_aprobar:
         q = q.where(Permiso.aprobador_id == user.id, Permiso.usuario_id != user.id)
+        if estado == SOLICITADO:  # las que ya aprobé y esperan a GH no son mías
+            q = q.where(Permiso.aprobado_jefe_id.is_(None))
     else:
         q = q.where(Permiso.usuario_id == empleado_visible(db, user, usuario_id).id)
     if estado:
@@ -246,12 +250,13 @@ def _revisable(db: Session, pid: int, user: Usuario) -> Permiso:
 def validar(pid: int, tareas: BackgroundTasks, data: ValidarPermisoIn | None = None, db: Session = Depends(get_db),
             user: Usuario = Depends(get_current_user)):
     p = _revisable(db, pid, user)
-    p.estado, p.revisado_por_id, p.fecha_revision = VALIDADO, user.id, datetime.now()
+    final = aprobar(p, user)
     if data and data.observaciones:
         p.observaciones = data.observaciones
     db.commit()
-    # Aviso a caseta en segundo plano: si el correo falla, la autorización no se afecta
-    tareas.add_task(correo.notificar_permiso, p.id, "permiso_autorizado")
+    # Aviso a caseta en segundo plano (solo al quedar validado): si el correo falla, la autorización no se afecta
+    if final:
+        tareas.add_task(correo.notificar_permiso, p.id, "permiso_autorizado")
     return _out(p)
 
 

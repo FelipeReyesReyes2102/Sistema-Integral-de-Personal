@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  CalendarDays, ClipboardCheck, Clock, Home, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
+  CalendarDays, CalendarRange, ClipboardCheck, Clock, Home, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
   History, PartyPopper, Settings, ShieldCheck, Users, UsersRound, X,
 } from 'lucide-react'
 import { api, elegirSede, sedeActiva } from '../api'
@@ -112,6 +112,7 @@ export default function Layout() {
               <div className="seccion">Administración</div>
               {link('/solicitudes', ClipboardCheck, 'Todas las solicitudes', badge(pendientes.todas))}
               {link('/equipo', CalendarDays, 'Calendario general')}
+              {link('/planeacion', CalendarRange, 'Planear vacaciones')}
               {link('/empleados', Users, 'Empleados')}
               {link('/grupos', UsersRound, 'Grupos')}
               {link('/turnos', Clock, 'Turnos')}

@@ -145,8 +145,8 @@ export default function Solicitudes({ modo = 'jefe' }) {
                   <>
                     <td>{s.periodo_nombre}</td>
                     <td>{fmtFecha(s.fecha_inicio)} - {fmtFecha(s.fecha_fin)}</td>
-                    <td>{s.dias_habiles} d <span className="muted">({num(s.horas)} h)</span></td>
-                    <td className="muted">{s.comentario}</td>
+                    <td>{s.por_horas ? <><b>{num(s.horas)} h</b> <span className="muted">(por horas)</span></> : <>{s.dias_habiles} d <span className="muted">({num(s.horas)} h)</span></>}</td>
+                    <td className="muted">{s.planeada && <span className="chip" style={{ marginRight: 4 }}>Planeada por GH</span>}{s.comentario}</td>
                   </>
                 ) : (
                   <>
@@ -161,16 +161,19 @@ export default function Solicitudes({ modo = 'jefe' }) {
                     </td>
                   </>
                 )}
-                <td><span className={`pill ${s.estado}`}>{ESTADOS[s.estado]}</span></td>
+                <td>
+                  <span className={`pill ${s.estado}`}>{s.falta_gh ? 'Aprobada por el jefe' : ESTADOS[s.estado]}</span>
+                  {s.falta_gh && <div className="muted" style={{ fontSize: 11 }}>{s.aprobado_jefe_nombre} · falta GH</div>}
+                </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   {s.tiene_firma && (
                     <button className="btn btn-sm" style={{ marginBottom: 4 }} onClick={() => verFirma(s)}><PenLine size={14} /> Firma</button>
                   )}
-                  {s.estado === 'solicitado' && (
+                  {s.estado === 'solicitado' && (admin || !s.falta_gh) && (
                     <div className="fila" style={{ flexWrap: 'nowrap' }}>
                       <button className="btn btn-sm btn-success"
                         onClick={() => (tab === 'permisos' ? setValidarPermiso(s) : ejecutar(`/vacaciones/${s.id}/validar`))}>
-                        <Check size={14} /> Validar
+                        <Check size={14} /> {admin || !s.requiere_gh ? 'Validar' : 'Aprobar'}
                       </button>
                       <button className="btn btn-sm btn-danger" onClick={() => setRechazo({ s, motivo: '' })}>
                         <X size={14} /> Rechazar

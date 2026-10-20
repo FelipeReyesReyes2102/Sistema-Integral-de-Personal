@@ -176,8 +176,9 @@ def pendientes(db: Session = Depends(get_db), user: Usuario = Depends(get_curren
         q = select(func.count(modelo.id)).where(modelo.estado == SOLICITADO, *extra)
         return db.scalar(q) or 0
 
-    mias = (SolicitudVacaciones.aprobador_id == user.id, SolicitudVacaciones.usuario_id != user.id)
-    mias_p = (Permiso.aprobador_id == user.id, Permiso.usuario_id != user.id)
+    mias = (SolicitudVacaciones.aprobador_id == user.id, SolicitudVacaciones.usuario_id != user.id,
+            SolicitudVacaciones.aprobado_jefe_id.is_(None))
+    mias_p = (Permiso.aprobador_id == user.id, Permiso.usuario_id != user.id, Permiso.aprobado_jefe_id.is_(None))
     res = {"vacaciones": contar(SolicitudVacaciones, mias), "permisos": contar(Permiso, mias_p)}
     res["total"] = res["vacaciones"] + res["permisos"]
     if es_admin(user):

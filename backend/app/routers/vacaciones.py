@@ -13,13 +13,14 @@ from ..models import (
 from ..models import ROLES_ADMIN, es_admin  # noqa: F401
 from ..models import Festivo
 from ..schemas import (
-    CalculoIn, CalculoOut, DiaExcluido, DiasLaboralesIn, DiasLaboralesOut, RechazoIn, TramoPeriodo, VacacionesIn,
+    CalculoIn, CalculoOut, DiaExcluido, DiasLaboralesIn, DiasLaboralesOut, PlaneacionFila, PlaneacionIn, RechazoIn,
+    TramoPeriodo, VacacionesIn,
     VacacionesOut,
 )
-from ..security import get_current_user
+from ..security import get_current_user, require_admin
 from ..sedes import Alcance, admin_permite, alcance, hoy_de
 from ..services import (
-    ciclo_de, consulta_festivos, jornada_de, empleado_visible, festivos_de, hay_traslape, puede_revisar, resolver_aprobador, saldo_periodo,
+    aprobar, ciclo_de, consulta_festivos, jornada_de, empleado_visible, festivos_de, hay_traslape, puede_revisar, resolver_aprobador, saldo_periodo,
     sincronizar_periodos,
 )
 
@@ -33,6 +34,8 @@ def _out(s: SolicitudVacaciones) -> VacacionesOut:
     o.aprobador_nombre = s.aprobador.nombre if s.aprobador else None
     o.revisado_por_nombre = s.revisado_por.nombre if s.revisado_por else None
     o.tiene_firma = bool(s.firma)
+    o.aprobado_jefe_nombre = s.aprobado_jefe.nombre if s.aprobado_jefe else None
+    o.falta_gh = s.estado == SOLICITADO and s.aprobado_jefe_id is not None
     return o
 
 
@@ -52,13 +55,18 @@ def _destino(db: Session, user: Usuario, usuario_id: int | None) -> Usuario:
 
 
 def _calcular(db: Session, empleado: Usuario, actor: Usuario, periodo_id: int, inicio: date, fin: date,
-              excluir_id: int | None = None):
+              excluir_id: int | None = None, horas: float | None = None):
     sincronizar_periodos(db, empleado)
     periodo = db.get(PeriodoVacaciones, periodo_id)
     if not periodo or periodo.usuario_id != empleado.id:
         raise HTTPException(404, "Periodo no encontrado para este empleado")
     saldo = saldo_periodo(db, periodo, excluir_id=excluir_id, aplicar_vencimiento=not es_admin(actor))
     jornada = jornada_de(empleado)
+    if horas:
+        res = _validar_horas(db, empleado, actor, jornada, periodo, saldo, inicio, fin, horas)
+        if hay_traslape(db, empleado.id, inicio, inicio, excluir_id):
+            res.errores.append("Ya tienes otra solicitud de vacaciones ese día.")
+        return periodo, saldo, res
     res = reglas.validar_vacaciones(
         cat=jornada.categoria, horas_dia=jornada.horas_dia, bloque_minimo=jornada.bloque_minimo,
         dias_anticipacion=empleado.sede.dias_anticipacion if empleado.sede else 0,
@@ -73,6 +81,37 @@ def _calcular(db: Session, empleado: Usuario, actor: Usuario, periodo_id: int, i
     if jornada.usa_ciclo_grupo and empleado.grupo is None:
         res.advertencias.append("No tienes grupo asignado; se calcularon días de lunes a viernes.")
     return periodo, saldo, res
+
+
+def _validar_horas(db, empleado, actor, jornada, periodo, saldo, inicio, fin, horas):
+    if not jornada.por_horas:
+        return reglas.ResultadoValidacion(0, 0, [f"La jornada {jornada.nombre} no permite vacaciones por horas."], [], [])
+    if fin != inicio:
+        return reglas.ResultadoValidacion(0, 0, ["Las vacaciones por horas son de un solo día."], [], [])
+    return reglas.validar_por_horas(
+        fecha=inicio, horas=horas, horas_dia=jornada.horas_dia, minimo_horas=jornada.minimo_horas,
+        bloque_minimo=jornada.bloque_minimo, ciclo=ciclo_de(empleado), festivos=festivos_de(db, empleado, inicio, inicio),
+        horas_disponibles=saldo.horas_disponible, periodo_inicio=periodo.fecha_inicio,
+        periodo_vencimiento=periodo.fecha_vencimiento, hoy=hoy_de(empleado), permitir_pasado=es_admin(actor),
+        tiene_bloque=saldo.bloque_cumplido,
+        dias_anticipacion=empleado.sede.dias_anticipacion if empleado.sede else 0)
+
+
+def _general_horas(db: Session, empleado: Usuario, actor: Usuario, fecha: date, horas: float, excluir_id: int | None):
+    """Por horas en modo general: del periodo vigente más antiguo que tenga saldo suficiente."""
+    sincronizar_periodos(db, empleado)
+    periodos = db.scalars(select(PeriodoVacaciones).where(
+        PeriodoVacaciones.usuario_id == empleado.id, PeriodoVacaciones.fecha_inicio <= fecha,
+        PeriodoVacaciones.fecha_vencimiento >= fecha).order_by(PeriodoVacaciones.fecha_inicio)).all()
+    total = sum(max(saldo_periodo(db, p, excluir_id=excluir_id).horas_disponible, 0) for p in periodos)
+    candidato = next((p for p in periodos
+                      if saldo_periodo(db, p, excluir_id=excluir_id).horas_disponible >= horas - 1e-9), None)
+    if candidato is None:
+        candidato = periodos[-1] if periodos else None
+    if candidato is None:
+        return [], reglas.ResultadoValidacion(0, horas, ["No tienes un periodo de vacaciones vigente en esa fecha."], [], []), 0.0
+    p, _, res = _calcular(db, empleado, actor, candidato.id, fecha, fecha, excluir_id, horas)
+    return [(p, fecha, fecha, res)], res, total
 
 
 def _general(db: Session, empleado: Usuario, actor: Usuario, inicio: date, fin: date, excluir_id: int | None = None):
@@ -145,6 +184,7 @@ def _crear_solicitudes(db: Session, empleado: Usuario, data: VacacionesIn, tramo
         s = existente if (i == 0 and existente) else SolicitudVacaciones(usuario_id=empleado.id)
         s.periodo_id, s.fecha_inicio, s.fecha_fin = p.id, desde, hasta
         s.dias_habiles, s.horas, s.comentario, s.aprobador_id = res.dias_habiles, res.horas, comentario, aprobador_id
+        s.por_horas = bool(data.horas)
         if data.firma:
             s.firma = data.firma
         s.estado = SOLICITADO if data.enviar else BORRADOR
@@ -186,18 +226,25 @@ def dias_laborales(data: DiasLaboralesIn, db: Session = Depends(get_db), user: U
 def calcular(data: CalculoIn, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
     """Vista previa: días laborales, horas y reglas incumplidas, sin guardar."""
     empleado = _destino(db, user, data.usuario_id)
+    jornada = jornada_de(empleado)
+    extra = dict(permite_horas=jornada.por_horas, horas_dia=jornada.horas_dia, minimo_horas=jornada.minimo_horas)
     if data.periodo_id is None:
-        tramos, res, horas_total = _general(db, empleado, user, data.fecha_inicio, data.fecha_fin, data.excluir_id)
-        jornada = jornada_de(empleado)
-        return CalculoOut(
+        if data.horas:
+            tramos, res, horas_total = _general_horas(db, empleado, user, data.fecha_inicio, data.horas, data.excluir_id)
+            if data.fecha_fin != data.fecha_inicio:
+                res.errores.append("Las vacaciones por horas son de un solo día.")
+        else:
+            tramos, res, horas_total = _general(db, empleado, user, data.fecha_inicio, data.fecha_fin, data.excluir_id)
+        return CalculoOut(**extra,
             dias_habiles=res.dias_habiles, horas=res.horas, errores=res.errores, advertencias=res.advertencias,
             fechas=res.fechas, horas_disponible=horas_total, dias_disponible=round(horas_total / jornada.horas_dia, 2),
             minimo_dias=jornada.bloque_minimo,
             reparto=[TramoPeriodo(periodo_id=p.id, periodo_nombre=p.nombre, fecha_inicio=a, fecha_fin=b, dias=r.dias_habiles)
                      for p, a, b, r in tramos],
         )
-    _, saldo, res = _calcular(db, empleado, user, data.periodo_id, data.fecha_inicio, data.fecha_fin, data.excluir_id)
-    return CalculoOut(
+    _, saldo, res = _calcular(db, empleado, user, data.periodo_id, data.fecha_inicio, data.fecha_fin, data.excluir_id,
+                              data.horas)
+    return CalculoOut(**extra,
         dias_habiles=res.dias_habiles, horas=res.horas, errores=res.errores, advertencias=res.advertencias,
         fechas=res.fechas, horas_disponible=saldo.horas_disponible, dias_disponible=saldo.dias_disponible,
         minimo_dias=jornada_de(empleado).bloque_minimo,
@@ -219,6 +266,8 @@ def listar(estado: str | None = None, usuario_id: int | None = None, todos: bool
         q = q.where(SolicitudVacaciones.usuario_id.in_(select(Usuario.id).where(alc.filtro(Usuario.sede_id))))
     elif por_aprobar:
         q = q.where(SolicitudVacaciones.aprobador_id == user.id, SolicitudVacaciones.usuario_id != user.id)
+        if estado == SOLICITADO:  # las que ya aprobé y esperan a GH no son mías
+            q = q.where(SolicitudVacaciones.aprobado_jefe_id.is_(None))
     else:
         q = q.where(SolicitudVacaciones.usuario_id == empleado_visible(db, user, usuario_id).id)
     if estado:
@@ -235,18 +284,22 @@ def crear(data: VacacionesIn, db: Session = Depends(get_db), user: Usuario = Dep
     if data.enviar and not data.firma:
         raise HTTPException(422, FALTA_FIRMA)
     if data.periodo_id is None:
-        tramos, res, _ = _general(db, empleado, user, data.fecha_inicio, data.fecha_fin)
+        if data.horas:
+            tramos, res, _ = _general_horas(db, empleado, user, data.fecha_inicio, data.horas, None)
+        else:
+            tramos, res, _ = _general(db, empleado, user, data.fecha_inicio, data.fecha_fin)
         if not res.ok:
             raise HTTPException(422, " ".join(res.errores))
         creadas = _crear_solicitudes(db, empleado, data, tramos, aprobador_id)
         db.commit()
         return _out(creadas[0])
-    periodo, _, res = _calcular(db, empleado, user, data.periodo_id, data.fecha_inicio, data.fecha_fin)
+    periodo, _, res = _calcular(db, empleado, user, data.periodo_id, data.fecha_inicio, data.fecha_fin, None, data.horas)
     if not res.ok:
         raise HTTPException(422, " ".join(res.errores))
     s = SolicitudVacaciones(
         usuario_id=empleado.id, periodo_id=periodo.id, fecha_inicio=data.fecha_inicio, fecha_fin=data.fecha_fin,
         dias_habiles=res.dias_habiles, horas=res.horas, comentario=data.comentario, aprobador_id=aprobador_id,
+        por_horas=bool(data.horas),
         firma=data.firma,
         estado=SOLICITADO if data.enviar else BORRADOR,
     )
@@ -279,7 +332,10 @@ def editar(sid: int, data: VacacionesIn, db: Session = Depends(get_db), user: Us
     if data.enviar and not (data.firma or s.firma):
         raise HTTPException(422, FALTA_FIRMA)
     if data.periodo_id is None:
-        tramos, res, _ = _general(db, s.usuario, user, data.fecha_inicio, data.fecha_fin, excluir_id=s.id)
+        if data.horas:
+            tramos, res, _ = _general_horas(db, s.usuario, user, data.fecha_inicio, data.horas, s.id)
+        else:
+            tramos, res, _ = _general(db, s.usuario, user, data.fecha_inicio, data.fecha_fin, excluir_id=s.id)
         if not res.ok:
             raise HTTPException(422, " ".join(res.errores))
         if not data.firma and s.firma:
@@ -287,10 +343,11 @@ def editar(sid: int, data: VacacionesIn, db: Session = Depends(get_db), user: Us
         _crear_solicitudes(db, s.usuario, data, tramos, aprobador_id, existente=s)
         db.commit()
         return _out(s)
-    _, _, res = _calcular(db, s.usuario, user, data.periodo_id, data.fecha_inicio, data.fecha_fin, excluir_id=s.id)
+    _, _, res = _calcular(db, s.usuario, user, data.periodo_id, data.fecha_inicio, data.fecha_fin, s.id, data.horas)
     if not res.ok:
         raise HTTPException(422, " ".join(res.errores))
     s.periodo_id, s.fecha_inicio, s.fecha_fin = data.periodo_id, data.fecha_inicio, data.fecha_fin
+    s.por_horas = bool(data.horas)
     s.dias_habiles, s.horas, s.comentario = res.dias_habiles, res.horas, data.comentario
     s.aprobador_id = aprobador_id
     if data.firma:
@@ -312,7 +369,8 @@ def enviar(sid: int, db: Session = Depends(get_db), user: Usuario = Depends(get_
     if not s.firma:
         raise HTTPException(422, "Abre la solicitud y fírmala para poder enviarla.")
     s.aprobador_id = resolver_aprobador(db, s.usuario, s.aprobador_id)
-    _, _, res = _calcular(db, s.usuario, user, s.periodo_id, s.fecha_inicio, s.fecha_fin, excluir_id=s.id)
+    _, _, res = _calcular(db, s.usuario, user, s.periodo_id, s.fecha_inicio, s.fecha_fin, s.id,
+                          s.horas if s.por_horas else None)
     if not res.ok:
         raise HTTPException(422, " ".join(res.errores))
     s.estado = SOLICITADO
@@ -368,7 +426,7 @@ def _revisable(db: Session, sid: int, user: Usuario) -> SolicitudVacaciones:
 @router.post("/{sid}/validar", response_model=VacacionesOut)
 def validar(sid: int, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
     s = _revisable(db, sid, user)
-    s.estado, s.revisado_por_id, s.fecha_revision = VALIDADO, user.id, datetime.now()
+    aprobar(s, user)
     db.commit()
     return _out(s)
 
@@ -380,3 +438,114 @@ def rechazar(sid: int, data: RechazoIn, db: Session = Depends(get_db), user: Usu
     s.revisado_por_id, s.fecha_revision = user.id, datetime.now()
     db.commit()
     return _out(s)
+
+
+# ---------------- Planeación general de vacaciones (GH) ----------------
+def _planear(db: Session, actor: Usuario, data: PlaneacionIn, aplicar: bool) -> list[PlaneacionFila]:
+    """Reparte los días laborales del rango de cada empleado entre sus periodos vigentes (primero el más antiguo).
+    Lo que no alcanza queda como saldo negativo y se descuenta de los próximos días que genere (siguiente periodo,
+    o el periodo en curso si la sede genera los días cada mes)."""
+    from ..services import generacion, meses_vigencia, usa_horas
+    from ..config import settings
+    if data.fecha_fin < data.fecha_inicio:
+        raise HTTPException(422, "La fecha final no puede ser anterior a la inicial.")
+    if (data.fecha_fin - data.fecha_inicio).days > 120:
+        raise HTTPException(422, "El rango de la planeación no puede ser mayor a 120 días.")
+    filas: list[PlaneacionFila] = []
+    for uid in dict.fromkeys(data.usuario_ids):
+        u = db.get(Usuario, uid)
+        if not u or not u.activo or not admin_permite(actor, u.sede_id):
+            continue
+        fila = PlaneacionFila(usuario_id=u.id, nombre=u.nombre, grupo=u.grupo.nombre if u.grupo else None)
+        filas.append(fila)
+        jornada = jornada_de(u)
+        hd = jornada.horas_dia
+        periodos = sincronizar_periodos(db, u)
+        hoy = hoy_de(u)
+        fechas = reglas.dias_laborales(data.fecha_inicio, data.fecha_fin, ciclo_de(u),
+                                       festivos_de(db, u, data.fecha_inicio, data.fecha_fin))
+        fila.dias, fila.horas = len(fechas), float(len(fechas) * hd)
+        vigentes = [p for p in periodos if p.fecha_inicio <= hoy <= p.fecha_vencimiento or p.fecha_inicio > hoy]
+        fila.saldo_antes = round(sum(saldo_periodo(db, p).horas_disponible for p in vigentes) / hd, 2)
+        if not fechas:
+            fila.error = "No tiene días laborales en ese rango."
+            continue
+        if hay_traslape(db, u.id, data.fecha_inicio, data.fecha_fin, None):
+            fila.error = "Ya tiene otra solicitud de vacaciones en esas fechas."
+            continue
+        # Capacidad por periodo (en días completos) de los periodos ya iniciados y vigentes en cada fecha
+        capacidad = {p.id: max(int(saldo_periodo(db, p).horas_disponible // hd + 1e-9), 0) for p in periodos
+                     if p.fecha_inicio <= hoy}
+        tramos: list[list] = []
+        deuda: list = []
+        for d in fechas:
+            p = next((p for p in periodos if capacidad.get(p.id, 0) > 0 and p.fecha_inicio <= max(d, hoy)
+                      and d <= p.fecha_vencimiento), None)
+            if p is None:
+                deuda.append(d)
+                continue
+            capacidad[p.id] -= 1
+            if tramos and tramos[-1][0].id == p.id:
+                tramos[-1][2] = d
+            else:
+                tramos.append([p, d, d])
+        fila.negativo = float(len(deuda))
+        fila.saldo_despues = round(fila.saldo_antes - fila.dias, 2)
+        if not aplicar:
+            continue
+        if deuda:
+            destino = _periodo_para_deuda(db, u, periodos, hoy, generacion(u), meses_vigencia(u), usa_horas(u), hd,
+                                          settings.vacaciones_al_cumplir_anio)
+            for d in deuda:
+                if tramos and tramos[-1][0].id == destino.id and (d - tramos[-1][2]).days <= 7:
+                    tramos[-1][2] = d
+                else:
+                    tramos.append([destino, d, d])
+        comentario = f"[Planeación GH] {data.comentario or ''}".strip()
+        for p, desde, hasta in tramos:
+            dias = len([f for f in fechas if desde <= f <= hasta])
+            s = SolicitudVacaciones(usuario_id=u.id, periodo_id=p.id, fecha_inicio=desde, fecha_fin=hasta,
+                                    dias_habiles=dias, horas=float(dias * hd), comentario=comentario, planeada=True,
+                                    estado=VALIDADO, aprobador_id=u.jefe_id, revisado_por_id=actor.id,
+                                    fecha_revision=datetime.now())
+            db.add(s)
+            db.flush()
+            fila.solicitudes.append(s.id)
+    if aplicar:
+        db.commit()
+    return filas
+
+
+def _periodo_para_deuda(db: Session, u: Usuario, periodos, hoy: date, modo: str, meses: int, en_horas: bool, hd: int,
+                        al_cumplir: bool) -> PeriodoVacaciones:
+    """Mensual: el periodo en curso (sus días se siguen acumulando). Aniversario/calendario: el siguiente periodo,
+    que se crea por adelantado con 0 h y recibe sus días cuando inicia."""
+    from ..services import tabla_antiguedad
+    if modo == "mensual":
+        en_curso = [p for p in periodos if p.fecha_inicio <= hoy]
+        if en_curso:
+            return en_curso[-1]
+    futuros = [p for p in periodos if p.fecha_inicio > hoy]
+    if futuros:
+        return futuros[0]
+    numero = (periodos[-1].numero + 1) if periodos else 1
+    pc = reglas.siguiente_periodo(u.fecha_ingreso, numero, modo, meses, al_cumplir)
+    dias = reglas.dias_por_antiguedad(numero, tabla_antiguedad(db, u.sede_id))
+    p = PeriodoVacaciones(usuario_id=u.id, numero=numero, fecha_inicio=pc.fecha_inicio,
+                          fecha_vencimiento=pc.fecha_vencimiento, dias_ley=dias, horas_otorgadas=0.0, horas_por_dia=hd,
+                          ajuste_horas=0, nota_ajuste="Periodo futuro: descuenta vacaciones planeadas sin saldo")
+    db.add(p)
+    db.flush()
+    return p
+
+
+@router.post("/planeacion/previa", response_model=list[PlaneacionFila])
+def planeacion_previa(data: PlaneacionIn, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin)):
+    """Vista previa: días que se descontarían a cada empleado y quién quedaría con saldo negativo."""
+    return _planear(db, admin, data, aplicar=False)
+
+
+@router.post("/planeacion", response_model=list[PlaneacionFila])
+def planeacion(data: PlaneacionIn, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin)):
+    """Programa las vacaciones (quedan validadas) y descuenta los días; sin saldo, queda negativo."""
+    return _planear(db, admin, data, aplicar=True)

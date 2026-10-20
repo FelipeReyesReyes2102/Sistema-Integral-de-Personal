@@ -255,16 +255,20 @@ def aplicar(db: Session, s: SolicitudAprobacion, canal: CanalAprobacion, reg, it
     if not revisor or not revisor.activo or not puede_revisar(revisor, reg):
         return nota(f"Decisión ignorada: {correo_resp or 'quien respondió'} no puede aprobar esta solicitud en SIP-O.")
     comentario = _valor_campo(f.get("Comentario"))
+    from .services import aprobar
     asignar_actor(db, revisor, "Teams (Power Automate)")
-    reg.estado, reg.revisado_por_id, reg.fecha_revision = nuevo, revisor.id, datetime.now()
+    final = True
     if nuevo == RECHAZADO:
+        reg.estado, reg.revisado_por_id, reg.fecha_revision = nuevo, revisor.id, datetime.now()
         reg.motivo_rechazo = comentario or "Rechazado desde Teams"
-    elif comentario and s.tipo == "permisos":
-        reg.observaciones = comentario
+    else:
+        final = aprobar(reg, revisor)
+        if comentario and s.tipo == "permisos":
+            reg.observaciones = comentario
     s.estado, s.decision_nota, s.resuelto, s.actualizado = "resuelta", None, ahora(), ahora()
     db.commit()
     db.info.pop("bitacora_actor", None)
-    if s.tipo == "permisos" and nuevo == VALIDADO:
+    if s.tipo == "permisos" and nuevo == VALIDADO and final:
         correo.notificar_permiso(reg.id, "permiso_autorizado")
     return True
 

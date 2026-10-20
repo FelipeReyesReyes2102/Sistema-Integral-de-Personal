@@ -109,6 +109,12 @@ class Sede(Base):
     home_office_max_dias: Mapped[int] = mapped_column(Integer, default=31, server_default="31")
     modulo_consultas: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     modulo_cumpleanos: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    # Cuándo se generan los días: aniversario (al cumplir cada año), calendario (cada 1 de enero, el primero
+    # proporcional a lo trabajado en el año de ingreso) o mensual (se acumulan mes a mes durante el año de servicio)
+    generacion_dias: Mapped[str] = mapped_column(String(12), default="aniversario", server_default="aniversario")
+    # Aprobación en dos niveles: primero el jefe y después GH
+    aprobacion_gh_vacaciones: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    aprobacion_gh_permisos: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
 
 class TipoJornada(Base):
@@ -123,6 +129,12 @@ class TipoJornada(Base):
     bloque_minimo: Mapped[int] = mapped_column(Integer, default=6)  # días seguidos que se toman al menos una vez
     # False: lunes a viernes; True: según el ciclo del grupo del empleado (p. ej. 4×4)
     usa_ciclo_grupo: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Cómo se lleva el saldo: "horas" (tabla × 8 h y cada día descuenta las horas de la jornada), "dias" (cada día de
+    # la tabla es un día de esta jornada) o vacío = lo que diga la política de la sede
+    descuento: Mapped[str | None] = mapped_column(String(10))
+    # Vacaciones por horas (p. ej. 4 h de una jornada de 12 h), con un mínimo de horas por solicitud
+    por_horas: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    minimo_horas: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -326,11 +338,16 @@ class SolicitudVacaciones(Base):
     fecha_fin: Mapped[date] = mapped_column(Date)
     dias_habiles: Mapped[int] = mapped_column(Integer)
     horas: Mapped[float] = mapped_column(Float)
+    por_horas: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())  # parte de una jornada
+    planeada: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())   # la programó GH
     estado: Mapped[str] = mapped_column(String(20), default=BORRADOR, index=True)
     comentario: Mapped[str | None] = mapped_column(Text)
     motivo_rechazo: Mapped[str | None] = mapped_column(Text)
     firma: Mapped[str | None] = mapped_column(Text)  # imagen PNG en data URL
     aprobador_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"), index=True)
+    # Dos niveles: el jefe aprueba (queda pendiente de GH) y GH valida
+    aprobado_jefe_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    fecha_aprobado_jefe: Mapped[datetime | None] = mapped_column(DateTime)
     revisado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     fecha_revision: Mapped[datetime | None] = mapped_column(DateTime)
     creado: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -340,6 +357,7 @@ class SolicitudVacaciones(Base):
     periodo: Mapped[PeriodoVacaciones] = relationship()
     aprobador: Mapped[Usuario | None] = relationship(foreign_keys=[aprobador_id])
     revisado_por: Mapped[Usuario | None] = relationship(foreign_keys=[revisado_por_id])
+    aprobado_jefe: Mapped[Usuario | None] = relationship(foreign_keys=[aprobado_jefe_id])
 
 
 class Permiso(Base):
@@ -362,6 +380,9 @@ class Permiso(Base):
     estado: Mapped[str] = mapped_column(String(20), default=BORRADOR, index=True)
     motivo_rechazo: Mapped[str | None] = mapped_column(Text)
     aprobador_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"), index=True)
+    # Dos niveles: el jefe aprueba (queda pendiente de GH) y GH valida
+    aprobado_jefe_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    fecha_aprobado_jefe: Mapped[datetime | None] = mapped_column(DateTime)
     revisado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     fecha_revision: Mapped[datetime | None] = mapped_column(DateTime)
     creado: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -369,6 +390,7 @@ class Permiso(Base):
     usuario: Mapped[Usuario] = relationship(foreign_keys=[usuario_id])
     aprobador: Mapped[Usuario | None] = relationship(foreign_keys=[aprobador_id])
     revisado_por: Mapped[Usuario | None] = relationship(foreign_keys=[revisado_por_id])
+    aprobado_jefe: Mapped[Usuario | None] = relationship(foreign_keys=[aprobado_jefe_id])
 
 
 class Sesion(Base):

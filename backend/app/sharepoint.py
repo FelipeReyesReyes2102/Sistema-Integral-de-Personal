@@ -527,7 +527,8 @@ def revisar_decisiones() -> int:
                 EnvioSharePoint.lista_id == lista.id, EnvioSharePoint.item_id.is_not(None), M.estado == SOLICITADO)).all()
             pendientes += [(lista, env, reg) for env, reg in filas]
         from .aprobacion_flujo import canal_activo
-        pendientes = [p for p in pendientes if not canal_activo(db, p[0].sede_id, p[0].tipo)]
+        pendientes = [p for p in pendientes if not canal_activo(db, p[0].sede_id, p[0].tipo)
+                      and p[2].aprobado_jefe_id is None]
         for lista, env, reg in pendientes:
             sel = ",".join(c for c in (lista.col_decision, lista.col_comentario, lista.col_respondio) if c)
             try:
@@ -546,17 +547,21 @@ def revisar_decisiones() -> int:
                 continue
             if not nuevo:
                 continue
+            from .services import aprobar
             asignar_actor(db, revisor, "Teams (Power Automate)")
-            reg.estado, reg.revisado_por_id, reg.fecha_revision = nuevo, revisor.id, datetime.now()
+            final = True
             if nuevo == RECHAZADO:
+                reg.estado, reg.revisado_por_id, reg.fecha_revision = nuevo, revisor.id, datetime.now()
                 reg.motivo_rechazo = comentario or "Rechazado desde Teams"
-            elif comentario and lista.tipo == "permisos":
-                reg.observaciones = comentario
+            else:
+                final = aprobar(reg, revisor)
+                if comentario and lista.tipo == "permisos":
+                    reg.observaciones = comentario
             env.decision_nota = None
             db.commit()
             db.info.pop("bitacora_actor", None)
             aplicadas += 1
-            if lista.tipo == "permisos" and nuevo == VALIDADO:
+            if lista.tipo == "permisos" and nuevo == VALIDADO and final:
                 correo.notificar_permiso(reg.id, "permiso_autorizado")
     if aplicadas and not SEGUNDO_PLANO:
         procesar_pendientes()
