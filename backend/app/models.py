@@ -86,6 +86,15 @@ class Sede(Base):
     caseta_activo: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     caseta_destinatarios: Mapped[str] = mapped_column(Text, default="")
     caseta_tipos: Mapped[str] = mapped_column(String(200), default="llegada_tarde,salida_temprana,salida_intermedia")
+    # Correo con el que la sede envía sus avisos (la configura su GH). Vacío = usa la configuración general.
+    correo_metodo: Mapped[str | None] = mapped_column(String(10))          # smtp | graph
+    correo_remitente: Mapped[str | None] = mapped_column(String(200))
+    correo_remitente_nombre: Mapped[str | None] = mapped_column(String(200))
+    smtp_host: Mapped[str | None] = mapped_column(String(200))
+    smtp_puerto: Mapped[int | None] = mapped_column(Integer)
+    smtp_seguridad: Mapped[str | None] = mapped_column(String(12))
+    smtp_usuario: Mapped[str | None] = mapped_column(String(200))
+    smtp_password: Mapped[str | None] = mapped_column(Text)  # cifrada
     creado: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     # ---- Política de vacaciones y permisos de la sede (la configura su GH) ----

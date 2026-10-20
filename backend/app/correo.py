@@ -73,6 +73,20 @@ def cargar(db: Session) -> dict:
     return cfg
 
 
+def config_sede(db: Session, sede: Sede | None) -> dict:
+    """Configuración con la que envía una sede: la suya si la tiene, si no la general."""
+    cfg = cargar(db)
+    if sede is not None and sede.correo_remitente:
+        cfg.update({
+            "CORREO_METODO": sede.correo_metodo or "smtp", "CORREO_REMITENTE": sede.correo_remitente,
+            "CORREO_REMITENTE_NOMBRE": sede.correo_remitente_nombre or cfg["CORREO_REMITENTE_NOMBRE"],
+            "CORREO_SMTP_HOST": sede.smtp_host or "", "CORREO_SMTP_PUERTO": str(sede.smtp_puerto or 587),
+            "CORREO_SMTP_SEGURIDAD": sede.smtp_seguridad or "starttls", "CORREO_SMTP_USUARIO": sede.smtp_usuario or "",
+            "CORREO_SMTP_PASSWORD": (descifrar(sede.smtp_password) or "") if sede.smtp_password else "",
+        })
+    return cfg
+
+
 def guardar(db: Session, cambios: dict[str, str | None], actor_id: int | None):
     for clave, valor in cambios.items():
         if clave not in CLAVES:
@@ -247,11 +261,11 @@ def _registrar_y_enviar(db: Session, notif: NotificacionCorreo, cfg: dict, html_
 def notificar_permiso(permiso_id: int, evento: str = "permiso_autorizado"):
     """Tarea en segundo plano: avisa a la caseta de la sede del empleado si el aviso está activo para ese tipo."""
     with SessionLocal() as db:
-        cfg = cargar(db)
         p = db.get(Permiso, permiso_id)
         sede = p.usuario.sede if p and p.usuario else None
         if not p or sede is None or not sede.caseta_activo:
             return
+        cfg = config_sede(db, sede)
         tipos = set(lista_correos(sede.caseta_tipos))
         destinatarios = lista_correos(sede.caseta_destinatarios)
         if p.tipo not in tipos or not destinatarios:
@@ -265,7 +279,7 @@ def notificar_permiso(permiso_id: int, evento: str = "permiso_autorizado"):
 
 
 def reintentar(db: Session, notif: NotificacionCorreo):
-    cfg = cargar(db)
+    cfg = config_sede(db, db.get(Sede, notif.sede_id) if notif.sede_id else None)
     if notif.permiso is not None:
         asunto, html_, texto = mensaje_permiso(notif.permiso, notif.evento)
     else:

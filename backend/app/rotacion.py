@@ -141,7 +141,7 @@ def enviar_avisos(db: Session, sede_id: int | None, hoy: date | None = None) -> 
     cfg = config(db, sede_id)
     if not cfg.activo:
         return {"enviados": 0, "errores": 0, "omitidos": 0, "motivo": "La rotación de turnos está desactivada."}
-    ccfg = correo.cargar(db)
+    ccfg = correo.config_sede(db, db.get(Sede, sede_id) if sede_id else None)
     lunes = proximo_lunes(hoy)
     enviados = errores = omitidos = 0
     grupos = [g.id for g in db.scalars(select(Grupo).where(Grupo.en_rotacion.is_(True), Grupo.sede_id == sede_id))]

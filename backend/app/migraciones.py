@@ -81,6 +81,17 @@ def _migrar_datos(conn: Connection, agregadas: list[str], insp=None):
             conn.execute(text("SELECT min(id) FROM sedes")).scalar()
         if principal is not None:
             conn.execute(text("UPDATE reglas_antiguedad SET sede_id = :s WHERE sede_id IS NULL"), {"s": principal})
+    if "sedes.correo_remitente" in agregadas:
+        # El correo pasa a ser de cada sede: todas arrancan con el que estaba configurado en general
+        valores = dict(conn.execute(text("SELECT clave, valor FROM configuracion WHERE clave LIKE 'CORREO_%'")).all())
+        if valores.get("CORREO_REMITENTE"):
+            conn.execute(text(
+                "UPDATE sedes SET correo_metodo = :m, correo_remitente = :r, correo_remitente_nombre = :n, smtp_host = :h,"
+                " smtp_puerto = :p, smtp_seguridad = :s, smtp_usuario = :u, smtp_password = :pw"), {
+                "m": valores.get("CORREO_METODO") or "smtp", "r": valores.get("CORREO_REMITENTE"),
+                "n": valores.get("CORREO_REMITENTE_NOMBRE"), "h": valores.get("CORREO_SMTP_HOST"),
+                "p": int(valores.get("CORREO_SMTP_PUERTO") or 587), "s": valores.get("CORREO_SMTP_SEGURIDAD"),
+                "u": valores.get("CORREO_SMTP_USUARIO"), "pw": valores.get("CORREO_SMTP_PASSWORD")})
     if "usuarios.email_personal" in agregadas:
         # Planta no tiene correo corporativo: el correo que tenían pasa a ser su correo personal
         conn.execute(text("UPDATE usuarios SET email_personal = email, email = NULL WHERE rol = 'planta' AND email IS NOT NULL"))

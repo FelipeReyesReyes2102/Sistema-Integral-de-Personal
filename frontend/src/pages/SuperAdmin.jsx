@@ -1,5 +1,4 @@
 import { ShieldCheck } from 'lucide-react'
-import ConfigCorreoServidor from '../components/ConfigCorreoServidor'
 import ConfigMicrosoft from '../components/ConfigMicrosoft'
 import ConfigSedes from '../components/ConfigSedes'
 
@@ -9,10 +8,9 @@ export default function SuperAdmin() {
     <>
       <div className="alerta warn" style={{ marginTop: 0, display: 'flex', gap: 8, alignItems: 'center' }}>
         <ShieldCheck size={16} /> Esta configuración es común a <b>todas las sedes</b> y solo la puede cambiar un super administrador.
-        La configuración de cada sede (política, tabla de antigüedad, caseta, SharePoint y aprobación en Teams) está en Configuración.
+        La configuración de cada sede (política, tabla de antigüedad, correo y caseta, SharePoint y aprobación en Teams) está en Configuración.
       </div>
       <ConfigSedes />
-      <ConfigCorreoServidor />
       <ConfigMicrosoft />
     </>
   )

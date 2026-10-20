@@ -104,14 +104,14 @@ def test_configuracion_validaciones_y_secreto():
     r = admin.put("/api/admin/correo", json=CONFIG)
     assert r.status_code == 200 and "clave-smtp" not in r.text and r.json()["password_configurada"]
     with SessionLocal() as db:
-        fila = db.get(ConfiguracionApp, "CORREO_SMTP_PASSWORD")
-        assert fila.cifrado and "clave-smtp" not in fila.valor
+        sede = sede_principal(db)
+        assert sede.smtp_password and "clave-smtp" not in sede.smtp_password  # cifrada en la sede
     assert entrar("ana@empresa.com").get("/api/admin/correo").status_code == 403
-    # Un administrador configura la caseta de su sede, pero no cambia el servidor de correo común
+    # El GH de la sede configura su propio correo de envío
     admin = entrar("admin@empresa.com", "Admin123")
     r = admin.put("/api/admin/correo", json={**CONFIG, "smtp_host": "otro.servidor.com", "caseta_destinatarios": "c@o-tek.com"})
-    assert r.status_code == 200 and r.json()["smtp_host"] == "smtp.o-tek.com" and r.json()["caseta_destinatarios"] == "c@o-tek.com"
-    assert r.json()["puede_editar_servidor"] is False
+    assert r.status_code == 200 and r.json()["smtp_host"] == "otro.servidor.com" and r.json()["caseta_destinatarios"] == "c@o-tek.com"
+    admin.put("/api/admin/correo", json=CONFIG)
 
 
 def test_aviso_a_caseta_al_autorizar_y_al_cancelar():
@@ -213,16 +213,24 @@ def test_graph_renueva_token_en_cache_sin_mail_send(monkeypatch):
     assert llamadas == ["Bearer viejo", "Bearer nuevo"]
 
 
-def test_servidor_solo_super_y_caseta_no_lo_toca():
+def test_cada_sede_tiene_su_correo():
+    from app import correo as c
     su = superadmin()
-    srv = {"metodo": "smtp", "remitente": "avisos@o-tek.com", "remitente_nombre": "SIP-O", "smtp_host": "smtp.o-tek.com",
-           "smtp_puerto": 587, "smtp_seguridad": "starttls", "smtp_usuario": "avisos@o-tek.com", "smtp_password": "x"}
-    r = su.put("/api/admin/correo/servidor", json=srv)
-    assert r.status_code == 200 and r.json()["password_configurada"] and "smtp_password" not in r.json()
-    # GH de la sede guarda solo la caseta: el servidor se conserva
-    caseta = {"caseta_activo": True, "caseta_destinatarios": "caseta@o-tek.com", "caseta_tipos": ["llegada_tarde"]}
-    assert su.put("/api/admin/correo", json=caseta).status_code == 200
-    assert su.get("/api/admin/correo/servidor").json()["smtp_host"] == "smtp.o-tek.com"
-    gh = entrar("admin@empresa.com", "Admin123")
-    if gh.get("/api/auth/me").json()["rol"] != "superadmin":
-        assert gh.get("/api/admin/correo/servidor").status_code == 403
+    assert su.put("/api/admin/correo", json=CONFIG).status_code == 200
+    with SessionLocal() as db:
+        otra = Sede(nombre="Sede correo prueba", zona_horaria="America/Bogota")
+        db.add(otra)
+        db.commit()
+        oid = otra.id
+    su.headers["X-Sede-Id"] = str(oid)
+    r = su.put("/api/admin/correo", json={**CONFIG, "remitente": "caseta.bogota@o-tek.com", "smtp_host": "smtp.bogota.com",
+                                         "smtp_password": "otra-clave"})
+    assert r.status_code == 200 and r.json()["remitente"] == "caseta.bogota@o-tek.com" and "otra-clave" not in r.text
+    del su.headers["X-Sede-Id"]
+    with SessionLocal() as db:
+        cfg_o = c.config_sede(db, db.get(Sede, oid))
+        cfg_m = c.config_sede(db, sede_principal(db))
+    assert cfg_o["CORREO_SMTP_HOST"] == "smtp.bogota.com" and cfg_o["CORREO_SMTP_PASSWORD"] == "otra-clave"
+    assert cfg_m["CORREO_SMTP_HOST"] == "smtp.o-tek.com" and cfg_m["CORREO_REMITENTE"] == "avisos@o-tek.com"
+    e = su.get("/api/bitacora", params={"seccion": "configuracion", "entidad": "Sede", "q": "Sede correo prueba"}).json()["items"][0]
+    assert {"campo": "Contraseña SMTP", "antes": None, "despues": "(valor oculto)"} in e["cambios"]

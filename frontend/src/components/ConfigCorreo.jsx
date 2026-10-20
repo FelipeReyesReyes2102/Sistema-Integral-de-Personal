@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, Mail, RotateCw, Save, Send, XCircle } from 'lucide-react'
-import { Link } from 'react-router-dom'
 import { api } from '../api'
-import { useAuth } from '../auth'
-import { esSuperAdmin } from '../utils'
 
 function Campo({ etiqueta, ayuda, children, full }) {
   return (
@@ -18,9 +15,10 @@ const EVENTOS = { permiso_autorizado: 'Autorizado', permiso_cancelado: 'Cancelad
 
 /** Configuración del correo y de los avisos a caseta cuando se autoriza un permiso. */
 export default function ConfigCorreo() {
-  const { user } = useAuth()
   const [estado, setEstado] = useState(null)
   const [form, setForm] = useState(null)
+  const [password, setPassword] = useState('')
+  const [borrarPassword, setBorrarPassword] = useState(false)
   const [msg, setMsg] = useState(null)
   const [prueba, setPrueba] = useState('')
   const [historial, setHistorial] = useState([])
@@ -30,6 +28,8 @@ export default function ConfigCorreo() {
     setEstado(e)
     const { password_configurada, tipos_disponibles, sede_id, sede_nombre, puede_editar_servidor, ...valores } = e
     setForm(valores)
+    setPassword('')
+    setBorrarPassword(false)
   }
   const cargarHistorial = () => api('/admin/correo/historial', { query: { limite: 20 } }).then(setHistorial).catch(() => {})
   useEffect(() => {
@@ -43,15 +43,16 @@ export default function ConfigCorreo() {
   const toggleTipo = (t) => setForm({
     ...form, caseta_tipos: form.caseta_tipos.includes(t) ? form.caseta_tipos.filter((x) => x !== t) : [...form.caseta_tipos, t],
   })
-  const { tipos_disponibles, sede_nombre } = estado
-  const casetaDe = (o) => ({ caseta_activo: o.caseta_activo, caseta_destinatarios: o.caseta_destinatarios, caseta_tipos: o.caseta_tipos })
-  const sucio = JSON.stringify(casetaDe(form)) !== JSON.stringify(casetaDe(estado))
+  const { password_configurada, tipos_disponibles, sede_id, sede_nombre, puede_editar_servidor, ...guardado } = estado
+  const sucio = JSON.stringify(form) !== JSON.stringify(guardado) || password || borrarPassword
 
   async function guardar() {
     setMsg(null)
     setOcupado(true)
     try {
-      aplicar(await api('/admin/correo', { method: 'PUT', body: casetaDe(form) }))
+      aplicar(await api('/admin/correo', {
+        method: 'PUT', body: { ...form, smtp_puerto: Number(form.smtp_puerto), smtp_password: password || null, borrar_password: borrarPassword },
+      }))
       setMsg({ ok: true, t: 'Configuración guardada. Envía un correo de prueba para verificarla.' })
     } catch (e) {
       setMsg({ ok: false, t: e.message })
@@ -83,7 +84,7 @@ export default function ConfigCorreo() {
   return (
     <div className="card" style={{ marginTop: 24 }}>
       <div className="fila" style={{ marginBottom: 6 }}>
-        <h3 className="fila" style={{ gap: 8 }}><Mail size={18} /> Avisos por correo a caseta · {sede_nombre}</h3>
+        <h3 className="fila" style={{ gap: 8 }}><Mail size={18} /> Correo y avisos a caseta · {sede_nombre}</h3>
         <span className={`pill ${estado.caseta_activo ? 'validado' : 'borrador'}`}>{estado.caseta_activo ? 'Avisos activos' : 'Avisos desactivados'}</span>
       </div>
       <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
@@ -112,15 +113,54 @@ export default function ConfigCorreo() {
 
         <div className="of full">
           <span className="of-ayuda" style={{ fontSize: 12 }}>
-            <b>Servidor de correo:</b> {estado.metodo === 'graph' ? 'Microsoft 365' : `SMTP ${estado.smtp_host || '(sin configurar)'}`}
-            {estado.remitente ? ` · desde ${estado.remitente}` : ' · sin remitente'} — es común a todas las sedes y lo configura el super administrador
-            {esSuperAdmin(user) ? <> en la pestaña <Link to="/super-admin">Super administrador</Link></> : ''}.
+            <b>Correo de envío de esta sede</b> (desde dónde salen sus avisos a caseta y de turnos):
           </span>
         </div>
+        <Campo etiqueta="Método de envío">
+          <select value={form.metodo} onChange={set('metodo')}>
+            <option value="smtp">Servidor SMTP</option>
+            <option value="graph">Microsoft 365 (usa la conexión con Microsoft)</option>
+          </select>
+        </Campo>
+        <Campo etiqueta="Correo remitente" ayuda={form.metodo === 'graph' ? 'Buzón de Microsoft 365 desde el que se envía (requiere permiso Mail.Send)' : 'Dirección que aparece como remitente'}>
+          <input value={form.remitente} onChange={set('remitente')} placeholder="avisos@o-tek.com" />
+        </Campo>
+        <Campo etiqueta="Nombre del remitente">
+          <input value={form.remitente_nombre} onChange={set('remitente_nombre')} />
+        </Campo>
+
+        {form.metodo === 'smtp' && (
+          <>
+            <Campo etiqueta="Servidor SMTP" ayuda="Ej. smtp.office365.com o el de su proveedor">
+              <input value={form.smtp_host} onChange={set('smtp_host')} placeholder="smtp.office365.com" />
+            </Campo>
+            <Campo etiqueta="Puerto">
+              <input type="number" value={form.smtp_puerto} onChange={set('smtp_puerto', Number)} />
+            </Campo>
+            <Campo etiqueta="Seguridad">
+              <select value={form.smtp_seguridad} onChange={set('smtp_seguridad')}>
+                <option value="starttls">STARTTLS (puerto 587)</option>
+                <option value="ssl">SSL/TLS (puerto 465)</option>
+                <option value="ninguna">Ninguna (servidor interno)</option>
+              </select>
+            </Campo>
+            <Campo etiqueta="Usuario SMTP" ayuda="Vacío si el servidor no pide autenticación">
+              <input value={form.smtp_usuario} onChange={set('smtp_usuario')} autoComplete="off" />
+            </Campo>
+            <Campo etiqueta="Contraseña SMTP"
+              ayuda={borrarPassword ? 'se eliminará al guardar' : password_configurada ? 'contraseña configurada (se guarda cifrada)' : 'sin contraseña'}>
+              <input type="password" value={password} onChange={(e) => { setPassword(e.target.value); setBorrarPassword(false) }}
+                placeholder={password_configurada ? '•••••••• (escribe una nueva para reemplazarla)' : ''} autoComplete="new-password" />
+            </Campo>
+          </>
+        )}
       </div>
 
       <div className="fila" style={{ marginTop: 16 }}>
         <button className="btn btn-primary" onClick={guardar} disabled={ocupado || !sucio}><Save size={15} /> Guardar</button>
+        {password_configurada && !borrarPassword && form.metodo === 'smtp' && (
+          <button className="btn btn-sm" onClick={() => { setBorrarPassword(true); setPassword('') }}>Eliminar contraseña</button>
+        )}
         <div className="espacio" />
         <input style={{ width: 240 }} value={prueba} onChange={(e) => setPrueba(e.target.value)} placeholder="Correo para la prueba (opcional)" />
         <button className="btn" onClick={enviarPrueba} disabled={ocupado || sucio} title={sucio ? 'Guarda los cambios antes de probar' : ''}>
