@@ -13,11 +13,11 @@ from .. import microsoft
 from ..config import settings
 from ..database import get_db
 from ..models import FlujoOAuth, Usuario
-from ..schemas import CambioPassword, LoginIn, MeOut
+from ..schemas import CambioPassword, LoginIn, MeOut, MisDatosIn
 from ..security import (
     poner_cookie_csrf,
     MAX_INTENTOS, MINUTOS_BLOQUEO, ahora, auditar, borrar_cookies, cerrar_sesion, crear_sesion, get_current_user,
-    hash_password, permisos_de,
+    debe_confirmar_datos, hash_password, permisos_de, proxima_confirmacion,
     puede_usar_password, sesion_actual, verify_password,
 )
 from ..services import usuario_out
@@ -44,7 +44,8 @@ def me_out(user: Usuario, metodo: str | None) -> MeOut:
     db = object_session(user)
     sedes = [{"id": s.id, "nombre": s.nombre, "zona_horaria": s.zona_horaria} for s in sedes_visibles(db, user)] if db else []
     return MeOut(**base, authenticated=True, display_name=user.nombre, role=user.rol, auth_method=metodo,
-                 permissions=permisos_de(user), puede_usar_password=puede_usar_password(user), sedes=sedes)
+                 permissions=permisos_de(user), puede_usar_password=puede_usar_password(user), sedes=sedes,
+                 debe_confirmar_datos=debe_confirmar_datos(user), proxima_confirmacion=proxima_confirmacion(user))
 
 
 @router.get("/config")
@@ -203,6 +204,38 @@ def me(request: Request, response: Response, user: Usuario = Depends(get_current
     # al usuario sin poder guardar nada ("Token CSRF inválido") hasta que cierre sesión.
     if sesion and request.cookies.get(settings.csrf_cookie_name) != sesion.csrf:
         poner_cookie_csrf(response, sesion.csrf)
+    return me_out(user, sesion and sesion.metodo)
+
+
+@router.put("/mis-datos", response_model=MeOut)
+def mis_datos(data: MisDatosIn, request: Request, user: Usuario = Depends(get_current_user),
+              db: Session = Depends(get_db)):
+    """El usuario confirma o actualiza sus datos personales; desde aquí vuelven a contar los 6 meses."""
+    from ..correo import EMAIL
+    from .usuarios import TELEFONO
+    valores = {k: (v.strip() or None) if isinstance(v, str) else v for k, v in data.model_dump().items()}
+    if valores["email_personal"]:
+        valores["email_personal"] = valores["email_personal"].lower()
+        if not EMAIL.match(valores["email_personal"]):
+            raise HTTPException(422, "El correo personal no es válido.")
+        if valores["email_personal"] == (user.email or "").lower():
+            raise HTTPException(422, "El correo personal debe ser distinto del corporativo.")
+        otro = db.scalar(select(Usuario.id).where(Usuario.id != user.id, func.lower(Usuario.email_personal) == valores["email_personal"]))
+        if otro or db.scalar(select(Usuario.id).where(Usuario.id != user.id, func.lower(Usuario.email) == valores["email_personal"])):
+            raise HTTPException(409, "Ese correo personal ya lo usa otro usuario.")
+    for etiqueta, k in (("teléfono", "telefono"), ("número de contacto", "contacto_telefono")):
+        if valores[k] and not TELEFONO.match(valores[k]):
+            raise HTTPException(422, f"El {etiqueta} no es válido: usa solo números, espacios, guiones, paréntesis o +.")
+    if valores["fecha_nacimiento"] and valores["fecha_nacimiento"] >= ahora().date():
+        raise HTTPException(422, "La fecha de nacimiento no es válida.")
+    cambiados = [k for k, v in valores.items() if getattr(user, k) != v]
+    for k in cambiados:
+        setattr(user, k, valores[k])
+    user.datos_confirmados = ahora()
+    auditar(db, "datos_personales_actualizados" if cambiados else "datos_personales_confirmados", usuario_id=user.id,
+            actor_id=user.id, detalle=", ".join(cambiados) or None, request=request)
+    db.commit()
+    sesion = getattr(request.state, "sesion", None)
     return me_out(user, sesion and sesion.metodo)
 
 

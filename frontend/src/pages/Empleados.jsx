@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CalendarDays, Cloud, Copy, KeyRound, Pencil, Plus, Scale, Search, UserPlus, UserX } from 'lucide-react'
+import { Briefcase, CalendarDays, Cloud, Copy, KeyRound, Pencil, Plus, Scale, Search, ShieldCheck, UserPlus, UserRound, UserX } from 'lucide-react'
 import { api, sedeActiva } from '../api'
 import Avatar from '../components/Avatar'
 import Modal from '../components/Modal'
@@ -286,7 +286,32 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
   return (
     <Modal ancho titulo={inicial.id ? 'Editar empleado' : 'Nuevo empleado'} onClose={onClose}
       pie={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={guardar}>Guardar</button></>}>
-      <div className="form-grid">
+      <div className="emp-cab">
+        <Avatar usuario={{ nombre: form.nombre }} src={fotoActual} tam={56} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="emp-cab-nombre">{form.nombre || 'Nuevo empleado'}</div>
+          <div className="muted" style={{ fontSize: 12 }}>
+            {[ROLES[form.rol], form.puesto, form.numero_empleado && `No. ${form.numero_empleado}`].filter(Boolean).join(' · ')}
+          </div>
+          {inicial.id && (
+            <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+              {inicial.datos_confirmados
+                ? `Confirmó sus datos personales el ${new Date(`${inicial.datos_confirmados.slice(0, 19)}Z`).toLocaleDateString('es-MX')}`
+                : 'Aún no ha confirmado sus datos personales'}
+            </div>
+          )}
+        </div>
+        <div className="emp-cab-acciones">
+          {fotoActual
+            ? <button type="button" className="btn btn-sm" onClick={() => { setFoto(null); setQuitarFoto(true) }}>Quitar foto</button>
+            : <span className="muted" style={{ fontSize: 11 }}>La foto se carga desde Microsoft</span>}
+          <label className="checkbox"><input type="checkbox" checked={form.activo} onChange={set('activo')} /> Activo</label>
+        </div>
+      </div>
+
+      <section className="emp-seccion">
+        <h4><KeyRound size={15} /> Cuenta y acceso</h4>
+        <div className="form-grid">
         {form.rol === 'planta' ? (
           <div className="full alerta warn" style={{ margin: 0 }}>
             El personal de planta no tiene correo corporativo: registra su <b>correo personal</b> (ahí recibirá sus avisos de turno)
@@ -311,11 +336,15 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
           )}
         </div>
         )}
-        <label className="campo full">Correo personal {form.rol === 'planta' ? '' : '(opcional)'}
+        <label className="campo">Correo personal {form.rol === 'planta' ? '' : '(opcional)'}
           <input type="email" value={form.email_personal || ''} onChange={set('email_personal')} placeholder="nombre@gmail.com" />
           <span className="muted" style={{ fontSize: 11 }}>
             {form.rol === 'planta' ? 'Se usa para los avisos por correo y también sirve para iniciar sesión.' : 'También sirve para iniciar sesión. Los avisos se envían al correo corporativo.'}
           </span>
+        </label>
+        <label className="campo">Número de nómina
+          <input value={form.numero_empleado} onChange={set('numero_empleado')} placeholder="Ej. 2001" />
+          <span className="muted" style={{ fontSize: 11 }}>También sirve para iniciar sesión.</span>
         </label>
         {ms.error && <div className="full alerta error">{ms.error}</div>}
         {r && (
@@ -354,17 +383,45 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
             <span className="chip-ms"><Cloud size={11} /> Datos de Microsoft</span>
           </div>
         )}
-
-        <label className="campo">Número de nómina (también sirve para iniciar sesión)
-          <input value={form.numero_empleado} onChange={set('numero_empleado')} placeholder="Ej. 2001" />
-        </label>
         <label className="campo">Tipo de usuario
           <select value={form.rol} onChange={set('rol')}>
             {Object.entries(ROLES).filter(([k]) => soySuper || k !== 'superadmin').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
           {form.rol === 'superadmin' && <span className="muted" style={{ fontSize: 11 }}>Acceso total, incluida la configuración de Microsoft.</span>}
         </label>
+        <div className="campo emp-nota">
+          <span>Contraseña</span>
+          <span>
+            {inicial.id
+              ? 'Para dar una nueva contraseña usa "Restablecer contraseña" en la lista de empleados.'
+              : 'Al guardar se genera una contraseña temporal de 6 dígitos que el empleado deberá cambiar en su primer inicio de sesión.'}
+            {form.microsoft_oid && <><br />Cuenta de Microsoft vinculada.</>}
+          </span>
+        </div>
+        </div>
+      </section>
+
+      <section className="emp-seccion">
+        <h4><UserRound size={15} /> Datos personales</h4>
+        <div className="form-grid">
         <label className="campo full">Nombre completo<input value={form.nombre} onChange={set('nombre')} /></label>
+        <label className="campo">Fecha de nacimiento (cumpleaños)
+          <input type="date" value={form.fecha_nacimiento || ''} onChange={set('fecha_nacimiento')} />
+          <span className="muted" style={{ fontSize: 11 }}>En el calendario todos ven solo el día y el mes, nunca el año.</span>
+        </label>
+        <label className="campo">Teléfono<input type="tel" value={form.telefono || ''} onChange={set('telefono')} placeholder="Ej. 55 1234 5678" /></label>
+        <label className="campo full">Dirección<input value={form.direccion || ''} onChange={set('direccion')} placeholder="Calle, número, colonia, ciudad" /></label>
+        <label className="campo">Contacto de emergencia (nombre)<input value={form.contacto_nombre || ''} onChange={set('contacto_nombre')} placeholder="Ej. María López (esposa)" /></label>
+        <label className="campo">Número de contacto<input type="tel" value={form.contacto_telefono || ''} onChange={set('contacto_telefono')} placeholder="Ej. 55 8765 4321" /></label>
+        <div className="full muted" style={{ fontSize: 11 }}>
+          El empleado también puede actualizar estos datos desde <b>Mi información</b>; cada 6 meses se le pide confirmarlos al iniciar sesión.
+        </div>
+        </div>
+      </section>
+
+      <section className="emp-seccion">
+        <h4><Briefcase size={15} /> Datos laborales</h4>
+        <div className="form-grid">
         <label className="campo">Sede
           <select value={form.sede_id || ''} onChange={cambiarSede} disabled={!puedeCambiarSede}>
             <option value="">Selecciona…</option>
@@ -376,6 +433,15 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
               : 'Solo un super administrador puede cambiar a un empleado de sede.'}
           </span>
         </label>
+        <label className="campo">Fecha de ingreso<input type="date" value={form.fecha_ingreso || ''} onChange={set('fecha_ingreso')} /></label>
+        <label className="campo">Puesto<input value={form.puesto || ''} onChange={set('puesto')} /></label>
+        <label className="campo">Departamento<input value={form.departamento || ''} onChange={set('departamento')} /></label>
+        <label className="campo">Jefe directo (aprueba sus solicitudes)
+          <select value={form.jefe_id} onChange={set('jefe_id')}>
+            <option value="">Sin jefe</option>
+            {jefes.map((j) => <option key={j.id} value={j.id}>{j.nombre}{j.puesto ? ` — ${j.puesto}` : ''}</option>)}
+          </select>
+        </label>
         <label className="campo">Tipo de jornada
           <select value={form.tipo_jornada_id || ''} onChange={set('tipo_jornada_id')}>
             <option value="">{form.rol === 'planta' ? 'La de planta de su sede' : 'La de oficina de su sede'}</option>
@@ -385,6 +451,49 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
           </select>
           <span className="muted" style={{ fontSize: 11 }}>Define horas por día, bloque mínimo y cómo se cuentan sus días hábiles.</span>
         </label>
+        <label className="campo">Turno
+          <select value={form.turno_id} onChange={set('turno_id')}>
+            <option value="">Sin turno</option>
+            {turnos.map((t) => <option key={t.id} value={t.id}>{t.nombre} ({t.hora_entrada.slice(0, 5)}-{t.hora_salida.slice(0, 5)})</option>)}
+          </select>
+        </label>
+        {form.rol === 'planta' ? (
+          <label className="campo">Grupo
+            <select value={form.grupo_id} onChange={set('grupo_id')}>
+              <option value="">Sin grupo</option>
+              {grupos.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+            </select>
+          </label>
+        ) : <div className="emp-hueco" />}
+        <label className="campo full">Días de vacaciones disponibles (opcional)
+          <input type="number" min="0" step="0.5" value={form.dias_disponibles ?? ''} onChange={set('dias_disponibles')}
+            placeholder={saldoActual ? `Actualmente ${num(saldoActual.total)}` : 'Ej. 18'} style={{ maxWidth: 220 }} />
+          <span className="muted" style={{ fontSize: 11 }}>
+            {saldoActual && saldoActual.detalle ? `Hoy: ${saldoActual.detalle}. ` : ''}
+            Se llenan primero en el periodo actual (hasta sus días de ley) y el resto en el anterior.
+            {inicial.id ? ' Vacío: sin cambios.' : ' Vacío: los días completos según su antigüedad.'}
+          </span>
+        </label>
+        <div className="full muted" style={{ fontSize: 12 }}>
+          {form.rol === 'planta'
+            ? 'Planta: días de 12 h (año 1 = 8 días). Al menos una vez por periodo debe tomar 4 días seguidos.'
+            : 'Oficinas / administrador: días de 8 h (año 1 = 12 días). Al menos una vez por periodo debe tomar 6 días seguidos.'}
+        </div>
+        </div>
+      </section>
+
+      <section className="emp-seccion">
+        <h4><ShieldCheck size={15} /> Permisos en el sistema</h4>
+        <div className="emp-permisos">
+          <label className="checkbox">
+            <input type="checkbox" checked={form.es_jefe} onChange={set('es_jefe')} /> Es jefe (puede aprobar y ver a su equipo)
+          </label>
+          {form.rol !== 'medico' && (
+            <label className="checkbox">
+              <input type="checkbox" checked={!!form.puede_consultas} onChange={set('puede_consultas')} /> Puede registrar consultas médicas e incapacidades
+            </label>
+          )}
+        </div>
         {soySuper && form.rol === 'gerencia_gh' ? (
           <div className="campo">
             <span>Sedes adicionales que gestiona (Gerencia GH)</span>
@@ -400,80 +509,9 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
               {sedes.length < 2 && <span className="muted" style={{ fontSize: 11 }}>Solo existe una sede.</span>}
             </div>
           </div>
-        ) : <div />}
-        <label className="campo">Fecha de ingreso<input type="date" value={form.fecha_ingreso || ''} onChange={set('fecha_ingreso')} /></label>
-        <label className="campo">Fecha de nacimiento (cumpleaños)
-          <input type="date" value={form.fecha_nacimiento || ''} onChange={set('fecha_nacimiento')} />
-          <span className="muted" style={{ fontSize: 11 }}>En el calendario todos ven solo el día y el mes, nunca el año.</span>
-        </label>
-        <label className="campo">Días de vacaciones disponibles (opcional)
-          <input type="number" min="0" step="0.5" value={form.dias_disponibles ?? ''} onChange={set('dias_disponibles')}
-            placeholder={saldoActual ? `Actualmente ${num(saldoActual.total)}` : 'Ej. 18'} />
-          <span className="muted" style={{ fontSize: 11 }}>
-            {saldoActual && saldoActual.detalle ? `Hoy: ${saldoActual.detalle}. ` : ''}
-            Se llenan primero en el periodo actual (hasta sus días de ley) y el resto en el anterior.
-            {inicial.id ? ' Vacío: sin cambios.' : ' Vacío: los días completos según su antigüedad.'}
-          </span>
-        </label>
-        <label className="campo">Puesto<input value={form.puesto || ''} onChange={set('puesto')} /></label>
-        <label className="campo">Departamento<input value={form.departamento || ''} onChange={set('departamento')} /></label>
-        <label className="campo">Turno
-          <select value={form.turno_id} onChange={set('turno_id')}>
-            <option value="">Sin turno</option>
-            {turnos.map((t) => <option key={t.id} value={t.id}>{t.nombre} ({t.hora_entrada.slice(0, 5)}-{t.hora_salida.slice(0, 5)})</option>)}
-          </select>
-        </label>
-        <label className="campo">Grupo (solo planta)
-          <select value={form.grupo_id} onChange={set('grupo_id')} disabled={form.rol !== 'planta'}>
-            <option value="">Sin grupo</option>
-            {grupos.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
-          </select>
-        </label>
-        <label className="campo">Jefe directo (aprueba sus solicitudes)
-          <select value={form.jefe_id} onChange={set('jefe_id')}>
-            <option value="">Sin jefe</option>
-            {jefes.map((j) => <option key={j.id} value={j.id}>{j.nombre}{j.puesto ? ` — ${j.puesto}` : ''}</option>)}
-          </select>
-        </label>
-        <label className="checkbox" style={{ alignSelf: 'end' }}>
-          <input type="checkbox" checked={form.es_jefe} onChange={set('es_jefe')} /> Es jefe (puede aprobar y ver a su equipo)
-        </label>
-        {form.rol !== 'medico' && (
-          <label className="checkbox" style={{ alignSelf: 'end' }}>
-            <input type="checkbox" checked={!!form.puede_consultas} onChange={set('puede_consultas')} /> Puede registrar consultas médicas e incapacidades
-          </label>
-        )}
-        <label className="campo">Teléfono<input type="tel" value={form.telefono || ''} onChange={set('telefono')} placeholder="Ej. 55 1234 5678" /></label>
-        <label className="campo">Dirección<input value={form.direccion || ''} onChange={set('direccion')} placeholder="Calle, número, colonia, ciudad" /></label>
-        <label className="campo">Contacto de emergencia (nombre)<input value={form.contacto_nombre || ''} onChange={set('contacto_nombre')} placeholder="Ej. María López (esposa)" /></label>
-        <label className="campo">Número de contacto<input type="tel" value={form.contacto_telefono || ''} onChange={set('contacto_telefono')} placeholder="Ej. 55 8765 4321" /></label>
-        <div className="campo" style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--muted)' }}>
-          <span>Contraseña</span>
-          <span style={{ fontSize: 12, lineHeight: 1.5 }}>
-            {inicial.id
-              ? 'Para dar una nueva contraseña usa "Restablecer contraseña" en la lista de empleados.'
-              : 'Al guardar se genera una contraseña temporal de 6 dígitos que el empleado deberá cambiar en su primer inicio de sesión.'}
-          </span>
-        </div>
-        <div className="campo">
-          <span>Foto</span>
-          <div className="persona">
-            <Avatar usuario={{ nombre: form.nombre }} src={fotoActual} tam={44} />
-            {fotoActual && <button type="button" className="btn btn-sm" onClick={() => { setFoto(null); setQuitarFoto(true) }}>Quitar foto</button>}
-            {!fotoActual && <span className="muted" style={{ fontSize: 12 }}>Se carga desde Microsoft</span>}
-          </div>
-        </div>
-        <label className="checkbox">
-          <input type="checkbox" checked={form.activo} onChange={set('activo')} /> Activo
-        </label>
-        {form.microsoft_oid && <div className="muted" style={{ fontSize: 11, alignSelf: 'center' }}>Cuenta de Microsoft vinculada</div>}
-        <div className="full muted" style={{ fontSize: 12 }}>
-          {form.rol === 'planta'
-            ? 'Planta: días de 12 h (año 1 = 8 días). Al menos una vez por periodo debe tomar 4 días seguidos.'
-            : 'Oficinas / administrador: días de 8 h (año 1 = 12 días). Al menos una vez por periodo debe tomar 6 días seguidos.'}
-        </div>
-        {error && <div className="full alerta error">{error}</div>}
-      </div>
+        ) : null}
+      </section>
+      {error && <div className="alerta error">{error}</div>}
       {temporalJefe && <PasswordTemporal usuario={temporalJefe} onClose={() => setTemporalJefe(null)} />}
     </Modal>
   )

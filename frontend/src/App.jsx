@@ -4,6 +4,7 @@ import { esAdmin, esMedico, esSuperAdmin } from './utils'
 import Layout, { esJefe } from './components/Layout'
 import Login from './pages/Login'
 import CambioObligatorio from './pages/CambioObligatorio'
+import ConfirmarDatos from './pages/ConfirmarDatos'
 import MisVacaciones from './pages/MisVacaciones'
 import Solicitudes from './pages/Solicitudes'
 import MiEquipo from './pages/MiEquipo'
@@ -54,6 +55,8 @@ export default function App() {
   }
   // Primer inicio de sesión con contraseña temporal: solo puede cambiarla
   if (user.debe_cambiar_password && user.auth_method !== 'microsoft') return <CambioObligatorio />
+  // Cada 6 meses desde el registro o el último cambio: confirmar o actualizar datos personales
+  if (user.debe_confirmar_datos) return <ConfirmarDatos />
   return (
     <Routes>
       <Route element={<Layout />}>

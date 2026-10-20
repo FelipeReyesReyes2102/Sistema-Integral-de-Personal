@@ -807,3 +807,28 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .incap-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 .incap-obs { grid-column: 1 / -1; }
 @media (max-width: 700px) { .incap-grid { grid-template-columns: 1fr 1fr; } }
+
+/* Formulario de empleado por secciones */
+.emp-cab { display: flex; align-items: center; gap: 14px; padding: 4px 2px 14px; border-bottom: 1px solid var(--border, #e3e7ee); margin-bottom: 4px; }
+.emp-cab-nombre { font-weight: 700; font-size: 16px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.emp-cab-acciones { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.emp-seccion { padding: 14px 0 6px; border-bottom: 1px solid var(--border, #e3e7ee); }
+.emp-seccion:last-of-type { border-bottom: 0; }
+.emp-seccion > h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .4px; color: var(--primary); }
+.emp-seccion .sedes-admin, .emp-seccion > .campo { margin-top: 10px; }
+.emp-nota span:last-child { font-size: 12px; line-height: 1.5; }
+.emp-permisos { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+@media (max-width: 760px) {
+  .emp-cab { flex-wrap: wrap; }
+  .emp-cab-acciones { flex-direction: row; align-items: center; width: 100%; justify-content: space-between; }
+  .emp-hueco { display: none; }
+}
+
+/* Mis datos personales (Mi información y confirmación cada 6 meses) */
+.mis-datos-fijos { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 14px; margin-bottom: 14px;
+  padding: 10px 12px; border-radius: 8px; background: var(--bg-soft, #f4f6fa); font-size: 13px; }
+.mis-datos-fijos span { display: block; font-size: 11px; color: var(--muted); }
+.mis-datos-fijos b { overflow-wrap: anywhere; }
+.login-card.confirmar-datos { max-width: 640px; text-align: left; background: #fff; color: var(--text); }
+.login-card.confirmar-datos h1, .login-card.confirmar-datos .login-sub { text-align: center; }
+.login-card.confirmar-datos .login-sub { color: var(--muted); }

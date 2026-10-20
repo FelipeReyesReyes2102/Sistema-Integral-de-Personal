@@ -271,6 +271,8 @@ class Usuario(Base):
     creado: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     actualizado: Mapped[datetime | None] = mapped_column(DateTime, onupdate=func.now())
     ultimo_acceso: Mapped[datetime | None] = mapped_column(DateTime)
+    # Última vez que el usuario confirmó o actualizó sus datos personales (cada 6 meses se le vuelve a pedir)
+    datos_confirmados: Mapped[datetime | None] = mapped_column(DateTime)
     # Contraseña temporal (6 dígitos) que se debe cambiar en el primer inicio de sesión
     debe_cambiar_password: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     password_temporal_expira: Mapped[datetime | None] = mapped_column(DateTime)

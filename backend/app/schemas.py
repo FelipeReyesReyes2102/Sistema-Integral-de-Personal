@@ -159,6 +159,7 @@ class UsuarioOut(UsuarioBase, ORM):
     ultimo_acceso: datetime | None = None
     debe_cambiar_password: bool = False
     bloqueado: bool = False
+    datos_confirmados: datetime | None = None
     # Solo se llena al crear el usuario o al restablecer su contraseña: se muestra una sola vez
     password_temporal: str | None = None
     password_temporal_expira: datetime | None = None
@@ -173,6 +174,18 @@ class MeOut(UsuarioOut):
     permissions: list[str] = []
     puede_usar_password: bool = True
     sedes: list[dict] = []   # sedes que puede consultar (selector del menú)
+    debe_confirmar_datos: bool = False      # cada 6 meses: confirmar o actualizar datos personales
+    proxima_confirmacion: datetime | None = None
+
+
+class MisDatosIn(BaseModel):
+    """Datos personales que cada usuario puede actualizar (al guardarlos se reinicia el conteo de 6 meses)."""
+    email_personal: str | None = Field(None, max_length=150)
+    fecha_nacimiento: date | None = None
+    telefono: str | None = Field(None, max_length=30)
+    direccion: str | None = Field(None, max_length=255)
+    contacto_nombre: str | None = Field(None, max_length=150)
+    contacto_telefono: str | None = Field(None, max_length=30)
 
 
 class JefeOut(ORM):

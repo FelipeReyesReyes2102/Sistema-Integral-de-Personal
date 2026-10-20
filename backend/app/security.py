@@ -9,6 +9,8 @@ import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
 
+from dateutil.relativedelta import relativedelta
+
 import bcrypt
 from fastapi import Depends, HTTPException, Request, Response, status
 from sqlalchemy import delete, select
@@ -37,6 +39,18 @@ MAX_INTENTOS = 5
 MINUTOS_BLOQUEO = 15
 # Rutas permitidas mientras el usuario no cambie su contraseña temporal
 RUTAS_CAMBIO_OBLIGATORIO = {"/api/auth/me", "/api/auth/cambiar-password", "/api/auth/logout", "/api/auth/config"}
+RUTAS_CONFIRMAR_DATOS = RUTAS_CAMBIO_OBLIGATORIO | {"/api/auth/mis-datos"}
+MESES_CONFIRMAR_DATOS = 6
+
+
+def proxima_confirmacion(usuario: Usuario) -> datetime:
+    """Seis meses después del registro del usuario o de la última vez que confirmó / cambió sus datos."""
+    base = usuario.datos_confirmados or usuario.creado or ahora()
+    return base + relativedelta(months=MESES_CONFIRMAR_DATOS)
+
+
+def debe_confirmar_datos(usuario: Usuario) -> bool:
+    return ahora() >= proxima_confirmacion(usuario)
 
 
 def asignar_password_temporal(usuario: Usuario) -> str:
@@ -155,6 +169,9 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Usuario
     if (user.debe_cambiar_password and sesion.metodo == "password"
             and request.url.path not in RUTAS_CAMBIO_OBLIGATORIO):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Debes cambiar tu contraseña temporal antes de continuar.")
+    if (request.method not in METODOS_SEGUROS and request.url.path not in RUTAS_CONFIRMAR_DATOS
+            and debe_confirmar_datos(user)):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Confirma o actualiza tus datos personales antes de continuar.")
     t = ahora()
     if (t - sesion.ultimo_uso).total_seconds() > 300:  # no escribir en cada petición
         sesion.ultimo_uso = t

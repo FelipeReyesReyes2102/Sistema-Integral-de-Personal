@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Briefcase, Cake, CalendarDays, Clock, Cloud, IdCard, KeyRound, LogOut, Mail, MapPin, Phone, PhoneCall, ShieldCheck, Stethoscope, UserRound, Users } from 'lucide-react'
+import { Briefcase, Cake, Pencil, CalendarDays, Clock, Cloud, IdCard, KeyRound, LogOut, Mail, MapPin, Phone, PhoneCall, ShieldCheck, Stethoscope, UserRound, Users } from 'lucide-react'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import { ROLES, diaMes, fmtFecha, num } from '../utils'
 import Avatar from './Avatar'
 import Modal from './Modal'
+import MisDatosForm from './MisDatosForm'
 
 function Dato({ icono: Icono, etiqueta, children }) {
   if (children === null || children === undefined || children === '' || children === false) return null
@@ -22,6 +23,7 @@ export default function PerfilUsuario({ onClose, onPassword }) {
   const { user, logout } = useAuth()
   const [saldo, setSaldo] = useState(null)
   const [turno, setTurno] = useState(null)
+  const [editar, setEditar] = useState(false)
 
   useEffect(() => {
     api('/periodos').then((ps) => {
@@ -35,9 +37,19 @@ export default function PerfilUsuario({ onClose, onPassword }) {
   const otrasSedes = (user.sedes || []).filter((s) => s.id !== user.sede_id).map((s) => s.nombre)
   const antiguedad = user.antiguedad_anios > 0 ? `${user.antiguedad_anios} año(s)` : 'menos de 1 año'
 
+  if (editar) {
+    return (
+      <Modal titulo="Mis datos personales" onClose={() => setEditar(false)}>
+        <MisDatosForm onGuardado={() => setEditar(false)}
+          pieExtra={<button type="button" className="btn" onClick={() => setEditar(false)}>Cancelar</button>} />
+      </Modal>
+    )
+  }
+
   return (
     <Modal titulo="Mi información" onClose={onClose}
       pie={<>
+        <button className="btn" onClick={() => setEditar(true)}><Pencil size={15} /> Editar mis datos</button>
         {user.puede_usar_password && user.auth_method !== 'microsoft' && (
           <button className="btn" onClick={() => { onClose(); onPassword() }}><KeyRound size={15} /> Cambiar contraseña</button>
         )}
@@ -95,7 +107,8 @@ export default function PerfilUsuario({ onClose, onPassword }) {
       <Dato icono={ShieldCheck} etiqueta="Sesión iniciada con">{user.auth_method === 'microsoft' ? 'Microsoft' : 'Usuario y contraseña'}</Dato>
       <Dato icono={Clock} etiqueta="Último acceso">{user.ultimo_acceso && new Date(`${user.ultimo_acceso.slice(0, 19)}Z`).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}</Dato>
       <p className="muted" style={{ fontSize: 12, margin: '12px 0 0' }}>
-        Si algún dato no es correcto, pide a Gestión Humana (GH) de tu sede que lo actualice.
+        Tus datos de contacto los puedes actualizar con <b>Editar mis datos</b>; los laborales, pídelos a Gestión Humana (GH) de tu sede.
+        {user.proxima_confirmacion && ` Próxima confirmación de datos: ${new Date(`${user.proxima_confirmacion.slice(0, 19)}Z`).toLocaleDateString('es-MX')}.`}
       </p>
     </Modal>
   )
