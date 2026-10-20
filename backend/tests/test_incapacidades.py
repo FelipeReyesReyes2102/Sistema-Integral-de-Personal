@@ -117,3 +117,33 @@ def test_rechazo_y_validacion_por_gh(monkeypatch):
         for cid in (c["id"], otra["id"], jefa["id"]):
             db.delete(db.get(ConsultaMedica, cid))
         db.commit()
+
+
+def test_jefe_ajusta_dias_al_validar(monkeypatch):
+    enviados = []
+    monkeypatch.setattr(correo, "enviar", lambda cfg, dest, asunto, h, t: enviados.append((dest, asunto, t)))
+    medico = entrar("medico@empresa.com")
+    carlos = next(p for p in medico.get("/api/consultas/pacientes?q=Carlos").json() if p["nombre"] == "Carlos Pérez")
+    inicio = date(HOY.year + 1, 2, 2)
+    datos = {"paciente_id": carlos["id"], "fecha": str(HOY), "hora_inicio": "13:00", "sintomas": "Lumbalgia",
+             "resultado": "envia_casa", "incapacidad": {"fecha_inicio": str(inicio), "fecha_fin": str(inicio + timedelta(days=4))}}
+    c = medico.post("/api/consultas", json=datos).json()
+    iid = c["incapacidad"]["id"]
+    laura = entrar("laura@empresa.com")
+    malo = {"fecha_inicio": str(inicio + timedelta(days=3)), "fecha_fin": str(inicio)}
+    assert laura.post(f"/api/incapacidades/{iid}/validar", json=malo).status_code == 422
+    r = laura.post(f"/api/incapacidades/{iid}/validar", json={"fecha_inicio": str(inicio), "fecha_fin": str(inicio + timedelta(days=1)),
+                                                               "comentario": "Solo 2 días según el certificado"})
+    assert r.status_code == 200, r.text
+    v = r.json()
+    assert v["estado"] == "validado" and v["dias"] == 2 and v["dias_original"] == 5
+    assert v["fecha_fin_original"] == str(inicio + timedelta(days=4)) and v["nota_revision"] == "Solo 2 días según el certificado"
+    # El calendario personal muestra solo los días validados
+    cal = entrar("carlos@empresa.com").get(f"/api/calendario?anio={inicio.year}").json()
+    dias = sorted(x["fecha"] for x in cal["incapacidades"] if x["id"] == iid)
+    assert dias == [str(inicio), str(inicio + timedelta(days=1))] and all(x["estado"] == "validado" for x in cal["incapacidades"] if x["id"] == iid)
+    # A GH le llegan las fechas originales y el comentario
+    assert any("validada" in a and "ajustadas por el jefe" in t and "Solo 2 días" in t for _, a, t in enviados)
+    with SessionLocal() as db:
+        db.delete(db.get(ConsultaMedica, c["id"]))
+        db.commit()

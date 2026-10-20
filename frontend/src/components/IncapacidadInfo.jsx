@@ -11,11 +11,16 @@ export default function IncapacidadInfo({ inc }) {
         <span className={`pill ${inc.estado}`}>{ESTADOS_INCAPACIDAD[inc.estado] || inc.estado}</span>
       </div>
       <div className="incap-fila"><span>Fechas</span><div>{fmtFecha(inc.fecha_inicio)} → {fmtFecha(inc.fecha_fin)} ({inc.dias} día(s))</div></div>
+      {inc.fecha_inicio_original && (
+        <div className="incap-fila"><span>Registrada por el médico</span>
+          <div>{fmtFecha(inc.fecha_inicio_original)} → {fmtFecha(inc.fecha_fin_original)} ({inc.dias_original} día(s)) · <i>el jefe ajustó los días</i></div></div>
+      )}
       <div className="incap-fila"><span>Tipo</span><div>{TIPOS_INCAPACIDAD[inc.tipo] || inc.tipo}</div></div>
       {inc.folio && <div className="incap-fila"><span>Folio</span><div>{inc.folio}</div></div>}
       {inc.observaciones && <div className="incap-fila"><span>Observaciones</span><div>{inc.observaciones}</div></div>}
       <div className="incap-fila"><span>{inc.estado === 'solicitado' ? 'Valida' : 'Revisó'}</span>
         <div>{inc.revisado_por_nombre || inc.aprobador_nombre || 'Gestión Humana'}</div></div>
+      {inc.nota_revision && <div className="incap-fila"><span>Comentario del jefe</span><div>{inc.nota_revision}</div></div>}
       {inc.motivo_rechazo && <div className="incap-fila"><span>Motivo de rechazo</span><div style={{ color: 'var(--danger)' }}>{inc.motivo_rechazo}</div></div>}
     </div>
   )

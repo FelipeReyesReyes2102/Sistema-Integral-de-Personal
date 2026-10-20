@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from .. import incapacidades as inc
 from ..database import get_db
 from ..models import SOLICITADO, Incapacidad, Usuario, es_admin
-from ..schemas import IncapacidadOut, RechazoIn
+from ..schemas import IncapacidadOut, RechazoIn, ValidarIncapacidadIn
 from ..security import get_current_user
 from ..sedes import Alcance, alcance
 from ..services import empleado_visible
@@ -43,9 +43,13 @@ def detalle(iid: int, db: Session = Depends(get_db), user: Usuario = Depends(get
 
 
 @router.post("/{iid}/validar", response_model=IncapacidadOut)
-def validar(iid: int, tareas: BackgroundTasks, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
+def validar(iid: int, tareas: BackgroundTasks, data: ValidarIncapacidadIn | None = None, db: Session = Depends(get_db),
+            user: Usuario = Depends(get_current_user)):
+    """Valida la incapacidad; opcionalmente con otras fechas (el jefe ajusta los días) y un comentario."""
     i = _obtener(db, iid, user)
-    inc.revisar(db, i, user, validar=True)
+    data = data or ValidarIncapacidadIn()
+    inc.revisar(db, i, user, validar=True, fecha_inicio=data.fecha_inicio, fecha_fin=data.fecha_fin,
+                comentario=data.comentario)
     db.commit()
     tareas.add_task(inc.notificar, i.id, "incapacidad_validada")
     return inc.out(i)

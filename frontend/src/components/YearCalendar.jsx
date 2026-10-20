@@ -3,7 +3,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, LayoutGrid } from 'lucide-reac
 import IconoCategoria from './IconoCategoria'
 import { CATEGORIAS, DIAS_SEMANA, ESTADOS, MESES, eventosPorFecha, estiloEvento, fmtFecha, hoyISO, parseISO, toISO } from '../utils'
 
-const PRIORIDAD = ['vacaciones', 'home_office', 'otro_permiso', 'salida_intermedia', 'salida_temprana', 'llegada_tarde', 'consulta', 'consulta_medica']
+const PRIORIDAD = ['incapacidad', 'vacaciones', 'home_office', 'otro_permiso', 'salida_intermedia', 'salida_temprana', 'llegada_tarde', 'consulta', 'consulta_medica']
 
 /**
  * Calendario interactivo.

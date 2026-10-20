@@ -37,6 +37,8 @@ def out(i: Incapacidad) -> IncapacidadOut:
     o.medico_nombre = i.medico.nombre if i.medico else None
     o.aprobador_nombre = i.aprobador.nombre if i.aprobador else None
     o.revisado_por_nombre = i.revisado_por.nombre if i.revisado_por else None
+    if i.fecha_inicio_original and i.fecha_fin_original:
+        o.dias_original = (i.fecha_fin_original - i.fecha_inicio_original).days + 1
     return o
 
 
@@ -83,13 +85,25 @@ def aplicar(db: Session, c: ConsultaMedica, data: IncapacidadIn | None, paciente
     return True
 
 
-def revisar(db: Session, i: Incapacidad, actor: Usuario, validar: bool, motivo: str | None = None):
+def revisar(db: Session, i: Incapacidad, actor: Usuario, validar: bool, motivo: str | None = None,
+            fecha_inicio: date | None = None, fecha_fin: date | None = None, comentario: str | None = None):
+    """Valida o rechaza. Al validar, el jefe puede ajustar las fechas (se conservan las del servicio médico)."""
     if i.estado != SOLICITADO:
         raise HTTPException(400, "La incapacidad ya fue revisada.")
     if not puede_validar(actor, i):
         raise HTTPException(403, "Solo el jefe del empleado o GH pueden validar la incapacidad.")
     if not validar and not (motivo or "").strip():
         raise HTTPException(422, "Indica el motivo del rechazo.")
+    if validar and (fecha_inicio or fecha_fin):
+        inicio, fin = fecha_inicio or i.fecha_inicio, fecha_fin or i.fecha_fin
+        if fin < inicio:
+            raise HTTPException(422, "La fecha final de la incapacidad no puede ser anterior a la inicial.")
+        if (fin - inicio).days + 1 > MAX_DIAS:
+            raise HTTPException(422, f"La incapacidad puede ser por máximo {MAX_DIAS} días.")
+        if (inicio, fin) != (i.fecha_inicio, i.fecha_fin):
+            i.fecha_inicio_original, i.fecha_fin_original = i.fecha_inicio, i.fecha_fin
+            i.fecha_inicio, i.fecha_fin, i.dias = inicio, fin, (fin - inicio).days + 1
+    i.nota_revision = (comentario or "").strip() or None if validar else None
     i.estado = VALIDADO if validar else RECHAZADO
     i.motivo_rechazo = None if validar else motivo.strip()
     i.revisado_por_id, i.fecha_revision = actor.id, ahora()
@@ -131,6 +145,10 @@ def mensaje(i: Incapacidad, evento: str) -> tuple[str, str, str]:
         nota = f"Motivo del rechazo: {i.motivo_rechazo or '—'}"
     filas = [("Empleado", u.nombre), ("No. de nómina", u.numero_empleado), ("Departamento", u.departamento or ""),
              ("Tipo", tipo), ("Fechas", cuando), ("Folio", i.folio or ""), ("Observaciones", i.observaciones or ""),
+             ("Fechas del servicio médico", f"{_fmt(i.fecha_inicio_original)} al {_fmt(i.fecha_fin_original)} "
+              f"({(i.fecha_fin_original - i.fecha_inicio_original).days + 1} día(s)) · ajustadas por el jefe"
+              if i.fecha_inicio_original and i.fecha_fin_original else ""),
+             ("Comentario del jefe", i.nota_revision or ""),
              ("Registró", i.medico.nombre if i.medico else ""),
              ("Revisó", i.revisado_por.nombre if i.revisado_por else "")]
     html_ = correo._plantilla(titulo, color, filas, nota, encabezado="SIP-O · INCAPACIDADES")

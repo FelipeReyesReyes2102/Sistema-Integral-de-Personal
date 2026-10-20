@@ -23,6 +23,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
   const [verConsulta, setVerConsulta] = useState(null)
   const [rechazo, setRechazo] = useState(null)
   const [validarPermiso, setValidarPermiso] = useState(null)
+  const [validarInc, setValidarInc] = useState(null)
   const [firma, setFirma] = useState(null)
 
   function verFirma(s) {
@@ -72,6 +73,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
       await api(ruta, { method: 'POST', body })
       setRechazo(null)
       setValidarPermiso(null)
+      setValidarInc(null)
       cargar()
       window.dispatchEvent(new Event('pendientes:refrescar'))
     } catch (e) {
@@ -140,8 +142,13 @@ export default function Solicitudes({ modo = 'jefe' }) {
               {filtrada.map((i) => (
                 <tr key={i.id}>
                   <td>{i.usuario_nombre}<div className="muted" style={{ fontSize: 12 }}>No. {i.usuario_numero}{i.usuario_departamento ? ` · ${i.usuario_departamento}` : ''}</div></td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{fmtFecha(i.fecha_inicio)} → {fmtFecha(i.fecha_fin)}</td>
-                  <td>{i.dias}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {fmtFecha(i.fecha_inicio)} → {fmtFecha(i.fecha_fin)}
+                    {i.fecha_inicio_original && (
+                      <div className="muted" style={{ fontSize: 11 }}>Médico: {fmtFecha(i.fecha_inicio_original)} → {fmtFecha(i.fecha_fin_original)}</div>
+                    )}
+                  </td>
+                  <td>{i.dias}{i.dias_original && i.dias_original !== i.dias && <div className="muted" style={{ fontSize: 11 }}>antes {i.dias_original}</div>}</td>
                   <td>{TIPOS_INCAPACIDAD[i.tipo] || i.tipo}</td>
                   <td className="muted">{i.folio || '—'}{i.observaciones && <div style={{ fontSize: 12 }}>{i.observaciones}</div>}</td>
                   <td className="muted">{i.medico_nombre}</td>
@@ -154,7 +161,10 @@ export default function Solicitudes({ modo = 'jefe' }) {
                   <td style={{ whiteSpace: 'nowrap' }}>
                     {i.estado === 'solicitado' && (
                       <div className="fila" style={{ flexWrap: 'nowrap' }}>
-                        <button className="btn btn-sm btn-success" onClick={() => ejecutar(`/incapacidades/${i.id}/validar`)}><Check size={14} /> Validar</button>
+                        <button className="btn btn-sm btn-success"
+                          onClick={() => setValidarInc({ i, fecha_inicio: i.fecha_inicio, fecha_fin: i.fecha_fin, comentario: '' })}>
+                          <Check size={14} /> Validar
+                        </button>
                         <button className="btn btn-sm btn-danger" onClick={() => setRechazo({ s: i, motivo: '' })}><X size={14} /> Rechazar</button>
                       </div>
                     )}
@@ -262,6 +272,53 @@ export default function Solicitudes({ modo = 'jefe' }) {
           </label>
         </Modal>
       )}
+      {validarInc && (() => {
+        const v = validarInc
+        const dias = v.fecha_inicio && v.fecha_fin && v.fecha_fin >= v.fecha_inicio
+          ? Math.round((new Date(v.fecha_fin) - new Date(v.fecha_inicio)) / 864e5) + 1 : 0
+        const cambio = v.fecha_inicio !== v.i.fecha_inicio || v.fecha_fin !== v.i.fecha_fin
+        return (
+          <Modal titulo="Validar incapacidad" onClose={() => setValidarInc(null)}
+            pie={<>
+              <button className="btn" onClick={() => setValidarInc(null)}>Cancelar</button>
+              <button className="btn btn-success" disabled={!dias}
+                onClick={() => ejecutar(`/incapacidades/${v.i.id}/validar`, {
+                  fecha_inicio: cambio ? v.fecha_inicio : null, fecha_fin: cambio ? v.fecha_fin : null, comentario: v.comentario.trim() || null,
+                })}>
+                <Check size={14} /> {cambio ? `Validar con ${dias} día(s)` : 'Validar'}
+              </button>
+            </>}>
+            <p style={{ marginTop: 0 }}>
+              <b>{v.i.usuario_nombre}</b> · {TIPOS_INCAPACIDAD[v.i.tipo] || v.i.tipo}{v.i.folio ? ` · Folio ${v.i.folio}` : ''}<br />
+              <span className="muted">El servicio médico registró {fmtFecha(v.i.fecha_inicio)} → {fmtFecha(v.i.fecha_fin)} ({v.i.dias} día(s)). Puedes ajustar los días antes de validarla.</span>
+            </p>
+            <div className="form-grid">
+              <label className="campo">Desde
+                <input type="date" value={v.fecha_inicio}
+                  onChange={(e) => setValidarInc({ ...v, fecha_inicio: e.target.value, fecha_fin: v.fecha_fin < e.target.value ? e.target.value : v.fecha_fin })} />
+              </label>
+              <label className="campo">Hasta
+                <input type="date" value={v.fecha_fin} min={v.fecha_inicio} onChange={(e) => setValidarInc({ ...v, fecha_fin: e.target.value })} />
+              </label>
+              <div className="full fila" style={{ gap: 8 }}>
+                <b>{dias} día(s) naturales</b>
+                {cambio && <span className="pill solicitado">Ajustada: antes {v.i.dias} día(s)</span>}
+                {cambio && (
+                  <button type="button" className="btn btn-sm" onClick={() => setValidarInc({ ...v, fecha_inicio: v.i.fecha_inicio, fecha_fin: v.i.fecha_fin })}>
+                    Restaurar fechas del médico
+                  </button>
+                )}
+              </div>
+              <label className="campo full">Comentario {cambio ? '(recomendado: por qué se ajustan los días)' : '(opcional)'}
+                <textarea rows={2} maxLength={500} value={v.comentario} onChange={(e) => setValidarInc({ ...v, comentario: e.target.value })} />
+              </label>
+            </div>
+            <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>
+              Los días validados quedan en el calendario del colaborador y se notifica a GH, incluidas las fechas originales si las cambias.
+            </p>
+          </Modal>
+        )
+      })()}
       {validarPermiso && (
         <Modal titulo="Validar permiso" onClose={() => setValidarPermiso(null)}
           pie={<>

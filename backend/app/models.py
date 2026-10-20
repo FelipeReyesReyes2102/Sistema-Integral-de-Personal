@@ -644,6 +644,10 @@ class Incapacidad(Base):
     revisado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     fecha_revision: Mapped[datetime | None] = mapped_column(DateTime)
     motivo_rechazo: Mapped[str | None] = mapped_column(Text)
+    # Si el jefe ajusta los días al validarla, se guardan las fechas que había registrado el servicio médico
+    fecha_inicio_original: Mapped[date | None] = mapped_column(Date)
+    fecha_fin_original: Mapped[date | None] = mapped_column(Date)
+    nota_revision: Mapped[str | None] = mapped_column(String(500))
     creado: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     consulta: Mapped["ConsultaMedica"] = relationship(back_populates="incapacidad")

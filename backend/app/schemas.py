@@ -516,6 +516,17 @@ class IncapacidadOut(ORM):
     fecha_revision: datetime | None = None
     motivo_rechazo: str | None = None
     creado: datetime | None = None
+    fecha_inicio_original: date | None = None   # fechas del servicio médico si el jefe las ajustó
+    fecha_fin_original: date | None = None
+    dias_original: int | None = None
+    nota_revision: str | None = None
+
+
+class ValidarIncapacidadIn(BaseModel):
+    """Al validar, el jefe puede ajustar los días de la incapacidad (con un comentario)."""
+    fecha_inicio: date | None = None
+    fecha_fin: date | None = None
+    comentario: str | None = Field(None, max_length=500)
 
 
 class ConsultaIn(BaseModel):
