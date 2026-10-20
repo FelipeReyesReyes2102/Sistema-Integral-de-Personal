@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-Rol = Literal["superadmin", "gerencia_gh", "admin", "oficina", "planta", "medico"]
+Rol = Literal["superadmin", "gerencia_gh", "admin", "oficina", "planta", "medico", "caseta"]
 TipoPermiso = Literal["llegada_tarde", "salida_temprana", "salida_intermedia", "consulta_medica", "home_office"]
 TipoNomina = Literal["con_goce", "sin_goce", "reposicion"]
 Firma = Annotated[str, Field(max_length=400_000, pattern=r"^data:image/png;base64,[A-Za-z0-9+/=]+$")]
@@ -443,6 +443,7 @@ class PermisoOut(ORM):
     usuario_id: int
     usuario_nombre: str | None = None
     tipo: str
+    registrado_por_nombre: str | None = None   # retardo registrado en caseta
     tipo_nombre: str | None = None
     por_dias: bool = False
     fecha: date
@@ -470,6 +471,8 @@ class PermisoOut(ORM):
 
 class ValidarPermisoIn(BaseModel):
     observaciones: str | None = None
+    # Retardos registrados en caseta: el jefe indica cómo se considera el tiempo en nómina al validar
+    tipo_nomina: Literal["con_goce", "sin_goce", "reposicion"] | None = None
 
 
 

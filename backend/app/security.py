@@ -218,6 +218,8 @@ def permisos_de(user: Usuario) -> list[str]:
         p += ["config:microsoft", "usuarios:superadmin"]
     if es_medico(user):
         p += ["consultas:registrar"]
+    if user.rol == "caseta" or es_admin(user):
+        p += ["caseta:consultar"]
     return p
 
 

@@ -250,7 +250,7 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
       turno_id: form.turno_id ? Number(form.turno_id) : null,
       grupo_id: form.rol === 'planta' && form.grupo_id ? Number(form.grupo_id) : null,
       jefe_id: form.jefe_id ? Number(form.jefe_id) : null,
-      email: form.rol === 'planta' ? null : (form.email || '').trim() || null,
+      email: ['planta', 'caseta'].includes(form.rol) ? null : (form.email || '').trim() || null,
       email_personal: (form.email_personal || '').trim() || null,
       fecha_nacimiento: form.fecha_nacimiento || null,
       direccion: (form.direccion || '').trim() || null,
@@ -312,9 +312,9 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
       <section className="emp-seccion">
         <h4><KeyRound size={15} /> Cuenta y acceso</h4>
         <div className="form-grid">
-        {form.rol === 'planta' ? (
+        {['planta', 'caseta'].includes(form.rol) ? (
           <div className="full alerta warn" style={{ margin: 0 }}>
-            El personal de planta no tiene correo corporativo: registra su <b>correo personal</b> (ahí recibirá sus avisos de turno)
+            El personal de {form.rol === 'caseta' ? 'caseta' : 'planta'} no tiene correo corporativo: registra su <b>correo personal</b> (ahí recibirá sus avisos de turno)
             y podrá entrar con su número de nómina.
           </div>
         ) : (
@@ -336,10 +336,10 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
           )}
         </div>
         )}
-        <label className="campo">Correo personal {form.rol === 'planta' ? '' : '(opcional)'}
+        <label className="campo">Correo personal {['planta', 'caseta'].includes(form.rol) ? '' : '(opcional)'}
           <input type="email" value={form.email_personal || ''} onChange={set('email_personal')} placeholder="nombre@gmail.com" />
           <span className="muted" style={{ fontSize: 11 }}>
-            {form.rol === 'planta' ? 'Se usa para los avisos por correo y también sirve para iniciar sesión.' : 'También sirve para iniciar sesión. Los avisos se envían al correo corporativo.'}
+            {['planta', 'caseta'].includes(form.rol) ? 'Se usa para los avisos por correo y también sirve para iniciar sesión.' : 'También sirve para iniciar sesión. Los avisos se envían al correo corporativo.'}
           </span>
         </label>
         <label className="campo">Número de nómina

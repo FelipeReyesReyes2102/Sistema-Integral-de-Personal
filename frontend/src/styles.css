@@ -849,3 +849,12 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .bp-detalle { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .paciente-elegido { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border: 1px solid var(--border, #d6dbe4); border-radius: 8px; background: #f7f9fc; }
 .paciente-nombre { font-weight: 600; }
+
+/* Caseta */
+.caseta-lista { display: flex; flex-direction: column; gap: 8px; }
+.caseta-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border, #e3e7ee);
+  border-left: 4px solid #888; border-radius: 8px; background: #fff; }
+.caseta-item.compacto { padding: 6px 10px; }
+.caseta-nombre { font-weight: 600; }
+.caseta-mov { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 14px; }
+@media (max-width: 640px) { .caseta-item { flex-wrap: wrap; } .caseta-item > div:last-child { text-align: left !important; width: 100%; } }

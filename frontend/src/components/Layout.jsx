@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  CalendarDays, ClipboardCheck, Clock, Home, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
+  CalendarDays, ClipboardCheck, Clock, DoorOpen, Home, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
   History, PartyPopper, Settings, ShieldCheck, Users, UsersRound, X,
 } from 'lucide-react'
 import { api, elegirSede, sedeActiva } from '../api'
@@ -13,6 +13,7 @@ import PerfilUsuario from './PerfilUsuario'
 
 const TITULOS = {
   '/': 'Mis vacaciones y ausencias',
+  '/caseta': 'Caseta · permisos del día y retardos',
   '/aprobaciones': 'Solicitudes por aprobar',
   '/mi-equipo': 'Mi equipo',
   '/solicitudes': 'Todas las solicitudes',
@@ -94,6 +95,12 @@ export default function Layout() {
         </div>
         <nav>
           {link('/', Home, 'Mis vacaciones')}
+          {user.rol === 'caseta' && (
+            <>
+              <div className="seccion">Caseta</div>
+              {link('/caseta', DoorOpen, 'Permisos y retardos')}
+            </>
+          )}
           {esMedico(user) && (
             <>
               <div className="seccion">Servicio médico</div>
@@ -112,6 +119,7 @@ export default function Layout() {
               <div className="seccion">Administración</div>
               {link('/solicitudes', ClipboardCheck, 'Todas las solicitudes', badge(pendientes.todas))}
               {link('/equipo', CalendarDays, 'Calendario general')}
+              {link('/caseta', DoorOpen, 'Caseta')}
               {link('/empleados', Users, 'Empleados')}
               {link('/grupos', UsersRound, 'Grupos')}
               {link('/turnos', Clock, 'Turnos')}
@@ -165,6 +173,7 @@ export default function Layout() {
         )}
         {jefe && <NavLink to="/mi-equipo"><UsersRound size={22} />Mi equipo</NavLink>}
         {esMedico(user) && <NavLink to="/consultas"><Stethoscope size={22} />Consultas</NavLink>}
+        {user.rol === 'caseta' && <NavLink to="/caseta"><DoorOpen size={22} />Caseta</NavLink>}
         <button className={menu ? 'active' : ''} onClick={() => setMenu(!menu)}>
           {menu ? <X size={22} /> : <Menu size={22} />}Menú
         </button>

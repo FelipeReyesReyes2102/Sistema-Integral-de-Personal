@@ -22,7 +22,7 @@ export const TIPOS_NOMINA = {
 
 export const ROLES = {
   superadmin: 'Super administrador', gerencia_gh: 'Gerencia GH', admin: 'GH', oficina: 'Oficinas', planta: 'Planta',
-  medico: 'Médico de planta',
+  medico: 'Médico de planta', caseta: 'Caseta',
 }
 
 /** GH, Gerencia GH o super administrador (el super administrador tiene acceso a todo). */
@@ -30,6 +30,8 @@ export const esAdmin = (u) => ['admin', 'gerencia_gh', 'superadmin'].includes(u?
 export const esSuperAdmin = (u) => u?.rol === 'superadmin'
 /** Médico de planta o usuario al que GH le permitió registrar consultas médicas. */
 export const esMedico = (u) => u?.rol === 'medico' || !!u?.puede_consultas
+/** Personal de caseta (y GH): permisos validados del día y registro de retardos. */
+export const esCaseta = (u) => u?.rol === 'caseta' || esAdmin(u)
 
 // Permisos que el empleado puede pedir (las consultas médicas las registra el médico)
 export const TIPOS_PERMISO_SOLICITABLES = {

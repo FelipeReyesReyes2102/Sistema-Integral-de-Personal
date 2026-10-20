@@ -14,6 +14,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .. import incapacidades
+from ..busqueda import buscar_usuarios
 from ..database import get_db
 from ..models import ROL_ADMIN, ROL_MEDICO, ROLES, Auditoria, ConsultaMedica, MedicamentoRecetado, Usuario
 from ..models import ROLES_ADMIN, es_admin, es_medico  # noqa: F401
@@ -67,24 +68,9 @@ def pacientes(rol: str | None = None, q: str | None = None, limite: int = 30, db
     No incluye al propio médico (no puede registrarse consultas a sí mismo)."""
     if rol and rol not in ROLES:
         raise HTTPException(400, "Tipo de usuario no válido")
-    stmt = select(Usuario).where(Usuario.activo.is_(True), Usuario.id != medico.id,
-                                 Usuario.sede_id.in_([x for x in _sedes_atendidas(db, medico) if x is not None] or [-1]))
-    if rol:
-        stmt = stmt.where(Usuario.rol == rol)
-    palabras = normalizar(q).split()
-    res = []
-    for u in db.scalars(stmt.order_by(Usuario.nombre)):
-        nombre = normalizar(u.nombre)
-        texto = " ".join(normalizar(x) for x in (u.nombre, u.numero_empleado, u.puesto, u.departamento, u.email, u.email_personal) if x)
-        if not all(w in texto for w in palabras):
-            continue
-        # Relevancia: número de nómina exacto, nombre que empieza igual, palabra del nombre que empieza igual, resto
-        frase = " ".join(palabras)
-        orden = (0 if palabras and normalizar(u.numero_empleado) == frase else 1 if nombre.startswith(frase)
-                 else 2 if palabras and any(n.startswith(palabras[0]) for n in nombre.split()) else 3)
-        res.append((orden, nombre, u))
+    encontrados = buscar_usuarios(db, _sedes_atendidas(db, medico), q, excluir_id=medico.id, rol=rol, limite=limite)
     out = []
-    for _, _, u in sorted(res, key=lambda x: (x[0], x[1]))[:max(1, min(limite, 100))]:
+    for u in encontrados:
         o = PacienteOut.model_validate(u)
         o.tiene_foto = u.foto_tipo is not None
         o.sede_nombre = u.sede.nombre if u.sede else None

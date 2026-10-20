@@ -216,6 +216,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
                       ? <span className="muted">{s.dias ?? '—'} día(s) laborales</span>
                       : <>{hhmm(s.hora_inicio)} - {hhmm(s.hora_fin)} <span className="muted">({num(s.horas)} h)</span></>}</td>
                     <td className="muted">
+                      {s.registrado_por_nombre && <span className="chip" style={{ marginRight: 4 }}>Caseta: {s.registrado_por_nombre}</span>}
                       {s.motivo}
                       {s.tipo_nomina && <div style={{ fontSize: 11 }}>{TIPOS_NOMINA[s.tipo_nomina]}{s.departamento && ` · ${s.departamento}`}</div>}
                     </td>
@@ -329,10 +330,25 @@ export default function Solicitudes({ modo = 'jefe' }) {
         <Modal titulo="Validar permiso" onClose={() => setValidarPermiso(null)}
           pie={<>
             <button className="btn" onClick={() => setValidarPermiso(null)}>Cancelar</button>
-            <button className="btn btn-success"
-              onClick={() => ejecutar(`/permisos/${validarPermiso.id}/validar`, { observaciones: validarPermiso.obs || null })}>Validar</button>
+            <button className="btn btn-success" disabled={!!validarPermiso.registrado_por_nombre && !validarPermiso.tipo_nomina && !validarPermiso.nomina}
+              onClick={() => ejecutar(`/permisos/${validarPermiso.id}/validar`, {
+                observaciones: validarPermiso.obs || null, tipo_nomina: validarPermiso.nomina || null,
+              })}>Validar</button>
           </>}>
           <p><b>{validarPermiso.usuario_nombre}</b> · {nombreTipo(validarPermiso)} · {fmtFecha(validarPermiso.fecha)} {hhmm(validarPermiso.hora_inicio)}-{hhmm(validarPermiso.hora_fin)}</p>
+          {validarPermiso.registrado_por_nombre && (
+            <div className="alerta warn" style={{ margin: '0 0 10px' }}>
+              Retardo registrado en caseta por <b>{validarPermiso.registrado_por_nombre}</b>: el empleado no lo solicitó ni lo firmó.
+            </div>
+          )}
+          {validarPermiso.registrado_por_nombre && !validarPermiso.tipo_nomina && (
+            <label className="campo" style={{ marginBottom: 10 }}>Cómo se considera el tiempo en nómina *
+              <select value={validarPermiso.nomina || ''} onChange={(e) => setValidarPermiso({ ...validarPermiso, nomina: e.target.value })}>
+                <option value="">Selecciona…</option>
+                {Object.entries(TIPOS_NOMINA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </label>
+          )}
           <label className="campo">
             {validarPermiso.tipo === 'consulta_medica' ? 'Observaciones del médico de planta (opcional)' : 'Observaciones (opcional)'}
             <textarea rows={3} value={validarPermiso.obs || ''} onChange={(e) => setValidarPermiso({ ...validarPermiso, obs: e.target.value })} />

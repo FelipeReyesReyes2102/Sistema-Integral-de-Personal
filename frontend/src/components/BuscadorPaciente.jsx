@@ -32,7 +32,8 @@ function Resaltado({ texto, palabras }) {
  * Buscador de pacientes: escribe nombre, apellido, número de nómina, puesto, departamento o correo.
  * Flechas para moverse, Enter para elegir, Esc para limpiar.
  */
-export default function BuscadorPaciente({ value, onChange }) {
+export default function BuscadorPaciente({ value, onChange, endpoint = '/consultas/pacientes', extra = null,
+  placeholder = 'Nombre, apellido, número de nómina, puesto o departamento…' }) {
   const [q, setQ] = useState('')
   const [lista, setLista] = useState([])
   const [abierto, setAbierto] = useState(false)
@@ -45,7 +46,7 @@ export default function BuscadorPaciente({ value, onChange }) {
     if (value || !abierto) return undefined
     setCargando(true)
     const t = setTimeout(() => {
-      api('/consultas/pacientes', { query: { q, limite: 30 } })
+      api(endpoint, { query: { q, limite: 30 } })
         .then((r) => { setLista(r); setActivo(0); setError('') })
         .catch((e) => setError(e.message))
         .finally(() => setCargando(false))
@@ -77,6 +78,7 @@ export default function BuscadorPaciente({ value, onChange }) {
           <div className="muted" style={{ fontSize: 12 }}>
             {[`No. ${value.numero_empleado}`, ROLES[value.rol], value.puesto, value.departamento, value.sede_nombre].filter(Boolean).join(' · ')}
           </div>
+          {extra && <div style={{ fontSize: 12, marginTop: 2 }}>{extra(value)}</div>}
           {(value.telefono || value.contacto_nombre || value.contacto_telefono) && (
             <div style={{ fontSize: 12, marginTop: 2 }}>
               {value.telefono && <>Tel. {value.telefono}</>}
@@ -96,7 +98,7 @@ export default function BuscadorPaciente({ value, onChange }) {
     <div className="buscador-paciente" ref={caja}>
       <div className="bp-input">
         <Search size={16} />
-        <input value={q} placeholder="Nombre, apellido, número de nómina, puesto o departamento…" autoComplete="off"
+        <input value={q} placeholder={placeholder} autoComplete="off"
           onChange={(e) => { setQ(e.target.value); setAbierto(true) }} onFocus={() => setAbierto(true)} onKeyDown={teclas}
           role="combobox" aria-expanded={abierto} aria-controls="bp-lista" aria-label="Buscar paciente" />
         {q && <button type="button" className="icon-btn plain" title="Limpiar" onClick={() => setQ('')}><X size={14} /></button>}

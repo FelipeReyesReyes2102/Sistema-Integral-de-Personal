@@ -16,13 +16,14 @@ ROL_MEDICO = "medico"  # médico de planta: registra consultas; para vacaciones 
 ROL_SUPERADMIN = "superadmin"  # todo lo del administrador + configuración de Microsoft y gestión de super admins
 # "admin" se muestra como GH (Gestión Humana): administra solo su sede.
 ROL_GERENCIA_GH = "gerencia_gh"  # Gerencia GH: mismos accesos que GH en las sedes que le asigne un super administrador
-ROLES = (ROL_SUPERADMIN, ROL_GERENCIA_GH, ROL_ADMIN, ROL_OFICINA, ROL_PLANTA, ROL_MEDICO)
+ROL_CASETA = "caseta"  # vigilancia: ve los permisos validados del día y registra retardos; vacaciones como oficinas
+ROLES = (ROL_SUPERADMIN, ROL_GERENCIA_GH, ROL_ADMIN, ROL_OFICINA, ROL_PLANTA, ROL_MEDICO, ROL_CASETA)
 ROLES_ADMIN = (ROL_ADMIN, ROL_GERENCIA_GH, ROL_SUPERADMIN)
 
 
 def tiene_correo_corporativo(rol: str) -> bool:
-    """Solo el personal de oficinas tiene correo corporativo."""
-    return rol != ROL_PLANTA
+    """Solo el personal de oficinas tiene correo corporativo (planta y caseta usan su correo personal)."""
+    return rol not in (ROL_PLANTA, ROL_CASETA)
 
 
 def correo_contacto(usuario) -> str | None:
@@ -420,9 +421,12 @@ class Permiso(Base):
     fecha_aprobado_jefe: Mapped[datetime | None] = mapped_column(DateTime)
     revisado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     fecha_revision: Mapped[datetime | None] = mapped_column(DateTime)
+    # Retardo registrado por caseta (el empleado no lo solicitó ni lo firmó)
+    registrado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     creado: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     usuario: Mapped[Usuario] = relationship(foreign_keys=[usuario_id])
+    registrado_por: Mapped[Usuario | None] = relationship(foreign_keys=[registrado_por_id])
     aprobador: Mapped[Usuario | None] = relationship(foreign_keys=[aprobador_id])
     revisado_por: Mapped[Usuario | None] = relationship(foreign_keys=[revisado_por_id])
     aprobado_jefe: Mapped[Usuario | None] = relationship(foreign_keys=[aprobado_jefe_id])

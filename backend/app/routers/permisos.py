@@ -26,6 +26,7 @@ def _out(p: Permiso) -> PermisoOut:
     o.aprobador_nombre = p.aprobador.nombre if p.aprobador else None
     o.revisado_por_nombre = p.revisado_por.nombre if p.revisado_por else None
     o.tiene_firma = bool(p.firma)
+    o.registrado_por_nombre = p.registrado_por.nombre if p.registrado_por else None
     db = object_session(p)
     sede_id = p.usuario.sede_id if p.usuario else None
     o.tipo_nombre = tipos_permiso.nombre(db, sede_id, p.tipo)
@@ -270,6 +271,10 @@ def _revisable(db: Session, pid: int, user: Usuario) -> Permiso:
 def validar(pid: int, tareas: BackgroundTasks, data: ValidarPermisoIn | None = None, db: Session = Depends(get_db),
             user: Usuario = Depends(get_current_user)):
     p = _revisable(db, pid, user)
+    if data and data.tipo_nomina:
+        p.tipo_nomina = data.tipo_nomina
+    if p.registrado_por_id and not p.tipo_nomina:
+        raise HTTPException(422, "Indica cómo se considera el tiempo del retardo en nómina para validarlo.")
     final = aprobar(p, user)
     if data and data.observaciones:
         p.observaciones = data.observaciones
