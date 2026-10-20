@@ -566,6 +566,8 @@ class PacienteOut(ORM):
     puesto: str | None
     departamento: str | None
     tiene_foto: bool = False
+    sede_nombre: str | None = None
+    email: str | None = None
     telefono: str | None = None
     contacto_nombre: str | None = None
     contacto_telefono: str | None = None

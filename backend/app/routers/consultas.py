@@ -19,7 +19,7 @@ from ..models import ROLES_ADMIN, es_admin, es_medico  # noqa: F401
 from ..schemas import ConsultaIn, ConsultaOut, ConsultaResumenOut, PacienteOut
 from ..security import auditar, get_current_user, require_medico
 from ..services import empleado_visible
-from ..sedes import Alcance, admin_permite, alcance
+from ..sedes import Alcance, admin_permite, alcance, normalizar, sedes_visibles
 
 router = APIRouter(prefix="/api/consultas", tags=["servicio médico"])
 
@@ -50,25 +50,45 @@ def _puede_ver_detalle(user: Usuario, c: ConsultaMedica) -> bool:
     return (es_medico(user) and user.sede_id == sede) or admin_permite(user, sede)
 
 
+def _sedes_atendidas(db: Session, medico: Usuario) -> set[int | None]:
+    """El médico atiende a su sede; GH / Gerencia GH / super admin con permiso, a las sedes que administran."""
+    if es_admin(medico):
+        return {x.id for x in sedes_visibles(db, medico)} | {medico.sede_id}
+    return {medico.sede_id}
+
+
 @router.get("/pacientes", response_model=list[PacienteOut])
-def pacientes(rol: str | None = None, q: str | None = None, db: Session = Depends(get_db),
+def pacientes(rol: str | None = None, q: str | None = None, limite: int = 30, db: Session = Depends(get_db),
               medico: Usuario = Depends(require_medico)):
-    """Empleados activos de la sede del médico, filtrados por tipo de usuario y búsqueda."""
-    stmt = select(Usuario).where(Usuario.activo.is_(True), Usuario.sede_id == medico.sede_id).order_by(Usuario.nombre)
+    """Búsqueda de pacientes por nombre, número de nómina, puesto, departamento o correo.
+
+    Sin distinguir mayúsculas ni acentos y por palabras ("felipe reyes" encuentra "Felipe de Jesús Reyes Reyes").
+    No incluye al propio médico (no puede registrarse consultas a sí mismo)."""
+    if rol and rol not in ROLES:
+        raise HTTPException(400, "Tipo de usuario no válido")
+    stmt = select(Usuario).where(Usuario.activo.is_(True), Usuario.id != medico.id,
+                                 Usuario.sede_id.in_([x for x in _sedes_atendidas(db, medico) if x is not None] or [-1]))
     if rol:
-        if rol not in ROLES:
-            raise HTTPException(400, "Tipo de usuario no válido")
         stmt = stmt.where(Usuario.rol == rol)
-    if q:
-        like = f"%{q.strip()}%"
-        stmt = stmt.where(or_(Usuario.nombre.ilike(like), Usuario.numero_empleado.ilike(like),
-                              Usuario.departamento.ilike(like)))
+    palabras = normalizar(q).split()
     res = []
-    for u in db.scalars(stmt.limit(200)):
-        p = PacienteOut.model_validate(u)
-        p.tiene_foto = u.foto_tipo is not None
-        res.append(p)
-    return res
+    for u in db.scalars(stmt.order_by(Usuario.nombre)):
+        nombre = normalizar(u.nombre)
+        texto = " ".join(normalizar(x) for x in (u.nombre, u.numero_empleado, u.puesto, u.departamento, u.email, u.email_personal) if x)
+        if not all(w in texto for w in palabras):
+            continue
+        # Relevancia: número de nómina exacto, nombre que empieza igual, palabra del nombre que empieza igual, resto
+        frase = " ".join(palabras)
+        orden = (0 if palabras and normalizar(u.numero_empleado) == frase else 1 if nombre.startswith(frase)
+                 else 2 if palabras and any(n.startswith(palabras[0]) for n in nombre.split()) else 3)
+        res.append((orden, nombre, u))
+    out = []
+    for _, _, u in sorted(res, key=lambda x: (x[0], x[1]))[:max(1, min(limite, 100))]:
+        o = PacienteOut.model_validate(u)
+        o.tiene_foto = u.foto_tipo is not None
+        o.sede_nombre = u.sede.nombre if u.sede else None
+        out.append(o)
+    return out
 
 
 @router.get("")
@@ -122,10 +142,10 @@ def _validar(db: Session, data: ConsultaIn, medico: Usuario) -> Usuario:
         raise HTTPException(404, "El paciente no existe o está inactivo")
     if paciente.id == medico.id:
         raise HTTPException(422, "No puedes registrar una consulta a tu propio nombre")
-    if paciente.sede_id != medico.sede_id:
-        raise HTTPException(422, "El paciente pertenece a otra sede.")
-    if medico.sede is not None and not medico.sede.modulo_consultas:
-        raise HTTPException(403, "El servicio médico no está habilitado en tu sede.")
+    if paciente.sede_id not in _sedes_atendidas(db, medico):
+        raise HTTPException(422, "El paciente pertenece a una sede que no atiendes.")
+    if paciente.sede is not None and not paciente.sede.modulo_consultas:
+        raise HTTPException(403, "El servicio médico no está habilitado en la sede del paciente.")
     if data.fecha > date.today():
         raise HTTPException(422, "La fecha de la consulta no puede ser futura")
     if data.hora_fin and data.hora_fin <= data.hora_inicio:

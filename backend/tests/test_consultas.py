@@ -91,3 +91,14 @@ def test_validaciones_y_permiso_de_consulta_ya_no_se_solicita():
     r = carlos.post("/api/permisos", json={"tipo": "consulta_medica", "fecha": str(date.today()),
                                            "hora_inicio": "09:00", "hora_fin": "10:00", "enviar": False})
     assert r.status_code == 422 and "médico de planta" in r.text
+
+
+def test_buscador_de_pacientes():
+    medico = entrar("medico@empresa.com")
+    nombres = lambda q: [p["nombre"] for p in medico.get("/api/consultas/pacientes", params={"q": q}).json()]  # noqa: E731
+    assert "Carlos Pérez" in nombres("perez carlos")       # sin acentos y en cualquier orden
+    assert "Carlos Pérez" in nombres("CARLOS")
+    assert nombres("Dra. Patricia") == []                    # el médico no aparece (no se atiende a sí mismo)
+    carlos = next(p for p in medico.get("/api/consultas/pacientes", params={"q": "carlos"}).json() if p["nombre"] == "Carlos Pérez")
+    assert medico.get("/api/consultas/pacientes", params={"q": carlos["numero_empleado"]}).json()[0]["id"] == carlos["id"]
+    assert medico.get("/api/consultas/pacientes", params={"q": "zzz-no-existe"}).json() == []
