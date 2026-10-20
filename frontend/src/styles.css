@@ -789,3 +789,5 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 @media (max-width: 900px) { .sp-teams-grid { grid-template-columns: 1fr; } }
 
 .tab-badge { margin-left: 6px; vertical-align: 1px; }
+
+.sa-sede { border-left: 4px solid var(--primary); }

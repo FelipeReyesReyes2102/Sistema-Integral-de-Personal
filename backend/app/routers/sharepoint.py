@@ -1,4 +1,4 @@
-"""Configuración de las listas de SharePoint de la sede activa (GH, Gerencia GH y super administrador)."""
+"""Configuración de las listas de SharePoint de la sede activa (solo super administrador, por sede)."""
 import json
 import threading
 from datetime import date
@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from .. import sharepoint
 from ..database import get_db
 from ..models import EnvioSharePoint, ListaSharePoint, Sede, Usuario
-from ..security import ahora, require_admin
+from ..security import ahora, require_superadmin
 from ..sedes import Alcance, alcance, sede_principal
 
 router = APIRouter(prefix="/api/sharepoint", tags=["sharepoint"])
@@ -88,13 +88,13 @@ def _procesar(lista_id: int):
 
 
 @router.get("")
-def obtener(db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def obtener(db: Session = Depends(get_db), _=Depends(require_superadmin), alc: Alcance = Depends(alcance)):
     sede = _sede(db, alc)
     return {"sede_nombre": sede.nombre, "listas": {t: _estado(db, sede, t) for t in sharepoint.TIPOS}}
 
 
 @router.put("/{tipo}/conectar")
-def conectar(tipo: str, data: ConectarIn, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin),
+def conectar(tipo: str, data: ConectarIn, db: Session = Depends(get_db), admin: Usuario = Depends(require_superadmin),
              alc: Alcance = Depends(alcance)):
     """Lee el sitio, la lista y sus columnas; sugiere el mapeo si la lista es nueva o cambió."""
     tipo, sede = _tipo(tipo), _sede(db, alc)
@@ -125,7 +125,7 @@ def conectar(tipo: str, data: ConectarIn, db: Session = Depends(get_db), admin: 
 
 
 @router.put("/{tipo}")
-def guardar(tipo: str, data: GuardarIn, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin),
+def guardar(tipo: str, data: GuardarIn, db: Session = Depends(get_db), admin: Usuario = Depends(require_superadmin),
             alc: Alcance = Depends(alcance)):
     tipo, sede = _tipo(tipo), _sede(db, alc)
     l = _lista(db, sede, tipo)
@@ -184,7 +184,7 @@ def _validar_teams(data: GuardarIn, columnas: dict, mapeo: dict):
 
 
 @router.post("/{tipo}/existentes")
-def enviar_existentes(tipo: str, data: ExistentesIn, db: Session = Depends(get_db), _=Depends(require_admin),
+def enviar_existentes(tipo: str, data: ExistentesIn, db: Session = Depends(get_db), _=Depends(require_superadmin),
                       alc: Alcance = Depends(alcance)):
     """Envía también las solicitudes que ya existían (desde una fecha); las ya enviadas no se duplican."""
     tipo, sede = _tipo(tipo), _sede(db, alc)
@@ -198,7 +198,7 @@ def enviar_existentes(tipo: str, data: ExistentesIn, db: Session = Depends(get_d
 
 
 @router.post("/{tipo}/reintentar")
-def reintentar(tipo: str, db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def reintentar(tipo: str, db: Session = Depends(get_db), _=Depends(require_superadmin), alc: Alcance = Depends(alcance)):
     tipo, sede = _tipo(tipo), _sede(db, alc)
     l = _lista(db, sede, tipo)
     if not l:
@@ -211,7 +211,7 @@ def reintentar(tipo: str, db: Session = Depends(get_db), _=Depends(require_admin
 
 
 @router.delete("/{tipo}")
-def desconectar(tipo: str, db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def desconectar(tipo: str, db: Session = Depends(get_db), _=Depends(require_superadmin), alc: Alcance = Depends(alcance)):
     """Deja de enviar a la lista. No borra nada en SharePoint."""
     tipo, sede = _tipo(tipo), _sede(db, alc)
     l = _lista(db, sede, tipo)

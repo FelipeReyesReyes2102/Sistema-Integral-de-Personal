@@ -28,7 +28,7 @@ export function elegirSede(id) {
   window.location.reload()
 }
 
-export async function api(path, { method = 'GET', body, query } = {}) {
+export async function api(path, { method = 'GET', body, query, sede: sedeElegida } = {}) {
   let url = `/api${path}`
   if (query) {
     const qs = new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined && v !== null && v !== ''))
@@ -36,7 +36,7 @@ export async function api(path, { method = 'GET', body, query } = {}) {
   }
   const headers = { 'Content-Type': 'application/json' }
   if (method !== 'GET') headers['X-CSRF-Token'] = leerCookie('sip_csrf')
-  const sede = sedeActiva()
+  const sede = sedeElegida || sedeActiva()
   if (sede) headers['X-Sede-Id'] = sede
   const res = await fetch(url, {
     method, headers, credentials: 'same-origin',

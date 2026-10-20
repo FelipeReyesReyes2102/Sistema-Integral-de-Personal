@@ -3,8 +3,6 @@ import { Plus, Trash2 } from 'lucide-react'
 import { api } from '../api'
 import { num } from '../utils'
 import ConfigCorreo from '../components/ConfigCorreo'
-import ConfigSharePoint from '../components/ConfigSharePoint'
-import ConfigAprobacionFlujo from '../components/ConfigAprobacionFlujo'
 import ConfigPolitica from '../components/ConfigPolitica'
 import { useAuth } from '../auth'
 import { esAdmin } from '../utils'
@@ -91,8 +89,6 @@ export default function Configuracion() {
       <ConfigPolitica />
     </div>
     <ConfigCorreo />
-    <ConfigAprobacionFlujo />
-    <ConfigSharePoint />
     </>
   )
 }

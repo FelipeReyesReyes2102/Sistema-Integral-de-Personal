@@ -76,6 +76,23 @@ def graph(monkeypatch):
     microsoft._token_app.update(valor=None, expira=0)
 
 
+def super_login():
+    """Las integraciones (SharePoint y Teams) las configura solo el super administrador."""
+    from datetime import date as _d
+
+    from app.database import SessionLocal
+    from app.models import Usuario
+    from app.security import hash_password
+    from app.sedes import sede_principal
+    with SessionLocal() as db:
+        if not db.query(Usuario).filter(Usuario.email == "super.integra@o-tek.com").first():
+            db.add(Usuario(numero_empleado="SI-1", nombre="Super Integraciones", email="super.integra@o-tek.com",
+                           rol="superadmin", password_hash=hash_password("Super123x"), fecha_ingreso=_d(2020, 1, 1),
+                           sede_id=sede_principal(db).id))
+            db.commit()
+    return login("super.integra@o-tek.com", "Super123x")
+
+
 def test_url_invalida():
     with pytest.raises(sharepoint.ErrorSharePoint):
         sharepoint.analizar_url("https://otek.sharepoint.com/sites/GH/Documentos")
@@ -83,7 +100,7 @@ def test_url_invalida():
 
 
 def test_envio_y_actualizacion(graph):
-    adm, ana = login("admin@empresa.com", "Admin123"), login("ana@empresa.com", "Cambiar123")
+    adm, ana = super_login(), login("ana@empresa.com", "Cambiar123")
     r = adm.put("/api/sharepoint/vacaciones/conectar", json={"url": URL})
     assert r.status_code == 200, r.text
     cfg = r.json()
@@ -162,7 +179,7 @@ def _solicitud(adm, ana, semanas):
 
 
 def test_aprobacion_en_teams(graph):
-    adm, ana = login("admin@empresa.com", "Admin123"), login("ana@empresa.com", "Cambiar123")
+    adm, ana = super_login(), login("ana@empresa.com", "Cambiar123")
     cfg = adm.put("/api/sharepoint/vacaciones/conectar", json={"url": URL}).json()
     teams = {"aprobacion_teams": True, "col_decision": "Decision", "col_comentario": "ComentarioTeams",
              "col_respondio": "Respondio", "cuenta_flujo": "Flujos@o-tek.com"}
@@ -237,3 +254,9 @@ def test_permiso_fecha_hora_en_zona_de_la_sede():
     assert sharepoint._convertir(d["fecha_hora_fin"], col, "fecha_hora_fin", "permisos", {}, None) == "2026-10-20T16:00:00Z"
     tipo = {"nombre": "field_8", "tipo": "choice", "opciones": ["Sale Temprano", "Llega Tarde", "Sale y Regresa", "Home office"]}
     assert sharepoint._convertir("llegada_tarde", tipo, "tipo", "permisos", {"field_8": {"llegada_tarde": "Llega Tarde"}}, None) == "Llega Tarde"
+
+
+def test_solo_super_admin_configura_integraciones():
+    gh = login("admin@empresa.com", "Admin123")
+    assert gh.get("/api/sharepoint").status_code == 403
+    assert gh.get("/api/aprobacion-flujo").status_code == 403

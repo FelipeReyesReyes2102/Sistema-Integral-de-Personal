@@ -10,6 +10,7 @@ from app import microsoft, sharepoint
 from app.config import settings
 from app.seed import main as seed
 from tests.test_api import FIRMA, login
+from tests.test_sharepoint import super_login
 
 seed()
 FLUJO = "https://prod-12.westus.logic.azure.com:443/workflows/abc/triggers/manual/paths/invoke?api-version=1&sig=SECRETO"
@@ -67,7 +68,7 @@ def _solicitar(adm, ana, semanas):
 
 
 def test_flujo_http_completo(entorno):
-    adm, ana = login("admin@empresa.com", "Admin123"), login("ana@empresa.com", "Cambiar123")
+    adm, ana = super_login(), login("ana@empresa.com", "Cambiar123")
     # Validaciones de configuración
     assert adm.put("/api/aprobacion-flujo", json={"activo": True}).status_code == 422
     assert adm.put("/api/aprobacion-flujo", json={"activo": False, "flujo_url": "https://evil.example.com/x"}).status_code == 422

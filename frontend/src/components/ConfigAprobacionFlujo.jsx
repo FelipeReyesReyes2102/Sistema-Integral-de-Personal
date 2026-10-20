@@ -6,7 +6,7 @@ import { fmtFecha } from '../utils'
 const ESTADOS = { pendiente: 'En cola', enviada: 'Esperando respuesta', resuelta: 'Resueltas en Teams', cerrada: 'Resueltas en SIP-O', error: 'Con error' }
 
 /** Aprobación en Teams con un flujo de Power Automate que SIP-O llama por HTTP (un solo flujo para toda la sede). */
-export default function ConfigAprobacionFlujo() {
+export default function ConfigAprobacionFlujo({ sedeId }) {
   const [d, setD] = useState(null)
   const [form, setForm] = useState(null)
   const [msg, setMsg] = useState(null)
@@ -16,7 +16,7 @@ export default function ConfigAprobacionFlujo() {
     setD(r)
     setForm({ activo: r.activo, tipos: r.tipos, flujo_url: '', lista_url: r.lista_url || '', cuenta_flujo: r.cuenta_flujo || '' })
   }
-  useEffect(() => { api('/aprobacion-flujo').then(aplicar).catch((e) => setMsg({ ok: false, t: e.message })) }, [])
+  useEffect(() => { api('/aprobacion-flujo', { sede: sedeId }).then(aplicar).catch((e) => setMsg({ ok: false, t: e.message })) }, [sedeId])
   if (!d || !form) return <div className="card">{msg ? <div className="alerta error">{msg.t}</div> : 'Cargando…'}</div>
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
@@ -34,7 +34,7 @@ export default function ConfigAprobacionFlujo() {
       setOcupado(false)
     }
   }
-  const guardar = () => correr(() => api('/aprobacion-flujo', { method: 'PUT', body: { ...form, flujo_url: form.flujo_url || null } }),
+  const guardar = () => correr(() => api('/aprobacion-flujo', { sede: sedeId, method: 'PUT', body: { ...form, flujo_url: form.flujo_url || null } }),
     form.activo ? 'Guardado. Las solicitudes nuevas se enviarán a Teams para su aprobación.' : 'Guardado (aprobación en Teams desactivada).')
 
   return (
@@ -68,7 +68,7 @@ export default function ConfigAprobacionFlujo() {
       <div className="fila" style={{ marginTop: 10, gap: 8, flexWrap: 'wrap' }}>
         <label className="checkbox"><input type="checkbox" checked={form.activo} onChange={set('activo')} /> Enviar las aprobaciones a Teams</label>
         <div className="espacio" />
-        {d.cuentas.error > 0 && <button className="btn btn-sm" disabled={ocupado} onClick={() => correr(() => api('/aprobacion-flujo/reintentar', { method: 'POST' }), 'Reintentando…')}><RefreshCw size={14} /> Reintentar</button>}
+        {d.cuentas.error > 0 && <button className="btn btn-sm" disabled={ocupado} onClick={() => correr(() => api('/aprobacion-flujo/reintentar', { sede: sedeId, method: 'POST' }), 'Reintentando…')}><RefreshCw size={14} /> Reintentar</button>}
         <button className="btn btn-primary btn-sm" disabled={ocupado} onClick={guardar}><Save size={14} /> Guardar</button>
       </div>
       <div className="sp-info">

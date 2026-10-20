@@ -1,4 +1,4 @@
-"""Configuración de la aprobación en Teams por flujo HTTP de Power Automate (sede activa)."""
+"""Configuración de la aprobación en Teams por flujo HTTP de Power Automate (solo super administrador, por sede)."""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from .. import aprobacion_flujo as af
 from ..database import get_db
 from ..models import CanalAprobacion, Sede, SolicitudAprobacion, Usuario
-from ..security import ahora, require_admin
+from ..security import ahora, require_superadmin
 from ..sedes import Alcance, alcance, sede_principal
 from ..sharepoint import ErrorSharePoint
 
@@ -48,12 +48,12 @@ def _estado(db: Session, sede: Sede) -> dict:
 
 
 @router.get("")
-def obtener(db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def obtener(db: Session = Depends(get_db), _=Depends(require_superadmin), alc: Alcance = Depends(alcance)):
     return _estado(db, _sede(db, alc))
 
 
 @router.put("")
-def guardar(data: CanalIn, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin),
+def guardar(data: CanalIn, db: Session = Depends(get_db), admin: Usuario = Depends(require_superadmin),
             alc: Alcance = Depends(alcance)):
     sede = _sede(db, alc)
     c = db.scalar(select(CanalAprobacion).where(CanalAprobacion.sede_id == sede.id))
@@ -82,7 +82,7 @@ def guardar(data: CanalIn, db: Session = Depends(get_db), admin: Usuario = Depen
 
 
 @router.post("/reintentar")
-def reintentar(db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def reintentar(db: Session = Depends(get_db), _=Depends(require_superadmin), alc: Alcance = Depends(alcance)):
     sede = _sede(db, alc)
     db.query(SolicitudAprobacion).filter(SolicitudAprobacion.sede_id == sede.id, SolicitudAprobacion.estado == "error") \
         .update({"estado": "pendiente", "intentos": 0})

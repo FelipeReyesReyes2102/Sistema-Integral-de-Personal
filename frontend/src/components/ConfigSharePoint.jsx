@@ -7,7 +7,7 @@ const TITULOS = { vacaciones: { t: 'Vacaciones', i: CalendarCheck }, permisos: {
 const TIPOS_COL = { text: 'Texto', number: 'Número', currency: 'Moneda', dateTime: 'Fecha', choice: 'Opción', boolean: 'Sí/No',
   personOrGroup: 'Persona', lookup: 'Búsqueda', calculated: 'Calculada', hyperlinkOrPicture: 'Hipervínculo', term: 'Metadatos' }
 
-function Lista({ datos, onCambio }) {
+function Lista({ datos, onCambio, sedeId }) {
   const [url, setUrl] = useState(datos.url || '')
   const [mapeo, setMapeo] = useState(datos.mapeo || {})
   const [valores, setValores] = useState(datos.valores || {})
@@ -37,20 +37,20 @@ function Lista({ datos, onCambio }) {
       setOcupado('')
     }
   }
-  const conectar = () => correr('conectar', () => api(`/sharepoint/${tipo}/conectar`, { method: 'PUT', body: { url } }),
+  const conectar = () => correr('conectar', () => api(`/sharepoint/${tipo}/conectar`, { sede: sedeId, method: 'PUT', body: { url } }),
     'Lista conectada. Revisa qué dato va en cada columna, activa el envío y guarda.')
-  const guardar = () => correr('guardar', () => api(`/sharepoint/${tipo}`, { method: 'PUT', body: {
+  const guardar = () => correr('guardar', () => api(`/sharepoint/${tipo}`, { sede: sedeId, method: 'PUT', body: {
     activo, mapeo, valores, aprobacion_teams: !!teams.activo, col_decision: teams.col_decision || null,
     val_aprobado: teams.val_aprobado, val_rechazado: teams.val_rechazado, col_comentario: teams.col_comentario || null,
     col_respondio: teams.col_respondio || null, cuenta_flujo: teams.cuenta_flujo || null } }),
     activo ? 'Guardado. Las solicitudes se enviarán a la lista al enviarse y se actualizarán con cada cambio.' : 'Guardado (envío desactivado).')
-  const existentes = () => correr('existentes', () => api(`/sharepoint/${tipo}/existentes`, { method: 'POST', body: { desde } }),
+  const existentes = () => correr('existentes', () => api(`/sharepoint/${tipo}/existentes`, { sede: sedeId, method: 'POST', body: { desde } }),
     (r) => (r.encolados ? `${r.encolados} solicitud(es) en cola; se envían en segundo plano.` : 'No hay solicitudes nuevas que enviar desde esa fecha.'))
-  const reintentar = () => correr('reintentar', () => api(`/sharepoint/${tipo}/reintentar`, { method: 'POST' }), 'Reintentando en segundo plano…')
-  const actualizar = () => correr('actualizar', () => api('/sharepoint').then((r) => r.listas[tipo]))
+  const reintentar = () => correr('reintentar', () => api(`/sharepoint/${tipo}/reintentar`, { sede: sedeId, method: 'POST' }), 'Reintentando en segundo plano…')
+  const actualizar = () => correr('actualizar', () => api('/sharepoint', { sede: sedeId }).then((r) => r.listas[tipo]))
   const desconectar = () => {
     if (!window.confirm('¿Dejar de enviar a esta lista? No se borra nada en SharePoint.')) return
-    correr('desconectar', () => api(`/sharepoint/${tipo}`, { method: 'DELETE' }), 'Lista desconectada.')
+    correr('desconectar', () => api(`/sharepoint/${tipo}`, { sede: sedeId, method: 'DELETE' }), 'Lista desconectada.')
   }
 
   const usados = new Set(Object.values(mapeo).filter(Boolean))
@@ -234,10 +234,10 @@ function AprobacionTeams({ datos, teams, setTeams, mapeo, valores }) {
 }
 
 /** Listas de SharePoint donde se registran las solicitudes de vacaciones y permisos de la sede activa. */
-export default function ConfigSharePoint() {
+export default function ConfigSharePoint({ sedeId }) {
   const [d, setD] = useState(null)
   const [error, setError] = useState('')
-  useEffect(() => { api('/sharepoint').then(setD).catch((e) => setError(e.message)) }, [])
+  useEffect(() => { api('/sharepoint', { sede: sedeId }).then(setD).catch((e) => setError(e.message)) }, [sedeId])
   if (!d) return <div className="card">{error ? <div className="alerta error">{error}</div> : 'Cargando…'}</div>
   const cambiar = (tipo, r) => setD({ ...d, listas: { ...d.listas, [tipo]: r } })
   return (
@@ -248,7 +248,7 @@ export default function ConfigSharePoint() {
         mismo elemento se actualiza al validarse, rechazarse o cancelarse. Los borradores no se envían. Requiere el permiso de
         aplicación <b>Sites.ReadWrite.All</b> (o Sites.Selected con acceso al sitio) en la app de Microsoft.
       </p>
-      {Object.keys(TITULOS).map((t) => <Lista key={t} datos={d.listas[t]} onCambio={cambiar} />)}
+      {Object.keys(TITULOS).map((t) => <Lista key={t} datos={d.listas[t]} onCambio={cambiar} sedeId={sedeId} />)}
     </div>
   )
 }
