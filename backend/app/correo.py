@@ -196,7 +196,7 @@ def _error_graph(r: httpx.Response) -> str:
 
 
 # ---------------- Avisos a caseta ----------------
-def _plantilla(titulo: str, color: str, filas: list[tuple[str, str]], nota: str) -> str:
+def _plantilla(titulo: str, color: str, filas: list[tuple[str, str]], nota: str, encabezado: str = "SIP-O · AVISO A CASETA") -> str:
     renglones = "".join(
         f'<tr><td style="padding:8px 12px;color:#667085;width:170px;border-bottom:1px solid #eef0f4">{html.escape(k)}</td>'
         f'<td style="padding:8px 12px;font-weight:600;color:#1d2433;border-bottom:1px solid #eef0f4">{html.escape(v)}</td></tr>'
@@ -204,7 +204,7 @@ def _plantilla(titulo: str, color: str, filas: list[tuple[str, str]], nota: str)
     return f"""<!doctype html><html><body style="margin:0;background:#f4f6fa;font-family:Segoe UI,Arial,sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0"><tr><td align="center">
 <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:10px;overflow:hidden">
-<tr><td style="background:#161e2f;color:#fff;padding:18px 24px;font-size:13px;letter-spacing:.5px">SIP-O · AVISO A CASETA</td></tr>
+<tr><td style="background:#161e2f;color:#fff;padding:18px 24px;font-size:13px;letter-spacing:.5px">{html.escape(encabezado)}</td></tr>
 <tr><td style="padding:20px 24px 6px"><div style="display:inline-block;background:{color};color:#fff;border-radius:4px;padding:4px 10px;font-size:12px;font-weight:600">{html.escape(titulo)}</div></td></tr>
 <tr><td style="padding:8px 12px 4px"><table width="100%" cellpadding="0" cellspacing="0" style="font-size:14px">{renglones}</table></td></tr>
 <tr><td style="padding:14px 24px 22px;color:#667085;font-size:12px">{html.escape(nota)}</td></tr>
@@ -283,6 +283,17 @@ def notificar_permiso(permiso_id: int, evento: str = "permiso_autorizado"):
 
 def reintentar(db: Session, notif: NotificacionCorreo):
     cfg = config_sede(db, db.get(Sede, notif.sede_id) if notif.sede_id else None)
+    if notif.incapacidad_id and notif.evento.startswith("incapacidad"):
+        from . import incapacidades
+        from .models import Incapacidad
+        i = db.get(Incapacidad, notif.incapacidad_id)
+        if i is None:
+            return
+        asunto, html_, texto = incapacidades.mensaje(i, notif.evento)
+        notif.destinatarios = ", ".join(incapacidades.destinatarios(db, i, notif.evento)) or notif.destinatarios
+        notif.asunto = asunto[:255]
+        _registrar_y_enviar(db, notif, cfg, html_, texto)
+        return
     if notif.permiso is not None:
         asunto, html_, texto = mensaje_permiso(notif.permiso, notif.evento)
     else:

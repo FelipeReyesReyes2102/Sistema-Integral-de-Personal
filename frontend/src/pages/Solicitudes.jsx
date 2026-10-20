@@ -4,10 +4,13 @@ import { Check, Eye, PenLine, X } from 'lucide-react'
 import { api } from '../api'
 import DetalleConsulta from '../components/DetalleConsulta'
 import Modal from '../components/Modal'
-import { ESTADOS, RESULTADOS_CONSULTA, ROLES, TIPOS_NOMINA, TIPOS_PERMISO_SOLICITABLES, fmtFecha, nombreTipo, hhmm, num } from '../utils'
+import {
+  ESTADOS, ESTADOS_INCAPACIDAD, RESULTADOS_CONSULTA, ROLES, TIPOS_INCAPACIDAD, TIPOS_NOMINA, TIPOS_PERMISO_SOLICITABLES, fmtFecha,
+  nombreTipo, hhmm, num,
+} from '../utils'
 
 /**
- * Bandeja para aprobar o rechazar vacaciones y permisos.
+ * Bandeja para aprobar o rechazar vacaciones, permisos e incapacidades.
  * modo="jefe": solicitudes donde el usuario es el jefe aprobador.
  * modo="admin": todas las solicitudes de la empresa.
  */
@@ -37,6 +40,11 @@ export default function Solicitudes({ modo = 'jefe' }) {
       return
     }
     const query = admin ? { todos: true, estado } : { por_aprobar: true, estado }
+    if (tab === 'incapacidades') {
+      if (!query.estado) delete query.estado
+      api('/incapacidades', { query }).then(setLista).catch((e) => setError(e.message))
+      return
+    }
     if (tab === 'permisos' && tipo) query.tipo = tipo
     api(`/${tab}`, { query }).then(setLista).catch((e) => setError(e.message))
   }
@@ -81,6 +89,8 @@ export default function Solicitudes({ modo = 'jefe' }) {
             onClick={() => setTab('vacaciones')}>Vacaciones{marca('vacaciones')}</button>
           <button style={{ fontWeight: tab === 'permisos' ? 700 : 400, color: tab === 'permisos' ? 'var(--primary)' : '' }}
             onClick={() => setTab('permisos')}>Permisos y home office{marca('permisos')}</button>
+          <button style={{ fontWeight: tab === 'incapacidades' ? 700 : 400, color: tab === 'incapacidades' ? 'var(--primary)' : '' }}
+            onClick={() => setTab('incapacidades')}>Incapacidades{marca('incapacidades')}</button>
           {admin && (
             <button style={{ fontWeight: tab === 'consultas' ? 700 : 400, color: tab === 'consultas' ? 'var(--primary)' : '' }}
               onClick={() => setTab('consultas')}>Consultas médicas</button>
@@ -120,6 +130,40 @@ export default function Solicitudes({ modo = 'jefe' }) {
               ))}
             </tbody>
           </table>
+        </div>
+      ) : tab === 'incapacidades' ? (
+        <div className="tabla-wrap">
+          <table className="tabla">
+            <thead><tr><th>Empleado</th><th>Fechas</th><th>Días</th><th>Tipo</th><th>Folio / observaciones</th><th>Registró</th><th>Estado</th><th /></tr></thead>
+            <tbody>
+              {filtrada.length === 0 && <tr><td colSpan={8} className="muted" style={{ textAlign: 'center' }}>Sin incapacidades</td></tr>}
+              {filtrada.map((i) => (
+                <tr key={i.id}>
+                  <td>{i.usuario_nombre}<div className="muted" style={{ fontSize: 12 }}>No. {i.usuario_numero}{i.usuario_departamento ? ` · ${i.usuario_departamento}` : ''}</div></td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{fmtFecha(i.fecha_inicio)} → {fmtFecha(i.fecha_fin)}</td>
+                  <td>{i.dias}</td>
+                  <td>{TIPOS_INCAPACIDAD[i.tipo] || i.tipo}</td>
+                  <td className="muted">{i.folio || '—'}{i.observaciones && <div style={{ fontSize: 12 }}>{i.observaciones}</div>}</td>
+                  <td className="muted">{i.medico_nombre}</td>
+                  <td>
+                    <span className={`pill ${i.estado}`}>{ESTADOS_INCAPACIDAD[i.estado] || ESTADOS[i.estado]}</span>
+                    {i.estado !== 'solicitado' && i.revisado_por_nombre && <div className="muted" style={{ fontSize: 11 }}>{i.revisado_por_nombre}</div>}
+                    {i.estado === 'solicitado' && <div className="muted" style={{ fontSize: 11 }}>Valida: {i.aprobador_nombre || 'GH'}</div>}
+                    {i.motivo_rechazo && <div style={{ fontSize: 11, color: 'var(--danger)' }}>{i.motivo_rechazo}</div>}
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {i.estado === 'solicitado' && (
+                      <div className="fila" style={{ flexWrap: 'nowrap' }}>
+                        <button className="btn btn-sm btn-success" onClick={() => ejecutar(`/incapacidades/${i.id}/validar`)}><Check size={14} /> Validar</button>
+                        <button className="btn btn-sm btn-danger" onClick={() => setRechazo({ s: i, motivo: '' })}><X size={14} /> Rechazar</button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="muted" style={{ fontSize: 12 }}>Las incapacidades las genera el servicio médico en la consulta. Aquí no se muestra información clínica. Al validarlas o rechazarlas se notifica por correo a GH.</p>
         </div>
       ) : (
       <div className="tabla-wrap">

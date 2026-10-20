@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, object_session
 
 from .models import (
     PERMISO_CONSULTA_MEDICA, Permiso, AdminSede, Bitacora, ConfiguracionApp, Festivo, Grupo, HorarioEspecial, PeriodoVacaciones, ReglaAntiguedad,
-    CanalAprobacion, ListaSharePoint, RotacionTurnos, Sede, SolicitudVacaciones, TipoJornada, TipoPermisoSede, Turno, TurnoDia, Usuario,
+    CanalAprobacion, ListaSharePoint, RotacionTurnos, Sede, SolicitudVacaciones, TipoJornada, TipoPermisoSede, Incapacidad, Turno, TurnoDia, Usuario,
 )
 
 CONFIG, VACACIONES = "configuracion", "vacaciones"
@@ -35,6 +35,7 @@ PROPIAS = {
     Festivo: (CONFIG, "Festivo"), RotacionTurnos: (CONFIG, "Rotación de turnos"),
     SolicitudVacaciones: (VACACIONES, "Solicitud de vacaciones"), Permiso: (VACACIONES, "Permiso"), ListaSharePoint: (CONFIG, "Lista de SharePoint"),
     CanalAprobacion: (CONFIG, "Aprobación en Teams"), TipoPermisoSede: (CONFIG, "Tipo de permiso"),
+    Incapacidad: (VACACIONES, "Incapacidad"),
 }
 OMITIR = {"id", "columnas", "sitio_id", "lista_id", "creado", "actualizado", "ultimo_aviso", "ultima_sincronizacion", "fecha_revision", "actualizado_por_id",
           "cifrado"}
@@ -266,6 +267,9 @@ def _descripcion(ctx: _Ctx, obj, viejo=False) -> str:
             cuando += f" {_fmt(g('hora_inicio'))}–{_fmt(g('hora_fin'))}"
         tipo = PERMISOS.get(g("tipo")) or _nombre_tipo(ctx, g("usuario_id"), g("tipo"))
         return f"{ctx.nombre('usuarios', g('usuario_id'))} · {tipo} · {cuando}"
+    if isinstance(obj, Incapacidad):
+        return (f"{ctx.nombre('usuarios', g('usuario_id'))} · {_fmt(g('fecha_inicio'))} al {_fmt(g('fecha_fin'))}"
+                f" ({g('dias')} día(s))")
     if isinstance(obj, Festivo):
         return f"{_fmt(g('fecha'))} · {g('nombre')}"
     if isinstance(obj, RotacionTurnos):

@@ -795,3 +795,15 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 /* ---------- Planeación de vacaciones ---------- */
 
 .fo-ayuda.error-texto { color: var(--danger); }
+
+/* Incapacidades */
+.incap-card { border: 1px solid #f0d5cc; border-left: 4px solid #b23c17; background: #fff8f5; border-radius: 8px; padding: 10px 12px; margin-top: 12px; font-size: 13px; }
+.incap-cab { display: flex; align-items: center; gap: 6px; color: #b23c17; margin-bottom: 6px; }
+.incap-cab .pill { margin-left: auto; }
+.incap-fila { display: grid; grid-template-columns: 120px 1fr; gap: 8px; padding: 3px 0; }
+.incap-fila > span { color: var(--muted); }
+.incap-form { border-top: 1px dashed var(--border, #dde2ea); padding-top: 10px; }
+.incap-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 12px; margin-top: 8px; }
+.incap-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.incap-obs { grid-column: 1 / -1; }
+@media (max-width: 700px) { .incap-grid { grid-template-columns: 1fr 1fr; } }

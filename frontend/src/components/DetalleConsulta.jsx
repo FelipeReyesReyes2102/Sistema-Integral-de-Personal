@@ -3,6 +3,7 @@ import { Lock, Stethoscope } from 'lucide-react'
 import { api } from '../api'
 import { RESULTADOS_CONSULTA, fmtFecha, hhmm } from '../utils'
 import Modal from './Modal'
+import IncapacidadInfo from './IncapacidadInfo'
 
 /**
  * Información que cargó el médico. El paciente (y el médico) ven el detalle completo;
@@ -59,6 +60,7 @@ export default function DetalleConsulta({ consultaId, resumen, onClose }) {
           </tbody>
         </table>
       )}
+      <IncapacidadInfo inc={(c || resumen)?.incapacidad} />
     </Modal>
   )
 }

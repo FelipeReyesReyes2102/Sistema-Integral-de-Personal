@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { api } from '../api'
-import { RESULTADOS_CONSULTA, ROLES, hhmm, hoyISO } from '../utils'
+import { ESTADOS_INCAPACIDAD, RESULTADOS_CONSULTA, ROLES, TIPOS_INCAPACIDAD, hhmm, hoyISO } from '../utils'
 import Avatar from './Avatar'
 import FormularioOtek, { Campo } from './FormularioOtek'
 
@@ -23,6 +23,13 @@ export default function ConsultaModal({ consulta, onClose, onSaved }) {
     indicaciones: consulta?.indicaciones || '',
     resultado: consulta?.resultado || 'regresa_labores',
   })
+  const incPrevia = consulta?.incapacidad || null
+  const [conInc, setConInc] = useState(!!incPrevia)
+  const [inc, setInc] = useState({
+    fecha_inicio: incPrevia?.fecha_inicio || hoyISO(), fecha_fin: incPrevia?.fecha_fin || hoyISO(),
+    tipo: incPrevia?.tipo || 'enfermedad_general', folio: incPrevia?.folio || '', observaciones: incPrevia?.observaciones || '',
+  })
+  const incBloqueada = incPrevia && incPrevia.estado !== 'solicitado'
   const [meds, setMeds] = useState(consulta?.medicamentos?.length ? consulta.medicamentos.map(({ id, ...m }) => m) : [{ ...MED_VACIO }])
   const [error, setError] = useState('')
   const [guardando, setGuardando] = useState(false)
@@ -45,7 +52,9 @@ export default function ConsultaModal({ consulta, onClose, onSaved }) {
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
   const setMed = (i, k) => (e) => setMeds(meds.map((m, j) => (j === i ? { ...m, [k]: e.target.value } : m)))
   const paciente = pacientes.find((p) => p.id === Number(form.paciente_id))
-  const listo = form.paciente_id && form.fecha && form.hora_inicio && form.sintomas.trim().length >= 3
+  const setI = (k) => (e) => setInc({ ...inc, [k]: e.target.value, ...(k === 'fecha_inicio' && inc.fecha_fin < e.target.value ? { fecha_fin: e.target.value } : {}) })
+  const diasInc = conInc && inc.fecha_inicio && inc.fecha_fin ? Math.round((new Date(inc.fecha_fin) - new Date(inc.fecha_inicio)) / 864e5) + 1 : 0
+  const listo = form.paciente_id && form.fecha && form.hora_inicio && form.sintomas.trim().length >= 3 && (!conInc || diasInc > 0)
 
   async function guardar() {
     setError('')
@@ -55,6 +64,7 @@ export default function ConsultaModal({ consulta, onClose, onSaved }) {
       medicamentos: meds.filter((m) => m.nombre.trim()).map((m) => ({
         nombre: m.nombre.trim(), dosis: m.dosis || null, frecuencia: m.frecuencia || null, duracion: m.duracion || null,
       })),
+      incapacidad: conInc ? { ...inc, folio: inc.folio.trim() || null, observaciones: inc.observaciones.trim() || null } : null,
     }
     try {
       if (consulta) await api(`/consultas/${consulta.id}`, { method: 'PUT', body })
@@ -95,6 +105,10 @@ export default function ConsultaModal({ consulta, onClose, onSaved }) {
           <Avatar usuario={paciente} tam={36} />
           <span className="muted" style={{ fontSize: 13 }}>
             {paciente.nombre} · No. {paciente.numero_empleado} · {ROLES[paciente.rol]}{paciente.puesto ? ` · ${paciente.puesto}` : ''}
+            {paciente.telefono && <><br />Tel. {paciente.telefono}</>}
+            {(paciente.contacto_nombre || paciente.contacto_telefono) && (
+              <><br />Contacto de emergencia: {[paciente.contacto_nombre, paciente.contacto_telefono].filter(Boolean).join(' · ')}</>
+            )}
           </span>
         </div>
       )}
@@ -147,6 +161,36 @@ export default function ConsultaModal({ consulta, onClose, onSaved }) {
       </Campo>
       <div className="fo-ayuda" style={{ alignSelf: 'end' }}>
         Solo el paciente y el servicio médico verán los síntomas, el diagnóstico y los medicamentos.
+      </div>
+
+      <div className="fo-campo full incap-form">
+        <label className="checkbox">
+          <input type="checkbox" checked={conInc} disabled={!!incBloqueada} onChange={(e) => setConInc(e.target.checked)} />
+          <b>Generar incapacidad</b>
+          {incPrevia && <span className={`pill ${incPrevia.estado}`} style={{ marginLeft: 8 }}>{ESTADOS_INCAPACIDAD[incPrevia.estado]}</span>}
+        </label>
+        {conInc && (
+          <div className="incap-grid">
+            <label>Desde<input type="date" value={inc.fecha_inicio} onChange={setI('fecha_inicio')} disabled={!!incBloqueada} /></label>
+            <label>Hasta<input type="date" value={inc.fecha_fin} min={inc.fecha_inicio} onChange={setI('fecha_fin')} disabled={!!incBloqueada} /></label>
+            <label>Tipo
+              <select value={inc.tipo} onChange={setI('tipo')} disabled={!!incBloqueada}>
+                {Object.entries(TIPOS_INCAPACIDAD).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </label>
+            <label>Folio (IMSS u otro)<input value={inc.folio} onChange={setI('folio')} maxLength={40} disabled={!!incBloqueada} /></label>
+            <label className="incap-obs">Observaciones para el jefe y GH
+              <input value={inc.observaciones} onChange={setI('observaciones')} maxLength={500} disabled={!!incBloqueada}
+                placeholder="Sin datos clínicos: p. ej. reposo en casa" />
+            </label>
+            <div className="fo-ayuda incap-obs">
+              {diasInc > 0 ? `${diasInc} día(s) naturales. ` : ''}
+              {incBloqueada
+                ? 'El jefe ya revisó la incapacidad; ya no se puede modificar.'
+                : 'Al guardar se envía al jefe del empleado para que la valide; al validarla se notifica a GH. El jefe y GH no ven síntomas, diagnóstico ni medicamentos.'}
+            </div>
+          </div>
+        )}
       </div>
       {error && <div className="full alerta error">{error}</div>}
     </FormularioOtek>

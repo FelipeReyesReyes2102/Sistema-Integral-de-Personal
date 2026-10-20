@@ -5,7 +5,7 @@ import Avatar from '../components/Avatar'
 import EventosDia from '../components/EventosDia'
 import { CATEGORIAS, DIAS_SEMANA, ESTADOS, MESES, ROLES, estiloEvento, hoyISO } from '../utils'
 
-const CATS = ['vacaciones', 'home_office', 'llegada_tarde', 'salida_temprana', 'salida_intermedia', 'otro_permiso', 'consulta']
+const CATS = ['vacaciones', 'home_office', 'llegada_tarde', 'salida_temprana', 'salida_intermedia', 'otro_permiso', 'consulta', 'incapacidad']
 
 /** Calendario general (administrador): vacaciones, permisos, home office y consultas de todo el personal. */
 export default function CalendarioEquipo() {

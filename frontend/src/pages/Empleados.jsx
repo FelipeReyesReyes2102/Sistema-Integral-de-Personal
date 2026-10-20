@@ -9,7 +9,8 @@ import { useAuth } from '../auth'
 
 const VACIO = {
   numero_empleado: '', nombre: '', sede_id: '', sedes_admin: [], tipo_jornada_id: '', email: '', email_personal: '', rol: 'oficina', fecha_ingreso: '', fecha_nacimiento: '', puesto: '', departamento: '',
-  turno_id: '', grupo_id: '', jefe_id: '', es_jefe: false, activo: true, password: '', microsoft_oid: '', dias_disponibles: '',
+  turno_id: '', grupo_id: '', jefe_id: '', es_jefe: false, puede_consultas: false, activo: true, password: '', microsoft_oid: '', dias_disponibles: '',
+  direccion: '', telefono: '', contacto_nombre: '', contacto_telefono: '',
 }
 
 export default function Empleados() {
@@ -252,6 +253,11 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
       email: form.rol === 'planta' ? null : (form.email || '').trim() || null,
       email_personal: (form.email_personal || '').trim() || null,
       fecha_nacimiento: form.fecha_nacimiento || null,
+      direccion: (form.direccion || '').trim() || null,
+      telefono: (form.telefono || '').trim() || null,
+      contacto_nombre: (form.contacto_nombre || '').trim() || null,
+      contacto_telefono: (form.contacto_telefono || '').trim() || null,
+      puede_consultas: form.rol !== 'medico' && !!form.puede_consultas,
       sede_id: sedeId,
       tipo_jornada_id: form.tipo_jornada_id ? Number(form.tipo_jornada_id) : null,
       sedes_admin: soySuper && form.rol === 'gerencia_gh' ? (form.sedes_admin || []).filter((x) => x !== sedeId) : (soySuper ? [] : null),
@@ -432,6 +438,15 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
         <label className="checkbox" style={{ alignSelf: 'end' }}>
           <input type="checkbox" checked={form.es_jefe} onChange={set('es_jefe')} /> Es jefe (puede aprobar y ver a su equipo)
         </label>
+        {form.rol !== 'medico' && (
+          <label className="checkbox" style={{ alignSelf: 'end' }}>
+            <input type="checkbox" checked={!!form.puede_consultas} onChange={set('puede_consultas')} /> Puede registrar consultas médicas e incapacidades
+          </label>
+        )}
+        <label className="campo">Teléfono<input type="tel" value={form.telefono || ''} onChange={set('telefono')} placeholder="Ej. 55 1234 5678" /></label>
+        <label className="campo">Dirección<input value={form.direccion || ''} onChange={set('direccion')} placeholder="Calle, número, colonia, ciudad" /></label>
+        <label className="campo">Contacto de emergencia (nombre)<input value={form.contacto_nombre || ''} onChange={set('contacto_nombre')} placeholder="Ej. María López (esposa)" /></label>
+        <label className="campo">Número de contacto<input type="tel" value={form.contacto_telefono || ''} onChange={set('contacto_telefono')} placeholder="Ej. 55 8765 4321" /></label>
         <div className="campo" style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--muted)' }}>
           <span>Contraseña</span>
           <span style={{ fontSize: 12, lineHeight: 1.5 }}>

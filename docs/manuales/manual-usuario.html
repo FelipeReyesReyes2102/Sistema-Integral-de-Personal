@@ -263,7 +263,7 @@ a { color: var(--primary); }
     <section id="cuenta">
       <h2><span class="n">09</span>Tu información y contraseña</h2>
       <ul>
-        <li>Pulsa tu nombre en el menú para abrir <b>Mi información</b>: tus días disponibles, datos laborales (nómina, sede, ingreso, jornada, turno, grupo, jefe), contacto y cumpleaños.</li>
+        <li>Pulsa tu nombre en el menú para abrir <b>Mi información</b>: tus días disponibles, datos laborales (nómina, sede, ingreso, jornada, turno, grupo, jefe), contacto (correos, teléfono, dirección y contacto de emergencia) y cumpleaños.</li>
         <li>Desde ahí puedes <span class="ui">Cambiar contraseña</span> (si entras con usuario y contraseña) o <span class="ui">Salir</span>.</li>
         <li>Si algún dato está mal, pide a GH de tu sede que lo corrija.</li>
       </ul>
@@ -274,11 +274,13 @@ a { color: var(--primary); }
       <p>En el menú aparece la sección <b>Jefe</b> con un círculo rojo cuando tienes pendientes.</p>
       <h3>Por aprobar</h3>
       <ol class="pasos">
-        <li><span>Abre <span class="ui">Por aprobar</span>. Las pestañas <i>Vacaciones</i> y <i>Permisos y home office</i> muestran un círculo rojo con sus pendientes.</span></li>
+        <li><span>Abre <span class="ui">Por aprobar</span>. Las pestañas <i>Vacaciones</i>, <i>Permisos y home office</i> e <i>Incapacidades</i> muestran un círculo rojo con sus pendientes.</span></li>
         <li><span>Revisa fechas, días, motivo y la <span class="ui">Firma</span> del colaborador. Con el ojo ves su saldo y sus vacaciones.</span></li>
         <li><span>Pulsa <span class="ui">Validar</span> o <span class="ui">Rechazar</span>. Al rechazar puedes escribir el motivo.</span></li>
       </ol>
       <p>Si tu sede usa <b>jefe + GH</b>, tu aprobación deja la solicitud como <span class="estado e-jefe">Aprobada por el jefe</span> y sale de tu bandeja; GH la valida.</p>
+      <h3>Validar incapacidades</h3>
+      <p>Cuando el servicio médico genera una incapacidad a alguien de tu equipo, te llega un correo y aparece en <span class="ui">Por aprobar</span> → <i>Incapacidades</i> con las fechas, los días, el tipo y el folio (sin información clínica). Pulsa <span class="ui">Validar</span> o <span class="ui">Rechazar</span> con el motivo; GH recibe un aviso por correo.</p>
       <h3>Aprobar desde Teams</h3>
       <p>Si tu sede lo tiene activo, te llega una aprobación en <b>Teams</b> y en Outlook con el detalle. Pulsa <i>Aprobar</i> o <i>Rechazar</i> y, si quieres, escribe un comentario: si rechazas, ese texto queda como motivo. Funciona desde el celular, fuera de la oficina.</p>
       <h3>Mi equipo</h3>
@@ -288,8 +290,16 @@ a { color: var(--primary); }
     </section>
 
     <section id="medico">
-      <h2><span class="n">11</span>Médico de planta</h2>
-      <p>En <b>Consultas médicas</b> registras cada consulta: paciente, fecha y horario, síntomas, diagnóstico, indicaciones, resultado y medicamentos recetados. El empleado ve en su calendario que tuvo una consulta. El detalle médico solo lo ven el médico y GH, y cada consulta abierta por GH queda registrada.</p>
+      <h2><span class="n">11</span>Servicio médico</h2>
+      <p>Lo usa el médico de planta y quien tenga el permiso de registrar consultas que da GH. En <b>Consultas médicas</b> registras cada consulta: paciente, fecha y horario, síntomas, diagnóstico, indicaciones, resultado y medicamentos recetados. El empleado ve en su calendario que tuvo una consulta. El detalle médico solo lo ven el médico y GH, y cada consulta abierta por GH queda registrada.</p>
+      <h3>Generar una incapacidad</h3>
+      <ol class="pasos">
+        <li><span>En la consulta marca <span class="ui">Generar incapacidad</span>.</span></li>
+        <li><span>Indica desde y hasta, el tipo (enfermedad general, riesgo de trabajo, maternidad u otro), el folio si lo hay y observaciones sin datos clínicos.</span></li>
+        <li><span>Guarda la consulta: la incapacidad se envía al jefe del empleado para que la valide.</span></li>
+      </ol>
+      <p>Mientras está pendiente puedes corregirla o quitarla. Ya revisada por el jefe no se puede modificar ni borrar la consulta. Al elegir al paciente ves su teléfono y su contacto de emergencia.</p>
+      <p>Como empleado, tu incapacidad aparece en tu calendario y en el detalle de tu consulta con su estado.</p>
     </section>
 
     <section id="faq">

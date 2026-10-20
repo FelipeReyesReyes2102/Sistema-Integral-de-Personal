@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Briefcase, Cake, CalendarDays, Clock, Cloud, IdCard, KeyRound, LogOut, Mail, MapPin, ShieldCheck, UserRound, Users } from 'lucide-react'
+import { Briefcase, Cake, CalendarDays, Clock, Cloud, IdCard, KeyRound, LogOut, Mail, MapPin, Phone, PhoneCall, ShieldCheck, Stethoscope, UserRound, Users } from 'lucide-react'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import { ROLES, diaMes, fmtFecha, num } from '../utils'
@@ -78,11 +78,17 @@ export default function PerfilUsuario({ onClose, onPassword }) {
       </Dato>
       <Dato icono={Users} etiqueta="Grupo">{user.grupo_nombre}</Dato>
       <Dato icono={UserRound} etiqueta="Jefe directo">{user.jefe_nombre || 'Sin jefe asignado'}</Dato>
+      {user.puede_consultas && <Dato icono={Stethoscope} etiqueta="Servicio médico">Puede registrar consultas e incapacidades</Dato>}
       {(user.es_jefe || user.total_a_cargo > 0) && <Dato icono={Users} etiqueta="Personal a cargo">{`${user.total_a_cargo} persona(s)`}</Dato>}
 
       <div className="perfil-seccion">Contacto</div>
       <Dato icono={Mail} etiqueta="Correo corporativo">{user.email}</Dato>
       <Dato icono={Mail} etiqueta="Correo personal">{user.email_personal}</Dato>
+      <Dato icono={Phone} etiqueta="Teléfono">{user.telefono}</Dato>
+      <Dato icono={MapPin} etiqueta="Dirección">{user.direccion}</Dato>
+      <Dato icono={PhoneCall} etiqueta="Contacto de emergencia">
+        {(user.contacto_nombre || user.contacto_telefono) && [user.contacto_nombre, user.contacto_telefono].filter(Boolean).join(' · ')}
+      </Dato>
       <Dato icono={Cake} etiqueta="Cumpleaños">{user.fecha_nacimiento && diaMes(user.fecha_nacimiento)}</Dato>
 
       <div className="perfil-seccion">Cuenta</div>

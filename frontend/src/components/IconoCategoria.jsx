@@ -1,4 +1,4 @@
-import { AlarmClock, Award, Cake, DoorOpen, FileText, Footprints, Laptop, PartyPopper, Stethoscope, TreePalm } from 'lucide-react'
+import { AlarmClock, Award, Cake, DoorOpen, FileText, Footprints, HeartPulse, Laptop, PartyPopper, Stethoscope, TreePalm } from 'lucide-react'
 
 // Ícono representativo de cada tipo de evento del calendario
 const ICONOS = {
@@ -10,6 +10,7 @@ const ICONOS = {
   otro_permiso: FileText,
   consulta: Stethoscope,
   consulta_medica: Stethoscope,
+  incapacidad: HeartPulse,
   festivo: PartyPopper,
   cumpleanos: Cake,
   aniversario: Award,

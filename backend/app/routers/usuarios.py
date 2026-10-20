@@ -1,3 +1,4 @@
+import re
 import base64
 from datetime import date
 
@@ -26,6 +27,7 @@ from ..services import (
     usuario_out,
 )
 
+TELEFONO = re.compile(r"^\+?[0-9 ()\-]{7,30}$")
 router = APIRouter(prefix="/api", tags=["usuarios"])
 
 
@@ -425,6 +427,13 @@ def _limpiar(data: UsuarioIn) -> dict:
         raise HTTPException(422, "El correo personal debe ser distinto del corporativo.")
     valores["email"], valores["email_personal"] = corporativo, personal
     valores["microsoft_oid"] = (valores.get("microsoft_oid") or "").strip() or None
+    for k in ("direccion", "telefono", "contacto_nombre", "contacto_telefono"):
+        valores[k] = (valores.get(k) or "").strip() or None
+    for etiqueta, k in (("teléfono", "telefono"), ("número de contacto", "contacto_telefono")):
+        if valores[k] and not TELEFONO.match(valores[k]):
+            raise HTTPException(422, f"El {etiqueta} no es válido: usa solo números, espacios, guiones, paréntesis o +.")
+    if data.rol == "medico":
+        valores["puede_consultas"] = False  # el médico ya registra consultas por su rol
     if data.rol != ROL_PLANTA:  # grupos y turnos solo aplican a planta
         valores["grupo_id"] = None
     return valores

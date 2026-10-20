@@ -10,7 +10,7 @@ import PermisoModal from '../components/PermisoModal'
 import VacacionesModal from '../components/VacacionesModal'
 import YearCalendar from '../components/YearCalendar'
 import {
-  CATEGORIAS, esAdmin as esAdminFn, ESTADOS, ROLES, TIPOS_NOMINA, TIPOS_PERMISO_SOLICITABLES, diaMes, nombreTipo, eventosPorFecha, estiloEvento, fmtFecha, hhmm, hoyISO, num,
+  CATEGORIAS, esAdmin as esAdminFn, ESTADOS, ROLES, TIPOS_NOMINA, TIPOS_PERMISO_SOLICITABLES, ESTADOS_INCAPACIDAD, diaMes, nombreTipo, eventosPorFecha, estiloEvento, fmtFecha, hhmm, hoyISO, num,
   parseISO, toISO,
 } from '../utils'
 import EventosDia from '../components/EventosDia'
@@ -344,6 +344,7 @@ export default function MisVacaciones({ usuarioId }) {
         <PanelRegistros anio={anio} registros={registros} franjas={franjasDelAnio} foco={foco}
           visible={(k) => (['llegada_tarde', 'salida_temprana', 'salida_intermedia', 'home_office'].includes(k) ? permisoHabilitado(k)
             : k === 'otro_permiso' ? hayOtros
+            : k === 'incapacidad' ? false
             : k === 'consulta' ? politica?.modulo_consultas !== false : k === 'cumpleanos' ? politica?.modulo_cumpleanos !== false : true)
             || (registros[k]?.dias || 0) > 0}
           ocultos={ocultos} onPeriodo={alternarPeriodo}
@@ -495,7 +496,8 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
     const cs = consultas.map((c) => ({ ...c, cat: 'consulta', orden: `${c.fecha}T${c.hora_inicio}`, fin: c.fecha }))
     return [...vs, ...ps, ...cs]
       .filter((i) => !estado || i.estado === estado)
-      .filter((i) => !cat || (cat === 'permisos' ? !['vacaciones', 'consulta'].includes(i.cat) : i.cat === cat))
+      .filter((i) => !cat || (cat === 'permisos' ? !['vacaciones', 'consulta'].includes(i.cat)
+        : cat === 'incapacidad' ? i.cat === 'consulta' && i.incapacidad : i.cat === cat))
       .filter((i) => !soloAnio || (i.orden.slice(0, 4) <= String(anio) && i.fin.slice(0, 4) >= String(anio)))
       .sort((a, b) => b.orden.localeCompare(a.orden))
   }, [vacaciones, permisos, consultas, estado, cat, soloAnio, anio])
@@ -543,6 +545,7 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
           {Object.entries(TIPOS_PERMISO_SOLICITABLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           <option value="otro_permiso">Otros permisos</option>
           <option value="consulta">Consultas médicas</option>
+          <option value="incapacidad">Incapacidades</option>
         </select>
         <select value={estado} onChange={(e) => setEstado(e.target.value)}>
           <option value="">Cualquier estado</option>
@@ -582,7 +585,9 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
             <div className="acciones">
               {i.cat === 'consulta' ? (
                 <>
-                  <span className="pill consulta">Servicio médico</span>
+                  {i.incapacidad
+                    ? <span className={`pill ${i.incapacidad.estado}`}>Incapacidad · {ESTADOS_INCAPACIDAD[i.incapacidad.estado]}</span>
+                    : <span className="pill consulta">Servicio médico</span>}
                   <button className="icon-btn" title="Ver lo que registró el médico" onClick={() => onConsulta(i)}><Eye size={16} /></button>
                 </>
               ) : (

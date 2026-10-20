@@ -159,24 +159,28 @@ a { color: var(--primary); }
       <h3>Dar de alta</h3>
       <ol class="pasos">
         <li><span>Pulsa <span class="ui">Nuevo empleado</span>. Si tiene correo de O-tek, búscalo en <b>Microsoft</b>: se llenan nombre, puesto, departamento, número de nómina, fecha de ingreso, jefe, sede (por su ubicación) y foto.</span></li>
-        <li><span>Revisa o completa: tipo de usuario, sede, tipo de jornada, grupo y turno (planta), jefe directo, correo personal y cumpleaños.</span></li>
+        <li><span>Revisa o completa: tipo de usuario, sede, tipo de jornada, grupo y turno (planta), jefe directo, correo personal, cumpleaños, <b>teléfono</b>, <b>dirección</b> y <b>contacto de emergencia</b> (nombre y número).</span></li>
         <li><span>En <b>Días de vacaciones disponibles</b> captura su saldo actual si ya tiene historial. Ejemplo: 18 días con 14 del periodo actual quedan como 14 del actual y 4 del anterior.</span></li>
         <li><span>Guarda. Si entrará con usuario y contraseña, genera una <b>contraseña temporal</b> de 6 dígitos y entrégasela; al entrar deberá crear la suya.</span></li>
       </ol>
       <div class="nota"><strong>Jefes</strong><p>Un jefe solo puede tener a cargo personas de su misma sede. El número de nómina también sirve para iniciar sesión (planta).</p></div>
+      <h3>Permiso para registrar consultas médicas</h3>
+      <p>Además del <b>médico de planta</b>, puedes marcar <span class="ui">Puede registrar consultas médicas e incapacidades</span> en cualquier empleado (por ejemplo, enfermería o un paramédico). Le aparece el menú <b>Consultas médicas</b> y atiende a los empleados de su sede igual que el médico. Desmárcalo para quitarle el acceso.</p>
       <h3>Capturar a nombre de un empleado</h3>
       <p>Desde las vacaciones del empleado puedes registrar solicitudes por él, incluso con fechas pasadas (historial), y hacer <b>ajustes de saldo</b> con una nota. Todo queda en la Bitácora.</p>
     </section>
 
     <section id="solicitudes">
       <h2><span class="n">03</span>Todas las solicitudes</h2>
-      <p>Las pestañas <i>Vacaciones</i>, <i>Permisos y home office</i> y <i>Consultas médicas</i> muestran un <b>círculo rojo</b> con los pendientes de cada tipo. Filtra por estado o busca por empleado.</p>
+      <p>Las pestañas <i>Vacaciones</i>, <i>Permisos y home office</i>, <i>Incapacidades</i> y <i>Consultas médicas</i> muestran un <b>círculo rojo</b> con los pendientes de cada tipo. Filtra por estado o busca por empleado.</p>
       <ul>
         <li><span class="ui">Validar</span>: aprueba en forma definitiva, aunque el jefe todavía no haya aprobado.</li>
         <li><span class="ui">Rechazar</span>: pide el motivo; el empleado lo ve.</li>
         <li><span class="ui">Cancelar</span> (validadas): devuelve el saldo y, si era un permiso con aviso a caseta, se avisa la cancelación.</li>
         <li><span class="ui">Firma</span>: muestra la firma del empleado.</li>
       </ul>
+      <h3>Incapacidades</h3>
+      <p>El servicio médico genera la incapacidad dentro de la consulta (fechas, tipo, folio y observaciones). Se envía por correo al <b>jefe directo</b> del empleado para que la valide en <span class="ui">Por aprobar</span> → <i>Incapacidades</i>; si no tiene jefe, la valida GH. Cuando el jefe la <b>valida o rechaza</b>, GH de la sede recibe un correo. En esta pestaña ves todas las de tu sede y también puedes validarlas o rechazarlas. El jefe y GH no ven síntomas, diagnóstico ni medicamentos. Los días de incapacidad aparecen en el calendario.</p>
       <p>Con aprobación <b>jefe + GH</b>, las que ya aprobó el jefe aparecen como <span class="estado e-jefe">Aprobada por el jefe</span> con su nombre y "falta GH". Las de un solo día por horas muestran las horas.</p>
     </section>
 

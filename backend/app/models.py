@@ -34,6 +34,11 @@ def es_admin(usuario) -> bool:
     """Administrador o super administrador."""
     return usuario is not None and usuario.rol in ROLES_ADMIN
 
+
+def es_medico(usuario) -> bool:
+    """Médico de planta o usuario al que GH le permitió registrar consultas médicas."""
+    return usuario is not None and (usuario.rol == ROL_MEDICO or bool(getattr(usuario, "puede_consultas", False)))
+
 # Estados de solicitudes (vacaciones y permisos)
 BORRADOR = "borrador"
 SOLICITADO = "solicitado"
@@ -251,7 +256,14 @@ class Usuario(Base):
     # Jefe directo (aprobador por defecto) y si este usuario puede aprobar solicitudes de su equipo
     jefe_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     es_jefe: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Además del médico de planta, GH puede permitir a otros usuarios registrar consultas (e incapacidades)
+    puede_consultas: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Datos de contacto
+    direccion: Mapped[str | None] = mapped_column(String(255))
+    telefono: Mapped[str | None] = mapped_column(String(30))
+    contacto_nombre: Mapped[str | None] = mapped_column(String(150))      # contacto de emergencia
+    contacto_telefono: Mapped[str | None] = mapped_column(String(30))
     # Vínculo con Microsoft Entra ID y foto de perfil (obtenida de Microsoft Graph)
     microsoft_oid: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
     foto: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
@@ -602,6 +614,41 @@ class ConsultaMedica(Base):
     medico: Mapped[Usuario | None] = relationship(foreign_keys=[medico_id])
     medicamentos: Mapped[list["MedicamentoRecetado"]] = relationship(
         back_populates="consulta", cascade="all, delete-orphan", order_by="MedicamentoRecetado.id")
+    incapacidad: Mapped["Incapacidad | None"] = relationship(back_populates="consulta", cascade="all, delete-orphan",
+                                                             uselist=False)
+
+
+TIPOS_INCAPACIDAD = ("enfermedad_general", "riesgo_trabajo", "maternidad", "otro")
+
+
+class Incapacidad(Base):
+    """Incapacidad generada en una consulta médica; la valida el jefe del empleado y se notifica a GH.
+
+    El jefe y GH ven fechas, días, tipo y folio, nunca la información clínica de la consulta."""
+    __tablename__ = "incapacidades"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    consulta_id: Mapped[int] = mapped_column(ForeignKey("consultas_medicas.id", ondelete="CASCADE"), unique=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), index=True)
+    medico_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    aprobador_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"), index=True)
+    fecha_inicio: Mapped[date] = mapped_column(Date, index=True)
+    fecha_fin: Mapped[date] = mapped_column(Date)
+    dias: Mapped[int] = mapped_column(Integer, default=1)                 # días naturales
+    tipo: Mapped[str] = mapped_column(String(30), default="enfermedad_general")
+    folio: Mapped[str | None] = mapped_column(String(40))                  # p. ej. folio del IMSS
+    observaciones: Mapped[str | None] = mapped_column(String(500))         # visible para el jefe y GH
+    estado: Mapped[str] = mapped_column(String(20), default=SOLICITADO, index=True)
+    revisado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    fecha_revision: Mapped[datetime | None] = mapped_column(DateTime)
+    motivo_rechazo: Mapped[str | None] = mapped_column(Text)
+    creado: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    consulta: Mapped["ConsultaMedica"] = relationship(back_populates="incapacidad")
+    usuario: Mapped[Usuario] = relationship(foreign_keys=[usuario_id])
+    medico: Mapped[Usuario | None] = relationship(foreign_keys=[medico_id])
+    aprobador: Mapped[Usuario | None] = relationship(foreign_keys=[aprobador_id])
+    revisado_por: Mapped[Usuario | None] = relationship(foreign_keys=[revisado_por_id])
 
 
 class MedicamentoRecetado(Base):
@@ -626,6 +673,7 @@ class NotificacionCorreo(Base):
     evento: Mapped[str] = mapped_column(String(40))  # permiso_autorizado | permiso_cancelado | prueba
     sede_id: Mapped[int | None] = mapped_column(ForeignKey("sedes.id"), index=True)
     permiso_id: Mapped[int | None] = mapped_column(ForeignKey("permisos.id", ondelete="SET NULL"), index=True)
+    incapacidad_id: Mapped[int | None] = mapped_column(ForeignKey("incapacidades.id", ondelete="SET NULL"), index=True)
     destinatarios: Mapped[str] = mapped_column(Text)
     asunto: Mapped[str] = mapped_column(String(255))
     estado: Mapped[str] = mapped_column(String(20), default="pendiente")  # pendiente | enviado | error

@@ -118,7 +118,12 @@ class UsuarioBase(BaseModel):
     grupo_id: int | None = None
     jefe_id: int | None = None
     es_jefe: bool = False
+    puede_consultas: bool = False   # además del médico: puede registrar consultas e incapacidades
     activo: bool = True
+    direccion: str | None = Field(None, max_length=255)
+    telefono: str | None = Field(None, max_length=30)
+    contacto_nombre: str | None = Field(None, max_length=150)     # contacto de emergencia
+    contacto_telefono: str | None = Field(None, max_length=30)
 
 
 class UsuarioIn(UsuarioBase):
@@ -468,6 +473,38 @@ class MedicamentoOut(MedicamentoIn, ORM):
     id: int
 
 
+class IncapacidadIn(BaseModel):
+    fecha_inicio: date
+    fecha_fin: date
+    tipo: Literal["enfermedad_general", "riesgo_trabajo", "maternidad", "otro"] = "enfermedad_general"
+    folio: str | None = Field(None, max_length=40)
+    observaciones: str | None = Field(None, max_length=500)
+
+
+class IncapacidadOut(ORM):
+    """Lo que ven el jefe y GH: sin información clínica."""
+    id: int
+    consulta_id: int
+    usuario_id: int
+    usuario_nombre: str | None = None
+    usuario_numero: str | None = None
+    usuario_departamento: str | None = None
+    medico_nombre: str | None = None
+    aprobador_id: int | None = None
+    aprobador_nombre: str | None = None
+    fecha_inicio: date
+    fecha_fin: date
+    dias: int
+    tipo: str
+    folio: str | None = None
+    observaciones: str | None = None
+    estado: str
+    revisado_por_nombre: str | None = None
+    fecha_revision: datetime | None = None
+    motivo_rechazo: str | None = None
+    creado: datetime | None = None
+
+
 class ConsultaIn(BaseModel):
     paciente_id: int
     fecha: date
@@ -478,6 +515,7 @@ class ConsultaIn(BaseModel):
     indicaciones: str | None = None
     resultado: Literal["regresa_labores", "envia_casa", "referido"] = "regresa_labores"
     medicamentos: list[MedicamentoIn] = []
+    incapacidad: IncapacidadIn | None = None
 
 
 class ConsultaResumenOut(ORM):
@@ -490,6 +528,7 @@ class ConsultaResumenOut(ORM):
     hora_fin: time | None
     medico_nombre: str | None = None
     detalle_clinico: bool = False
+    incapacidad: IncapacidadOut | None = None
 
 
 class ConsultaOut(ConsultaResumenOut):
@@ -514,6 +553,9 @@ class PacienteOut(ORM):
     puesto: str | None
     departamento: str | None
     tiene_foto: bool = False
+    telefono: str | None = None
+    contacto_nombre: str | None = None
+    contacto_telefono: str | None = None
 
 
 # ---------- Sedes ----------

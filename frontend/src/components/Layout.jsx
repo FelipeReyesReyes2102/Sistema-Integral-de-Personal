@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { api, elegirSede, sedeActiva } from '../api'
 import { useAuth } from '../auth'
-import { ROLES, esAdmin as esAdminFn } from '../utils'
+import { ROLES, esAdmin as esAdminFn, esMedico } from '../utils'
 import Avatar from './Avatar'
 import CambiarPassword from './CambiarPassword'
 import PerfilUsuario from './PerfilUsuario'
@@ -94,7 +94,7 @@ export default function Layout() {
         </div>
         <nav>
           {link('/', Home, 'Mis vacaciones')}
-          {user.rol === 'medico' && (
+          {esMedico(user) && (
             <>
               <div className="seccion">Servicio médico</div>
               {link('/consultas', Stethoscope, 'Consultas médicas')}
@@ -164,7 +164,7 @@ export default function Layout() {
           </NavLink>
         )}
         {jefe && <NavLink to="/mi-equipo"><UsersRound size={22} />Mi equipo</NavLink>}
-        {user.rol === 'medico' && <NavLink to="/consultas"><Stethoscope size={22} />Consultas</NavLink>}
+        {esMedico(user) && <NavLink to="/consultas"><Stethoscope size={22} />Consultas</NavLink>}
         <button className={menu ? 'active' : ''} onClick={() => setMenu(!menu)}>
           {menu ? <X size={22} /> : <Menu size={22} />}Menú
         </button>

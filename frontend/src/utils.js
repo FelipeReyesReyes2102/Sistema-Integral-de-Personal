@@ -28,6 +28,8 @@ export const ROLES = {
 /** GH, Gerencia GH o super administrador (el super administrador tiene acceso a todo). */
 export const esAdmin = (u) => ['admin', 'gerencia_gh', 'superadmin'].includes(u?.rol)
 export const esSuperAdmin = (u) => u?.rol === 'superadmin'
+/** Médico de planta o usuario al que GH le permitió registrar consultas médicas. */
+export const esMedico = (u) => u?.rol === 'medico' || !!u?.puede_consultas
 
 // Permisos que el empleado puede pedir (las consultas médicas las registra el médico)
 export const TIPOS_PERMISO_SOLICITABLES = {
@@ -47,6 +49,7 @@ export const CATEGORIAS = {
   otro_permiso: { label: 'Otros permisos', color: '#6d4c41' },
   consulta: { label: 'Consulta médica', color: '#00897b' },
   consulta_medica: { label: 'Consulta médica (permiso)', color: '#00897b' },
+  incapacidad: { label: 'Incapacidad', color: '#b23c17' },
   festivo: { label: 'Festivo', color: '#e53935' },
   cumpleanos: { label: 'Cumpleaños', color: '#ec407a' },
   aniversario: { label: 'Aniversario', color: '#c99a06' },
@@ -77,6 +80,7 @@ export function eventosPorFecha(datos) {
   const agregar = (f, e) => (mapa[f] ||= []).push(e)
   for (const [f, v] of Object.entries(datos?.vacaciones || {})) agregar(f, { cat: 'vacaciones', estado: v.estado, id: v.id })
   for (const p of datos?.permisos || []) agregar(p.fecha, { cat: p.cat || p.tipo, tipo_nombre: p.tipo_nombre, estado: p.estado, id: p.id, hora_inicio: p.hora_inicio, hora_fin: p.hora_fin })
+  for (const i of datos?.incapacidades || []) agregar(i.fecha, { cat: 'incapacidad', estado: i.estado, id: i.id })
   for (const c of datos?.consultas || []) agregar(c.fecha, { cat: 'consulta', estado: 'registrada', id: c.id, hora_inicio: c.hora_inicio, hora_fin: c.hora_fin })
   return mapa
 }
@@ -86,6 +90,15 @@ export function diaMes(iso) {
   if (!iso) return ''
   return parseISO(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })
 }
+
+export const TIPOS_INCAPACIDAD = {
+  enfermedad_general: 'Enfermedad general',
+  riesgo_trabajo: 'Riesgo de trabajo',
+  maternidad: 'Maternidad',
+  otro: 'Otro',
+}
+
+export const ESTADOS_INCAPACIDAD = { solicitado: 'Por validar', validado: 'Validada', rechazado: 'Rechazada' }
 
 export const RESULTADOS_CONSULTA = {
   regresa_labores: 'Regresa a sus labores',

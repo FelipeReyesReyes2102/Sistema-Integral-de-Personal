@@ -5,6 +5,7 @@ import { CATEGORIAS, ESTADOS, RESULTADOS_CONSULTA, TIPOS_NOMINA, fmtFecha, nombr
 import Modal from './Modal'
 import Avatar from './Avatar'
 import IconoCategoria from './IconoCategoria'
+import IncapacidadInfo from './IncapacidadInfo'
 
 function Fila({ k, v }) {
   if (v === undefined || v === null || v === '') return null
@@ -19,7 +20,8 @@ function Evento({ e }) {
 
   useEffect(() => {
     if (!e.id) return
-    const ruta = e.cat === 'vacaciones' ? `/vacaciones/${e.id}` : e.cat === 'consulta' ? `/consultas/${e.id}` : `/permisos/${e.id}`
+    const ruta = e.cat === 'vacaciones' ? `/vacaciones/${e.id}` : e.cat === 'consulta' ? `/consultas/${e.id}`
+      : e.cat === 'incapacidad' ? `/incapacidades/${e.id}` : `/permisos/${e.id}`
     api(ruta).then(setD).catch((err) => setError(err.message))
   }, [e.cat, e.id])
 
@@ -47,7 +49,8 @@ function Evento({ e }) {
           <Fila k="Motivo de rechazo" v={d.motivo_rechazo} />
         </>
       )}
-      {d && e.cat !== 'vacaciones' && e.cat !== 'consulta' && (
+      {d && e.cat === 'incapacidad' && <IncapacidadInfo inc={d} />}
+      {d && e.cat !== 'vacaciones' && e.cat !== 'consulta' && e.cat !== 'incapacidad' && (
         <>
           <Fila k="Tipo" v={nombreTipo(d)} />
           {d.por_dias || d.tipo === 'home_office'
@@ -73,6 +76,7 @@ function Evento({ e }) {
               <li key={m.id}><b>{m.nombre}</b>{[m.dosis, m.frecuencia, m.duracion].filter(Boolean).map((x) => ` · ${x}`).join('')}</li>
             ))}</ul>) : '—'} />
           <Fila k="Indicaciones" v={d.indicaciones} />
+          {d.incapacidad && <IncapacidadInfo inc={d.incapacidad} />}
           <Fila k="Resultado" v={RESULTADOS_CONSULTA[d.resultado]} />
         </>
       )}

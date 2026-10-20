@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .database import get_db
-from .models import ROL_ADMIN, ROL_MEDICO, Auditoria, Sesion, Usuario
+from .models import ROL_ADMIN, ROL_MEDICO, Auditoria, Sesion, Usuario, es_medico
 from .models import ROL_SUPERADMIN, ROLES_ADMIN, es_admin  # noqa: F401
 
 METODOS_SEGUROS = {"GET", "HEAD", "OPTIONS"}
@@ -178,7 +178,11 @@ def require_roles(*roles: str):
 
 require_admin = require_roles(*ROLES_ADMIN)
 require_superadmin = require_roles(ROL_SUPERADMIN)
-require_medico = require_roles(ROL_MEDICO)
+def require_medico(user: Usuario = Depends(get_current_user)) -> Usuario:
+    """Médico de planta o usuario con permiso para registrar consultas médicas."""
+    if not es_medico(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tienes permiso para registrar consultas médicas")
+    return user
 
 
 def require_jefe(user: Usuario = Depends(get_current_user)) -> Usuario:
@@ -195,7 +199,7 @@ def permisos_de(user: Usuario) -> list[str]:
         p += ["usuarios:administrar", "catalogos:administrar", "solicitudes:todas"]
     if user.rol == ROL_SUPERADMIN:
         p += ["config:microsoft", "usuarios:superadmin"]
-    if user.rol == ROL_MEDICO:
+    if es_medico(user):
         p += ["consultas:registrar"]
     return p
 

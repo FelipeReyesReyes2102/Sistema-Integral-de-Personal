@@ -9,10 +9,10 @@ from .. import reglas
 from .. import tipos_permiso
 from ..database import get_db
 from ..models import (
-    ESTADOS_ACTIVOS, PERMISO_HOME_OFFICE, ROL_ADMIN, ROL_MEDICO, SOLICITADO, TIPOS_PERMISO, VALIDADO, ConsultaMedica, Festivo, Permiso,
+    ESTADOS_ACTIVOS, PERMISO_HOME_OFFICE, ROL_ADMIN, ROL_MEDICO, SOLICITADO, TIPOS_PERMISO, VALIDADO, ConsultaMedica, Festivo, Incapacidad, Permiso,
     SolicitudVacaciones, Usuario,
 )
-from ..models import ROLES_ADMIN, es_admin  # noqa: F401
+from ..models import ROLES_ADMIN, es_admin, es_medico  # noqa: F401
 from ..security import get_current_user, require_admin
 from ..sedes import Alcance, admin_permite, alcance
 from ..services import ciclo_de, consulta_festivos, empleado_visible, festivos_de
@@ -63,6 +63,19 @@ def _consultas(db: Session, u: Usuario, desde: date, hasta: date, con_detalle: b
              "hora_fin": c.hora_fin.strftime("%H:%M") if c.hora_fin else None} for c in db.scalars(q)]
 
 
+def _incapacidades(db: Session, u: Usuario, desde: date, hasta: date) -> list[dict]:
+    """Un evento por día de cada incapacidad pendiente o validada."""
+    q = select(Incapacidad).where(Incapacidad.usuario_id == u.id, Incapacidad.estado.in_((SOLICITADO, VALIDADO)),
+                                  Incapacidad.fecha_inicio <= hasta, Incapacidad.fecha_fin >= desde)
+    res = []
+    for i in db.scalars(q):
+        d = max(i.fecha_inicio, desde)
+        while d <= min(i.fecha_fin, hasta):
+            res.append({"fecha": d.isoformat(), "id": i.id, "estado": i.estado})
+            d += timedelta(days=1)
+    return res
+
+
 def _cumpleanos(db: Session, anio: int, yo: int, sede_id: int | None) -> list[dict]:
     """Cumpleaños del personal activo de la sede en el año indicado. Solo día y mes (nunca el año de nacimiento
     ni la edad)."""
@@ -89,7 +102,7 @@ def calendario(anio: int, usuario_id: int | None = None, db: Session = Depends(g
         if not ciclo.es_laboral(d):
             no_laborables.append(d.isoformat())
         d += timedelta(days=1)
-    detalle_clinico = u.id == user.id or user.rol in (ROL_MEDICO, *ROLES_ADMIN)  # el jefe solo ve que hubo consulta
+    detalle_clinico = u.id == user.id or es_medico(user) or es_admin(user)  # el jefe solo ve que hubo consulta
     return {
         "anio": anio,
         "festivos": [{"fecha": f.fecha.isoformat(), "nombre": f.nombre} for f in festivos],
@@ -97,6 +110,7 @@ def calendario(anio: int, usuario_id: int | None = None, db: Session = Depends(g
         "vacaciones": _dias_vacaciones(db, u, desde, hasta),
         "permisos": _permisos_por_dia(db, u, desde, hasta),
         "consultas": _consultas(db, u, desde, hasta, detalle_clinico),
+        "incapacidades": _incapacidades(db, u, desde, hasta),
         "cumpleanos": _cumpleanos(db, anio, u.id, u.sede_id) if (u.sede is None or u.sede.modulo_cumpleanos) else [],
     }
 
@@ -116,7 +130,7 @@ def calendario_equipo(anio: int, mes: int, grupo_id: int | None = None, rol: str
     if q:
         stmt = stmt.where(Usuario.nombre.ilike(f"%{q.strip()}%"))
     empleados = []
-    totales = {"vacaciones": 0, "permiso": 0, "home_office": 0, "consulta": 0}
+    totales = {"vacaciones": 0, "permiso": 0, "home_office": 0, "consulta": 0, "incapacidad": 0}
     for u in db.scalars(stmt):
         ciclo = ciclo_de(u)
         fest = {f.fecha: f.nombre for f in db.scalars(consulta_festivos(u, desde, hasta))}
@@ -138,6 +152,9 @@ def calendario_equipo(anio: int, mes: int, grupo_id: int | None = None, rol: str
             dias[c["fecha"]]["eventos"].append({"cat": "consulta", "estado": "registrada", "id": c["id"],
                                                  "hora_inicio": c["hora_inicio"], "hora_fin": c["hora_fin"]})
             totales["consulta"] += 1
+        for i in _incapacidades(db, u, desde, hasta):
+            dias[i["fecha"]]["eventos"].append({"cat": "incapacidad", "estado": i["estado"], "id": i["id"]})
+            totales["incapacidad"] += 1
         empleados.append({
             "id": u.id, "nombre": u.nombre, "rol": u.rol, "numero_empleado": u.numero_empleado,
             "sede": u.sede.nombre if u.sede else None,
@@ -183,13 +200,16 @@ def pendientes(db: Session = Depends(get_db), user: Usuario = Depends(get_curren
     mias = (SolicitudVacaciones.aprobador_id == user.id, SolicitudVacaciones.usuario_id != user.id,
             SolicitudVacaciones.aprobado_jefe_id.is_(None))
     mias_p = (Permiso.aprobador_id == user.id, Permiso.usuario_id != user.id, Permiso.aprobado_jefe_id.is_(None))
-    res = {"vacaciones": contar(SolicitudVacaciones, mias), "permisos": contar(Permiso, mias_p)}
-    res["total"] = res["vacaciones"] + res["permisos"]
+    mias_i = (Incapacidad.aprobador_id == user.id, Incapacidad.usuario_id != user.id)
+    res = {"vacaciones": contar(SolicitudVacaciones, mias), "permisos": contar(Permiso, mias_p),
+           "incapacidades": contar(Incapacidad, mias_i)}
+    res["total"] = res["vacaciones"] + res["permisos"] + res["incapacidades"]
     if es_admin(user):
         de_sede = lambda m: (m.usuario_id.in_(select(Usuario.id).where(alc.filtro(Usuario.sede_id))),)  # noqa: E731
         res["todas_vacaciones"] = contar(SolicitudVacaciones, de_sede(SolicitudVacaciones))
         res["todas_permisos"] = contar(Permiso, de_sede(Permiso))
-        res["todas"] = res["todas_vacaciones"] + res["todas_permisos"]
+        res["todas_incapacidades"] = contar(Incapacidad, de_sede(Incapacidad))
+        res["todas"] = res["todas_vacaciones"] + res["todas_permisos"] + res["todas_incapacidades"]
     return res
 
 

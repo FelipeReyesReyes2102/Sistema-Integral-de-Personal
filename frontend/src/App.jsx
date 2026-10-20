@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { useAuth } from './auth'
-import { esAdmin, esSuperAdmin } from './utils'
+import { esAdmin, esMedico, esSuperAdmin } from './utils'
 import Layout, { esJefe } from './components/Layout'
 import Login from './pages/Login'
 import CambioObligatorio from './pages/CambioObligatorio'
@@ -29,7 +29,7 @@ function SoloSuperAdmin({ children }) {
 
 function SoloMedico({ children }) {
   const { user } = useAuth()
-  return user?.rol === 'medico' ? children : <Navigate to="/" replace />
+  return esMedico(user) ? children : <Navigate to="/" replace />
 }
 
 function SoloJefe({ children }) {
