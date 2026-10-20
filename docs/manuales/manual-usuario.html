@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual de usuario SIP-O</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: índice lateral fijo + columna de lectura; en teléfono el índice va arriba */
+:root {
+  --bg: #f5f7fb;
+  --paper: #ffffff;
+  --ink: #1b2233;
+  --muted: #5d6779;
+  --line: #dfe5ee;
+  --navy: #161e2f;
+  --primary: #1f4a86;
+  --primary-soft: #e8eef8;
+  --sun: #f2b705;
+  --sun-soft: #fff6d6;
+  --ok: #2e7d4f;
+  --ok-soft: #e4f4ea;
+  --warn: #a35d00;
+  --warn-soft: #fff1dc;
+  --bad: #b42318;
+  --bad-soft: #fde8e7;
+  --kbd: #eef1f6;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141f; --paper: #161d2b; --ink: #e6eaf2; --muted: #9aa5b8; --line: #2a3448; --navy: #0b101a;
+    --primary: #8db4ea; --primary-soft: #1d2a40; --sun: #f6c94a; --sun-soft: #3a3016;
+    --ok: #7fd3a1; --ok-soft: #173326; --warn: #f3b867; --warn-soft: #3a2a12; --bad: #f19a92; --bad-soft: #3d1c1a;
+    --kbd: #222b3c; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141f; --paper: #161d2b; --ink: #e6eaf2; --muted: #9aa5b8; --line: #2a3448; --navy: #0b101a;
+  --primary: #8db4ea; --primary-soft: #1d2a40; --sun: #f6c94a; --sun-soft: #3a3016;
+  --ok: #7fd3a1; --ok-soft: #173326; --warn: #f3b867; --warn-soft: #3a2a12; --bad: #f19a92; --bad-soft: #3d1c1a;
+  --kbd: #222b3c; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 17px; line-height: 1.6; padding-inline: 16px; padding-block: 0 48px; }
+.portada { max-width: 1120px; margin: 0 auto; padding-block: 36px 28px; display: grid; gap: 10px; border-bottom: 1px solid var(--line); }
+.marca { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.sol { width: 22px; height: 22px; border-radius: 50%; background: var(--sun); box-shadow: 0 0 0 4px var(--sun-soft); }
+h1 { font-family: var(--display); font-size: clamp(30px, 5vw, 44px); line-height: 1.1; margin: 0; text-wrap: balance; }
+.lead { color: var(--muted); max-width: 64ch; margin: 0; }
+.para { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.chip { font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--primary-soft); color: var(--primary); }
+.marco { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 40px; padding-top: 28px; }
+nav.indice { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); align-self: start; max-height: calc(100vh - 32px); overflow-y: auto; font-size: 15px; }
+nav.indice b { display: block; font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+nav.indice ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; counter-reset: s; }
+nav.indice a { display: block; padding: 5px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; border-left: 3px solid transparent; }
+nav.indice a:hover, nav.indice a:focus-visible { background: var(--primary-soft); border-left-color: var(--primary); outline: none; }
+main { min-width: 0; max-width: 760px; display: grid; gap: 44px; }
+section { scroll-margin-top: 16px; display: grid; gap: 12px; }
+h2 { font-family: var(--display); font-size: 27px; line-height: 1.2; margin: 0; text-wrap: balance; display: flex; align-items: baseline; gap: 12px; }
+h2 .n { font-family: var(--mono); font-size: 14px; color: var(--primary); font-weight: 500; }
+h3 { font-size: 19px; margin: 10px 0 0; }
+p { margin: 0; }
+ul, ol { margin: 0; padding-left: 22px; display: grid; gap: 4px; }
+ol.pasos { counter-reset: paso; list-style: none; padding: 0; gap: 10px; }
+ol.pasos > li { counter-increment: paso; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; align-items: start; }
+ol.pasos > li::before { content: counter(paso); font-family: var(--mono); font-size: 14px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--navy); color: #fff; }
+.ui { font-family: var(--mono); font-size: 14px; background: var(--kbd); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+kbd { font-family: var(--mono); font-size: 13px; background: var(--paper); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 6px; }
+.nota { border-radius: 10px; padding: 12px 16px; display: grid; gap: 4px; background: var(--primary-soft); }
+.nota.aviso { background: var(--warn-soft); }
+.nota.ok { background: var(--ok-soft); }
+.nota strong { font-size: 14px; text-transform: uppercase; letter-spacing: .05em; color: var(--primary); }
+.nota.aviso strong { color: var(--warn); }
+.nota.ok strong { color: var(--ok); }
+.tabla { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); background: var(--bg); }
+tr:last-child td { border-bottom: none; }
+.estado { display: inline-block; font-size: 13px; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.e-borrador { background: var(--kbd); color: var(--muted); }
+.e-solicitado { background: var(--sun-soft); color: var(--warn); }
+.e-validado { background: var(--ok-soft); color: var(--ok); }
+.e-rechazado, .e-cancelado { background: var(--bad-soft); color: var(--bad); }
+.e-jefe { background: var(--primary-soft); color: var(--primary); }
+.leyenda { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
+.leyenda div { display: flex; gap: 10px; align-items: center; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 15px; }
+.mu { width: 22px; height: 22px; border-radius: 6px; flex: none; border: 1px solid var(--line); }
+details { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+details[open] { padding-bottom: 14px; }
+summary { cursor: pointer; font-weight: 600; }
+details p { margin-top: 8px; color: var(--ink); }
+.pie { max-width: 1120px; margin: 48px auto 0; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+a { color: var(--primary); }
+@media (max-width: 860px) {
+  .marco { grid-template-columns: 1fr; gap: 24px; }
+  nav.indice { position: static; max-height: none; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  nav.indice ol { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+
+<header class="portada">
+  <div class="marca"><span class="sol" aria-hidden="true"></span> SIP-O · Sistema Integral de Personal · O-tek</div>
+  <h1>Manual de usuario</h1>
+  <p class="lead">Cómo consultar tu saldo, pedir vacaciones, home office y permisos, y cómo aprobar las solicitudes de tu equipo si eres jefe.</p>
+  <div class="para"><span class="chip">Oficinas</span><span class="chip">Planta</span><span class="chip">Jefes</span><span class="chip">Médico de planta</span></div>
+</header>
+
+<div class="marco">
+  <nav class="indice" aria-label="Contenido">
+    <b>Contenido</b>
+    <ol>
+      <li><a href="#entrar">Entrar a SIP-O</a></li>
+      <li><a href="#pantalla">Tu pantalla</a></li>
+      <li><a href="#calendario">El calendario</a></li>
+      <li><a href="#saldo">Tu saldo de vacaciones</a></li>
+      <li><a href="#vacaciones">Pedir vacaciones</a></li>
+      <li><a href="#homeoffice">Home office</a></li>
+      <li><a href="#permisos">Permisos por horas</a></li>
+      <li><a href="#estados">Seguimiento y estados</a></li>
+      <li><a href="#cuenta">Tu información y contraseña</a></li>
+      <li><a href="#jefes">Si eres jefe</a></li>
+      <li><a href="#medico">Médico de planta</a></li>
+      <li><a href="#faq">Preguntas frecuentes</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <section id="entrar">
+      <h2><span class="n">01</span>Entrar a SIP-O</h2>
+      <p>Abre <span class="ui">https://sip-o.otek.internal</span> desde la red de la empresa (o con la VPN conectada).</p>
+      <h3>Con usuario y contraseña</h3>
+      <ol class="pasos">
+        <li><span>Escribe tu <b>correo corporativo</b> o tu <b>número de nómina</b>. El personal de planta usa su número de nómina.</span></li>
+        <li><span>Escribe tu contraseña y pulsa <span class="ui">Entrar</span>.</span></li>
+      </ol>
+      <h3>Con tu cuenta de Microsoft</h3>
+      <p>Debajo del formulario está <span class="ui">Iniciar sesión con Microsoft</span>. Úsalo si tienes correo de O-tek: entras con la misma cuenta de Outlook y Teams, sin otra contraseña.</p>
+      <h3>Primera vez o contraseña temporal</h3>
+      <p>Si GH te dio una <b>contraseña temporal de 6 dígitos</b>, al entrar SIP-O te pedirá crear la tuya. Debe tener al menos 8 caracteres, con letras y números, y escribirse igual dos veces.</p>
+      <div class="nota aviso"><strong>¿Olvidaste tu contraseña?</strong><p>Pide a Gestión Humana (GH) de tu sede una contraseña temporal. Después de 5 intentos fallidos la cuenta se bloquea 15 minutos por seguridad.</p></div>
+    </section>
+
+    <section id="pantalla">
+      <h2><span class="n">02</span>Tu pantalla</h2>
+      <p>Al entrar ves <b>Mis vacaciones</b>: el calendario del año, tu resumen y tus registros. A la izquierda está el menú; en computadora puedes encogerlo con el botón de la esquina. En el celular el menú aparece abajo.</p>
+      <ul>
+        <li><b>Tu tarjeta</b> (arriba): foto, nombre, puesto, sede, fecha de ingreso, antigüedad y tu turno de esta semana.</li>
+        <li><b>Resumen</b>: días disponibles por periodo y cuándo vencen.</li>
+        <li><b>Registros</b>: vacaciones, home office, permisos, consultas médicas, festivos y cumpleaños del año.</li>
+        <li><b>Tu nombre</b> (abajo del menú): abre <i>Mi información</i>.</li>
+      </ul>
+    </section>
+
+    <section id="calendario">
+      <h2><span class="n">03</span>El calendario</h2>
+      <p>Cada mes muestra tus días con colores. Los días que ya pasaron se ven más tenues; de hoy en adelante, con más intensidad.</p>
+      <div class="leyenda">
+        <div><span class="mu" style="background:#4caf50"></span> Vacaciones validadas</div>
+        <div><span class="mu" style="background:#f6c400"></span> Vacaciones solicitadas</div>
+        <div><span class="mu" style="background:#bdbdbd"></span> Borrador</div>
+        <div><span class="mu" style="background:#2f6db5"></span> Home office</div>
+        <div><span class="mu" style="background:#e57373"></span> Festivo de tu sede</div>
+        <div><span class="mu" style="background:#ec407a"></span> Cumpleaños</div>
+        <div><span class="mu" style="background:#c99a06"></span> Tu aniversario en O-tek</div>
+        <div><span class="mu" style="background:var(--primary-soft)"></span> Franja del periodo de vacaciones</div>
+      </div>
+      <h3>Cómo se usa</h3>
+      <div class="tabla"><table>
+        <thead><tr><th>Acción</th><th>Qué hace</th></tr></thead>
+        <tbody>
+          <tr><td><b>Clic izquierdo</b> en un día y luego en otro</td><td>Selecciona el rango para pedir vacaciones, home office o un permiso.</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Cancela la selección.</td></tr>
+          <tr><td><b>Clic derecho</b> en un día</td><td>Muestra los eventos de ese día: festivos, cumpleaños de tu sede, tus registros.</td></tr>
+          <tr><td><b>Un clic</b> en un tipo de registro (panel Registros)</td><td>Resalta esos días en el calendario con una animación.</td></tr>
+          <tr><td><b>Doble clic</b> en un tipo de registro</td><td>Abre la lista de esos registros (puedes ver, editar o cancelar).</td></tr>
+          <tr><td>Chips de periodo (arriba del calendario)</td><td>Pintan el calendario con la franja de cada periodo; puedes apagar las franjas.</td></tr>
+        </tbody>
+      </table></div>
+      <p>No puedes seleccionar fechas pasadas, ni más días de los que tienes disponibles, ni fechas después de que venza el periodo.</p>
+    </section>
+
+    <section id="saldo">
+      <h2><span class="n">04</span>Tu saldo de vacaciones</h2>
+      <p>Tus días se organizan por <b>periodo</b> (por ejemplo <i>Periodo 2026</i>). Cada periodo tiene una fecha de vencimiento: los días que no uses antes de esa fecha se pierden. En O-tek México son 18 meses.</p>
+      <ul>
+        <li><b>Días hábiles:</b> solo se descuentan tus días de trabajo. No cuentan fines de semana, tus días de descanso del ciclo (por ejemplo 4×4 en planta) ni los festivos de tu sede.</li>
+        <li><b>Modo General:</b> si tienes días de dos periodos, SIP-O usa primero los del periodo más antiguo, para que no se te venzan.</li>
+        <li><b>Bloque obligatorio:</b> en cada periodo debes tomar al menos una vez varios días seguidos (por ejemplo 6 en oficinas o 4 en planta). Mientras no lo tomes, SIP-O no te deja pedir días sueltos que te impidan completarlo.</li>
+        <li><b>Planta:</b> según tu sede, el saldo se lleva en días de tu jornada o en horas. La tarjeta te muestra siempre los días que te quedan.</li>
+      </ul>
+      <div class="nota aviso"><strong>Saldo negativo</strong><p>Si GH programó vacaciones generales (por ejemplo un paro de planta) y no tenías días suficientes, verás el saldo en negativo. Se descuenta solo de los próximos días que generes: en tu aniversario, el 1 de enero o cada mes, según tu sede.</p></div>
+    </section>
+
+    <section id="vacaciones">
+      <h2><span class="n">05</span>Pedir vacaciones</h2>
+      <ol class="pasos">
+        <li><span>En el calendario, haz clic en el <b>primer día</b> y luego en el <b>último</b>.</span></li>
+        <li><span>En la barra que aparece, revisa los días y el saldo, y pulsa <span class="ui">Solicitar vacaciones</span>.</span></li>
+        <li><span>En el formulario verás los días laborables, qué días no cuentan (festivos o descansos) y cuánto te quedará.</span></li>
+        <li><span>Elige al <b>jefe que aprueba</b>. Por defecto es tu jefe directo; solo aparecen jefes de tu sede.</span></li>
+        <li><span><b>Firma</b> en el recuadro con el mouse, el dedo o un lápiz. Si te equivocas, pulsa <span class="ui">Borrar</span>.</span></li>
+        <li><span>Pulsa <span class="ui">Enviar</span>. Si aún no estás seguro, usa <span class="ui">Guardar borrador</span>.</span></li>
+      </ol>
+      <h3>Vacaciones por horas</h3>
+      <p>Si tu jornada lo permite (lo define GH), al elegir <b>un solo día</b> aparece la opción <span class="ui">Por horas</span>. Escribe cuántas horas tomarás (hay un mínimo por solicitud) y se descuentan solo esas horas de tu saldo.</p>
+      <div class="nota"><strong>Anticipación</strong><p>Algunas sedes piden solicitar con cierta anticipación. Si te falta, el formulario te dice a partir de qué fecha puedes pedirlas.</p></div>
+    </section>
+
+    <section id="homeoffice">
+      <h2><span class="n">06</span>Home office</h2>
+      <ol class="pasos">
+        <li><span>Selecciona los días en el calendario y pulsa <span class="ui">Home office</span>.</span></li>
+        <li><span>Escribe el motivo, elige al jefe y firma.</span></li>
+        <li><span>Pulsa <span class="ui">Enviar</span>.</span></li>
+      </ol>
+      <p>El home office no descuenta vacaciones. Tu sede define el máximo de días por solicitud.</p>
+    </section>
+
+    <section id="permisos">
+      <h2><span class="n">07</span>Permisos por horas</h2>
+      <p>Con un día seleccionado, pulsa <span class="ui">Solicitar permiso</span> y elige el tipo:</p>
+      <div class="tabla"><table>
+        <thead><tr><th>Tipo</th><th>Cuándo usarlo</th><th>Horario</th></tr></thead>
+        <tbody>
+          <tr><td><b>Llegada tarde</b></td><td>Entrarás después de tu hora de entrada.</td><td>Se prellena tu hora de entrada; escribe a qué hora llegarás.</td></tr>
+          <tr><td><b>Salida temprana</b></td><td>Saldrás antes de tu hora de salida.</td><td>Se prellena tu hora de salida; escribe a qué hora te irás.</td></tr>
+          <tr><td><b>Salida durante la jornada</b></td><td>Saldrás y regresarás el mismo día.</td><td>Escribe la hora de salida y la de regreso.</td></tr>
+        </tbody>
+      </table></div>
+      <p>El horario se toma de <b>tu turno de ese día</b>, incluidos horarios especiales como el <i>Short Friday</i>. Indica también cómo se considera el tiempo en nómina (<i>con goce</i>, <i>sin goce</i> o <i>reposición de tiempo</i>), el motivo, el jefe y tu firma.</p>
+      <div class="nota"><strong>Caseta</strong><p>Cuando tu permiso queda autorizado, el personal de caseta recibe un aviso por correo con tu nombre, número de nómina y horario, si tu sede tiene activo ese aviso.</p></div>
+    </section>
+
+    <section id="estados">
+      <h2><span class="n">08</span>Seguimiento y estados</h2>
+      <p>Abre la lista desde el panel <b>Registros</b> (doble clic) o con <span class="ui">Ver todas</span>.</p>
+      <div class="tabla"><table>
+        <thead><tr><th>Estado</th><th>Qué significa</th><th>Qué puedes hacer</th></tr></thead>
+        <tbody>
+          <tr><td><span class="estado e-borrador">Borrador</span></td><td>Guardada, aún no enviada. Ya aparta tus días.</td><td>Editar, firmar y enviar, o eliminar.</td></tr>
+          <tr><td><span class="estado e-solicitado">Solicitado</span></td><td>Enviada; espera a tu jefe.</td><td>Cancelarla.</td></tr>
+          <tr><td><span class="estado e-jefe">Aprobada por el jefe</span></td><td>Tu sede pide dos aprobaciones: el jefe ya aprobó, falta GH.</td><td>Esperar a GH.</td></tr>
+          <tr><td><span class="estado e-validado">Validado</span></td><td>Aprobada. Los días ya cuentan como tomados.</td><td>Para cancelarla, pídelo a tu jefe o a GH.</td></tr>
+          <tr><td><span class="estado e-rechazado">Rechazado</span></td><td>No fue aprobada; verás el motivo.</td><td>Hacer una nueva solicitud.</td></tr>
+          <tr><td><span class="estado e-cancelado">Cancelado</span></td><td>Se canceló; los días regresan a tu saldo.</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+      <p>Tu jefe puede aprobar en SIP-O o desde <b>Teams</b>. Si aprueba en Teams, SIP-O lo refleja en uno o dos minutos.</p>
+    </section>
+
+    <section id="cuenta">
+      <h2><span class="n">09</span>Tu información y contraseña</h2>
+      <ul>
+        <li>Pulsa tu nombre en el menú para abrir <b>Mi información</b>: tus días disponibles, datos laborales (nómina, sede, ingreso, jornada, turno, grupo, jefe), contacto y cumpleaños.</li>
+        <li>Desde ahí puedes <span class="ui">Cambiar contraseña</span> (si entras con usuario y contraseña) o <span class="ui">Salir</span>.</li>
+        <li>Si algún dato está mal, pide a GH de tu sede que lo corrija.</li>
+      </ul>
+    </section>
+
+    <section id="jefes">
+      <h2><span class="n">10</span>Si eres jefe</h2>
+      <p>En el menú aparece la sección <b>Jefe</b> con un círculo rojo cuando tienes pendientes.</p>
+      <h3>Por aprobar</h3>
+      <ol class="pasos">
+        <li><span>Abre <span class="ui">Por aprobar</span>. Las pestañas <i>Vacaciones</i> y <i>Permisos y home office</i> muestran un círculo rojo con sus pendientes.</span></li>
+        <li><span>Revisa fechas, días, motivo y la <span class="ui">Firma</span> del colaborador. Con el ojo ves su saldo y sus vacaciones.</span></li>
+        <li><span>Pulsa <span class="ui">Validar</span> o <span class="ui">Rechazar</span>. Al rechazar puedes escribir el motivo.</span></li>
+      </ol>
+      <p>Si tu sede usa <b>jefe + GH</b>, tu aprobación deja la solicitud como <span class="estado e-jefe">Aprobada por el jefe</span> y sale de tu bandeja; GH la valida.</p>
+      <h3>Aprobar desde Teams</h3>
+      <p>Si tu sede lo tiene activo, te llega una aprobación en <b>Teams</b> y en Outlook con el detalle. Pulsa <i>Aprobar</i> o <i>Rechazar</i> y, si quieres, escribe un comentario: si rechazas, ese texto queda como motivo. Funciona desde el celular, fuera de la oficina.</p>
+      <h3>Mi equipo</h3>
+      <p>Tabla con cada colaborador: periodo, días otorgados, tomados, solicitados, restantes, vencimiento, próximas vacaciones y pendientes. Úsala para planear ausencias.</p>
+      <h3>Cancelar una aprobación</h3>
+      <p>Puedes cancelar una solicitud que tú validaste; los días regresan al colaborador.</p>
+    </section>
+
+    <section id="medico">
+      <h2><span class="n">11</span>Médico de planta</h2>
+      <p>En <b>Consultas médicas</b> registras cada consulta: paciente, fecha y horario, síntomas, diagnóstico, indicaciones, resultado y medicamentos recetados. El empleado ve en su calendario que tuvo una consulta. El detalle médico solo lo ven el médico y GH, y cada consulta abierta por GH queda registrada.</p>
+    </section>
+
+    <section id="faq">
+      <h2><span class="n">12</span>Preguntas frecuentes</h2>
+      <details><summary>No me deja seleccionar unos días.</summary><p>Son fechas pasadas, posteriores al vencimiento del periodo, o superan tus días disponibles. Revisa el saldo en el resumen.</p></details>
+      <details><summary>¿Por qué me descuentan menos días de los que seleccioné?</summary><p>Solo cuentan tus días laborales: fines de semana, descansos del ciclo y festivos de tu sede no se descuentan. El formulario te dice cuáles no cuentan.</p></details>
+      <details><summary>Me sale que debo tomar días seguidos.</summary><p>Es el bloque obligatorio del periodo. Pide ese bloque primero o una cantidad de días sueltos que todavía te permita completarlo.</p></details>
+      <details><summary>¿Puedo editar una solicitud enviada?</summary><p>No. Cancélala mientras esté en <i>Solicitado</i> y crea una nueva.</p></details>
+      <details><summary>No aparece mi jefe en la lista.</summary><p>Solo aparecen jefes de tu sede. Pide a GH que revise tu jefe directo y tu sede.</p></details>
+      <details><summary>¿Por qué mi saldo está en negativo?</summary><p>GH programó vacaciones generales cuando no tenías días suficientes. Se te descuenta de los próximos días que generes.</p></details>
+    </section>
+  </main>
+</div>
+<footer class="pie">SIP-O · Sistema Integral de Personal · O-tek. Para dudas o correcciones de tus datos, contacta a Gestión Humana de tu sede.</footer>
+</body>
+</html>

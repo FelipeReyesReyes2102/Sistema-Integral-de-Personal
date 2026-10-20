@@ -129,6 +129,8 @@ Cualquier empleado puede ser **jefe** (casilla *Es jefe* en Empleados), y cada e
 La conexión se captura en *Configuración → Conexión con Microsoft* (con botón **Probar conexión**) o en
 `backend/.env`. Guía completa de configuración en Entra ID: [docs/MICROSOFT_ENTRA.md](docs/MICROSOFT_ENTRA.md).
 
+Manuales de uso: [usuario](docs/manuales/manual-usuario.html) y [administración](docs/manuales/manual-administrador.html) (índice en [docs/manuales](docs/manuales/README.md)).
+
 El logo oficial está en `frontend/public/logo-otek.png` (y el ícono de pestaña, recortado del mismo logo, en `favicon.png`).
 
 ## Reglas de vacaciones
