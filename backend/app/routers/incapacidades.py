@@ -1,5 +1,5 @@
 """Incapacidades: las ve el empleado, las valida su jefe (o GH) y GH las consulta todas."""
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -7,7 +7,7 @@ from .. import incapacidades as inc
 from ..database import get_db
 from ..models import SOLICITADO, Incapacidad, Usuario, es_admin
 from ..schemas import IncapacidadOut, RechazoIn, ValidarIncapacidadIn
-from ..security import get_current_user
+from ..security import auditar, get_current_user
 from ..sedes import Alcance, alcance
 from ..services import empleado_visible
 
@@ -43,23 +43,32 @@ def detalle(iid: int, db: Session = Depends(get_db), user: Usuario = Depends(get
 
 
 @router.post("/{iid}/validar", response_model=IncapacidadOut)
-def validar(iid: int, tareas: BackgroundTasks, data: ValidarIncapacidadIn | None = None, db: Session = Depends(get_db),
-            user: Usuario = Depends(get_current_user)):
+def validar(iid: int, request: Request, tareas: BackgroundTasks, data: ValidarIncapacidadIn | None = None,
+            db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
     """Valida la incapacidad; opcionalmente con otras fechas (el jefe ajusta los días) y un comentario."""
     i = _obtener(db, iid, user)
     data = data or ValidarIncapacidadIn()
     inc.revisar(db, i, user, validar=True, fecha_inicio=data.fecha_inicio, fecha_fin=data.fecha_fin,
                 comentario=data.comentario)
+    detalle = f"consulta {i.consulta_id} · {inc.texto(i)}"
+    if i.fecha_inicio_original:
+        detalle += (f" · el jefe ajustó los días (el médico registró {i.fecha_inicio_original:%d/%m/%Y} al "
+                    f"{i.fecha_fin_original:%d/%m/%Y})")
+    if i.nota_revision:
+        detalle += f" · comentario: {i.nota_revision}"
+    auditar(db, "incapacidad_validada", usuario_id=i.usuario_id, actor_id=user.id, detalle=detalle, request=request)
     db.commit()
     tareas.add_task(inc.notificar, i.id, "incapacidad_validada")
     return inc.out(i)
 
 
 @router.post("/{iid}/rechazar", response_model=IncapacidadOut)
-def rechazar(iid: int, data: RechazoIn, tareas: BackgroundTasks, db: Session = Depends(get_db),
+def rechazar(iid: int, data: RechazoIn, request: Request, tareas: BackgroundTasks, db: Session = Depends(get_db),
              user: Usuario = Depends(get_current_user)):
     i = _obtener(db, iid, user)
     inc.revisar(db, i, user, validar=False, motivo=data.motivo)
+    auditar(db, "incapacidad_rechazada", usuario_id=i.usuario_id, actor_id=user.id,
+            detalle=f"consulta {i.consulta_id} · {inc.texto(i)} · motivo: {i.motivo_rechazo}", request=request)
     db.commit()
     tareas.add_task(inc.notificar, i.id, "incapacidad_rechazada")
     return inc.out(i)

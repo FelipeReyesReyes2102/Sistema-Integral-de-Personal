@@ -147,3 +147,34 @@ def test_jefe_ajusta_dias_al_validar(monkeypatch):
     with SessionLocal() as db:
         db.delete(db.get(ConsultaMedica, c["id"]))
         db.commit()
+
+
+def test_bitacora_de_consultas_y_rechazo_del_jefe(monkeypatch):
+    monkeypatch.setattr(correo, "enviar", lambda *a: None)
+    from app.security import ahora
+    inicio_prueba = (ahora() - timedelta(seconds=2)).isoformat()
+    medico = entrar("medico@empresa.com")
+    carlos = next(p for p in medico.get("/api/consultas/pacientes?q=Carlos").json() if p["nombre"] == "Carlos Pérez")
+    datos = {"paciente_id": carlos["id"], "fecha": str(HOY), "hora_inicio": "15:00", "sintomas": "Migraña severa",
+             "resultado": "envia_casa", "incapacidad": {"fecha_inicio": str(HOY), "fecha_fin": str(HOY + timedelta(days=1))}}
+    c = medico.post("/api/consultas", json=datos).json()
+    iid = c["incapacidad"]["id"]
+    # El jefe la rechaza (con motivo)
+    laura = entrar("laura@empresa.com")
+    r = laura.post(f"/api/incapacidades/{iid}/rechazar", json={"motivo": "No presentó el certificado"})
+    assert r.status_code == 200 and r.json()["estado"] == "rechazado"
+
+    bit = medico.get("/api/consultas/bitacora", params={"q": "carlos"}).json()
+    mios = [b for b in bit if b["consulta_id"] == c["id"] and b["fecha"] >= inicio_prueba]
+    eventos = {b["evento"]: b for b in mios}
+    assert {"consulta_registrada", "incapacidad_generada", "incapacidad_rechazada"} <= set(eventos)
+    assert eventos["consulta_registrada"]["actor_nombre"] == "Dra. Patricia Ruiz"
+    assert eventos["incapacidad_rechazada"]["actor_nombre"] == "Laura Martínez"
+    assert "No presentó el certificado" in eventos["incapacidad_rechazada"]["detalle"]
+    assert all("Migraña" not in (b["detalle"] or "") for b in bit)            # sin datos clínicos
+    assert medico.get("/api/consultas/bitacora", params={"tipo": "incapacidad"}).json()[0]["evento"].startswith("incapacidad")
+    # Un empleado sin permiso de consultas no la ve
+    assert entrar("carlos@empresa.com").get("/api/consultas/bitacora").status_code == 403
+    with SessionLocal() as db:
+        db.delete(db.get(ConsultaMedica, c["id"]))
+        db.commit()

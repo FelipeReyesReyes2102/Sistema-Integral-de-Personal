@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { Eye, Pencil, Plus, Trash2 } from 'lucide-react'
 import { api } from '../api'
 import ConsultaModal from '../components/ConsultaModal'
+import BitacoraConsultas from '../components/BitacoraConsultas'
 import DetalleConsulta from '../components/DetalleConsulta'
-import { RESULTADOS_CONSULTA, ROLES, fmtFecha, hhmm, toISO } from '../utils'
+import { ESTADOS_INCAPACIDAD, RESULTADOS_CONSULTA, ROLES, fmtFecha, hhmm, toISO } from '../utils'
 
 /** Bitácora del servicio médico de planta. */
 export default function Consultas() {
@@ -13,6 +14,7 @@ export default function Consultas() {
   const [hoy, setHoy] = useState(null)
   const [modal, setModal] = useState(null) // {tipo: 'nueva'|'editar'|'ver', consulta}
   const [error, setError] = useState('')
+  const [vista, setVista] = useState('consultas')
 
   const cargar = () => {
     api('/consultas', { query: { todos: true, ...filtros } }).then(setLista).catch((e) => setError(e.message))
@@ -42,7 +44,13 @@ export default function Consultas() {
         <button className="btn btn-primary" onClick={() => setModal({ tipo: 'nueva' })}><Plus size={16} /> Registrar consulta</button>
       </div>
 
-      <div className="card">
+      <div className="tabs" style={{ marginBottom: 12 }}>
+        <button className={vista === 'consultas' ? 'activo' : ''} onClick={() => setVista('consultas')}>CONSULTAS</button>
+        <button className={vista === 'bitacora' ? 'activo' : ''} onClick={() => setVista('bitacora')}>BITÁCORA</button>
+      </div>
+      {vista === 'bitacora' && <BitacoraConsultas onVer={(id) => setModal({ tipo: 'ver', consulta: { id } })} />}
+
+      {vista === 'consultas' && <div className="card">
         <div className="fila" style={{ marginBottom: 14 }}>
           <label className="campo" style={{ width: 150 }}>Desde<input type="date" value={filtros.desde} onChange={f('desde')} /></label>
           <label className="campo" style={{ width: 150 }}>Hasta<input type="date" value={filtros.hasta} onChange={f('hasta')} /></label>
@@ -60,10 +68,10 @@ export default function Consultas() {
         <div className="tabla-wrap">
           <table className="tabla">
             <thead>
-              <tr><th>Fecha</th><th>Horario</th><th>Paciente</th><th>Síntomas</th><th>Medicamento</th><th>Resultado</th><th>Atendió</th><th /></tr>
+              <tr><th>Fecha</th><th>Horario</th><th>Paciente</th><th>Síntomas</th><th>Medicamento</th><th>Resultado</th><th>Incapacidad</th><th>Atendió</th><th /></tr>
             </thead>
             <tbody>
-              {lista.length === 0 && <tr><td colSpan={8} className="muted" style={{ textAlign: 'center', padding: 24 }}>Sin consultas en el periodo.</td></tr>}
+              {lista.length === 0 && <tr><td colSpan={9} className="muted" style={{ textAlign: 'center', padding: 24 }}>Sin consultas en el periodo.</td></tr>}
               {lista.map((c) => (
                 <tr key={c.id}>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtFecha(c.fecha)}</td>
@@ -79,6 +87,16 @@ export default function Consultas() {
                       {RESULTADOS_CONSULTA[c.resultado]}
                     </span>
                   </td>
+                  <td>
+                    {c.incapacidad ? (
+                      <>
+                        <span className={`pill ${c.incapacidad.estado}`}>{ESTADOS_INCAPACIDAD[c.incapacidad.estado]}</span>
+                        <div className="muted" style={{ fontSize: 11 }}>
+                          {c.incapacidad.dias} día(s){c.incapacidad.estado !== 'solicitado' && c.incapacidad.revisado_por_nombre ? ` · ${c.incapacidad.revisado_por_nombre}` : ''}
+                        </div>
+                      </>
+                    ) : <span className="muted">—</span>}
+                  </td>
                   <td className="muted">{c.medico_nombre}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button className="icon-btn" title="Ver" onClick={() => setModal({ tipo: 'ver', consulta: c })}><Eye size={16} /></button>{' '}
@@ -90,7 +108,7 @@ export default function Consultas() {
             </tbody>
           </table>
         </div>
-      </div>
+      </div>}
 
       {(modal?.tipo === 'nueva' || modal?.tipo === 'editar') && (
         <ConsultaModal consulta={modal.consulta} onClose={() => setModal(null)} onSaved={() => { setModal(null); cargar() }} />

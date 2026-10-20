@@ -54,15 +54,29 @@ def puede_validar(user: Usuario, i: Incapacidad) -> bool:
     return i.aprobador_id == user.id or admin_permite(user, i.usuario.sede_id if i.usuario else None)
 
 
-def aplicar(db: Session, c: ConsultaMedica, data: IncapacidadIn | None, paciente: Usuario, medico: Usuario) -> bool:
-    """Crea, actualiza o quita la incapacidad de la consulta. Devuelve True si hay que avisar al jefe."""
+def texto(i: Incapacidad) -> str:
+    """Resumen sin datos clínicos para la bitácora del servicio médico."""
+    partes = [f"incapacidad {i.id}" if i.id else "incapacidad", f"{_fmt(i.fecha_inicio)} al {_fmt(i.fecha_fin)} ({i.dias} día(s))",
+              TIPOS.get(i.tipo, i.tipo)]
+    if i.folio:
+        partes.append(f"folio {i.folio}")
+    return " · ".join(partes)
+
+
+def aplicar(db: Session, c: ConsultaMedica, data: IncapacidadIn | None, paciente: Usuario,
+            medico: Usuario) -> tuple[str | None, str | None]:
+    """Crea, actualiza o quita la incapacidad de la consulta.
+
+    Devuelve (evento, resumen): "nueva" (hay que avisar al jefe), "modificada", "quitada" o (None, None)."""
     actual = c.incapacidad
     if data is None:
         if actual is not None:
             if actual.estado != SOLICITADO:
                 raise HTTPException(400, "La incapacidad ya fue revisada por el jefe; no se puede quitar de la consulta.")
+            resumen = texto(actual)
             c.incapacidad = None
-        return False
+            return "quitada", resumen
+        return None, None
     if data.fecha_fin < data.fecha_inicio:
         raise HTTPException(422, "La fecha final de la incapacidad no puede ser anterior a la inicial.")
     dias = (data.fecha_fin - data.fecha_inicio).days + 1
@@ -74,15 +88,16 @@ def aplicar(db: Session, c: ConsultaMedica, data: IncapacidadIn | None, paciente
         if actual.estado != SOLICITADO:
             if any(getattr(actual, k) != v for k, v in valores.items()):
                 raise HTTPException(400, "La incapacidad ya fue revisada por el jefe; ya no se puede modificar.")
-            return False
+            return None, None
+        cambio = any(getattr(actual, k) != v for k, v in valores.items())
         for k, v in valores.items():
             setattr(actual, k, v)
         actual.usuario_id = paciente.id
         actual.aprobador_id = paciente.jefe_id if paciente.jefe_id != paciente.id else None
-        return False
+        return ("modificada", texto(actual)) if cambio else (None, None)
     c.incapacidad = Incapacidad(usuario_id=paciente.id, medico_id=medico.id, estado=SOLICITADO,
                                 aprobador_id=paciente.jefe_id if paciente.jefe_id != paciente.id else None, **valores)
-    return True
+    return "nueva", None
 
 
 def revisar(db: Session, i: Incapacidad, actor: Usuario, validar: bool, motivo: str | None = None,

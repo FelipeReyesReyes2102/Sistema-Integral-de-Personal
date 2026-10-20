@@ -261,12 +261,15 @@ export default function Solicitudes({ modo = 'jefe' }) {
         </Modal>
       )}
       {rechazo && (
-        <Modal titulo="Rechazar solicitud" onClose={() => setRechazo(null)}
+        <Modal titulo={tab === 'incapacidades' ? 'Rechazar incapacidad' : 'Rechazar solicitud'} onClose={() => setRechazo(null)}
           pie={<>
             <button className="btn" onClick={() => setRechazo(null)}>Cancelar</button>
-            <button className="btn btn-danger" onClick={() => ejecutar(`/${tab}/${rechazo.s.id}/rechazar`, { motivo: rechazo.motivo })}>Rechazar</button>
+            <button className="btn btn-danger" disabled={tab === 'incapacidades' && !rechazo.motivo.trim()}
+              onClick={() => ejecutar(`/${tab}/${rechazo.s.id}/rechazar`, { motivo: rechazo.motivo })}>Rechazar</button>
           </>}>
-          <p>Solicitud de <b>{rechazo.s.usuario_nombre}</b></p>
+          <p>{tab === 'incapacidades' ? 'Incapacidad' : 'Solicitud'} de <b>{rechazo.s.usuario_nombre}</b>
+            {tab === 'incapacidades' && <span className="muted"> · {fmtFecha(rechazo.s.fecha_inicio)} → {fmtFecha(rechazo.s.fecha_fin)} ({rechazo.s.dias} día(s)). Se notificará a GH y quedará en la bitácora del servicio médico.</span>}
+          </p>
           <label className="campo">Motivo del rechazo
             <textarea rows={3} value={rechazo.motivo} onChange={(e) => setRechazo({ ...rechazo, motivo: e.target.value })} />
           </label>
@@ -281,6 +284,9 @@ export default function Solicitudes({ modo = 'jefe' }) {
           <Modal titulo="Validar incapacidad" onClose={() => setValidarInc(null)}
             pie={<>
               <button className="btn" onClick={() => setValidarInc(null)}>Cancelar</button>
+              <button className="btn btn-danger" onClick={() => { setValidarInc(null); setRechazo({ s: v.i, motivo: '' }) }}>
+                <X size={14} /> Rechazar
+              </button>
               <button className="btn btn-success" disabled={!dias}
                 onClick={() => ejecutar(`/incapacidades/${v.i.id}/validar`, {
                   fecha_inicio: cambio ? v.fecha_inicio : null, fecha_fin: cambio ? v.fecha_fin : null, comentario: v.comentario.trim() || null,
