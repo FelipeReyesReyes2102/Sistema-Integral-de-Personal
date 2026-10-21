@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
-import { AlarmClock, Ban, DoorOpen, Footprints, Laptop, RefreshCw, Search, Send } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { AlarmClock, Ban, CheckCircle2, DoorOpen, Footprints, Hourglass, Laptop, MessageSquare, RefreshCw, Search, Send, XCircle } from 'lucide-react'
 import { api } from '../api'
 import Avatar from '../components/Avatar'
 import BuscadorPaciente from '../components/BuscadorPaciente'
-import { CATEGORIAS, ESTADOS, fmtFecha } from '../utils'
+import { CATEGORIAS, fmtFecha } from '../utils'
 
 const ahoraHHMM = () => new Date().toTimeString().slice(0, 5)
 const minutos = (a, b) => {
@@ -90,6 +90,25 @@ function PermisosHoy() {
   )
 }
 
+// Estado de la solicitud de acceso a planta, tal como lo necesita caseta
+function Acceso({ r }) {
+  if (r.estado === 'validado') {
+    return <div className="acceso ok"><CheckCircle2 size={18} /> <b>ACCESO AUTORIZADO</b><span>{r.autorizo}{r.observaciones ? ` · "${r.observaciones}"` : ''}</span></div>
+  }
+  if (r.estado === 'rechazado') {
+    return <div className="acceso no"><XCircle size={18} /> <b>ACCESO DENEGADO</b><span>{r.autorizo}{r.motivo_rechazo ? ` · ${r.motivo_rechazo}` : ''}</span></div>
+  }
+  if (r.estado === 'cancelado') return <div className="acceso cancelado"><Ban size={18} /> <b>Cancelado</b></div>
+  return (
+    <div className="acceso espera">
+      <Hourglass size={18} /> <b>Esperando autorización</b>
+      <span>de {r.va_a_gh ? `GH (${r.aprobador_nombre || 'Gestión Humana'})` : r.aprobador_nombre}
+        {r.teams ? (r.teams.estado === 'enviado' ? ' · enviada a Teams' : r.teams.estado === 'error' ? ' · error al enviar a Teams' : ' · enviando a Teams…')
+          : ' · en SIP-O y por correo'}</span>
+    </div>
+  )
+}
+
 function Retardos() {
   const [emp, setEmp] = useState(null)
   const [hora, setHora] = useState(ahoraHHMM())
@@ -98,8 +117,24 @@ function Retardos() {
   const [lista, setLista] = useState([])
   const [msg, setMsg] = useState(null)
   const [enviando, setEnviando] = useState(false)
-  const cargar = () => api('/caseta/retardos').then(setLista).catch(() => {})
-  useEffect(() => { cargar() }, [])
+  const [aviso, setAviso] = useState(null)
+  const previos = useRef({})
+  // Se consulta cada 15 s: el jefe puede responder en SIP-O o en Teams y caseta lo ve casi al momento
+  const cargar = () => api('/caseta/retardos').then((l) => {
+    const cambios = l.filter((r) => previos.current[r.id] === 'solicitado' && r.estado !== 'solicitado' && r.estado !== 'cancelado')
+    if (cambios.length) {
+      const c = cambios[0]
+      setAviso({ ok: c.estado === 'validado', t: `${c.nombre}: ${c.estado === 'validado' ? 'acceso AUTORIZADO' : 'acceso DENEGADO'} por ${c.autorizo || 'su jefe'}.` })
+    }
+    previos.current = Object.fromEntries(l.map((r) => [r.id, r.estado]))
+    setLista(l)
+  }).catch(() => {})
+  useEffect(() => {
+    cargar()
+    const t = setInterval(cargar, 15000)
+    return () => clearInterval(t)
+  }, [])
+  const esperando = lista.filter((r) => r.estado === 'solicitado').length
   useEffect(() => { setHora(ahoraHHMM()); setGh(false) }, [emp?.id])
 
   const retraso = emp?.entrada_hoy ? minutos(emp.entrada_hoy, hora) : 0
@@ -110,7 +145,7 @@ function Retardos() {
     setEnviando(true)
     try {
       const r = await api('/caseta/retardos', { method: 'POST', body: { usuario_id: emp.id, hora_llegada: hora, motivo: motivo.trim() || null, enviar_gh: gh } })
-      setMsg({ ok: true, t: `Retardo de ${r.nombre} registrado (${retraso} min). Se envió a ${r.va_a_gh ? 'GH' : r.aprobador_nombre} para validarlo.` })
+      setMsg({ ok: true, t: `Solicitud de acceso de ${r.nombre} enviada a ${r.va_a_gh ? `GH (${r.aprobador_nombre || 'Gestión Humana'})` : r.aprobador_nombre}${r.teams ? ' en SIP-O y Teams' : ''}. Su respuesta aparecerá abajo.` })
       setEmp(null)
       setMotivo('')
       cargar()
@@ -134,10 +169,10 @@ function Retardos() {
   return (
     <>
       <div className="card">
-        <b style={{ fontSize: 16 }}>Registrar retardo</b>
+        <b style={{ fontSize: 16 }}>Retardo: solicitar acceso a planta</b>
         <p className="muted" style={{ marginTop: 4, fontSize: 13 }}>
-          Busca a la persona que llegó tarde. Se crea un permiso de <b>llegada tarde</b> que valida su jefe inmediato; si no tiene jefe o
-          el jefe no está en planta, lo valida GH.
+          Si alguien llega después de su hora de entrada, regístralo aquí: se pide a su <b>jefe inmediato</b> que autorice el acceso a
+          planta, en SIP-O y en <b>Teams</b>. Si no tiene jefe o el jefe no está en planta, se pide a GH. Queda como permiso de llegada tarde.
         </p>
         <BuscadorPaciente value={emp} onChange={setEmp} endpoint="/caseta/empleados"
           placeholder="Nombre, apellido o número de nómina…"
@@ -161,31 +196,38 @@ function Retardos() {
               <span className="muted">Se enviará a: <b>{destino}</b></span>
               <div className="espacio" />
               <button className="btn btn-primary" onClick={registrar} disabled={enviando || !emp.entrada_hoy || retraso <= 0}>
-                <Send size={15} /> {enviando ? 'Registrando…' : 'Registrar retardo'}
+                <Send size={15} /> {enviando ? 'Enviando…' : 'Solicitar acceso'}
               </button>
             </div>
           </div>
         )}
         {msg && <div className={`alerta ${msg.ok ? 'ok' : 'error'}`} style={{ marginTop: 12 }}>{msg.t}</div>}
       </div>
+      {aviso && (
+        <div className={`alerta ${aviso.ok ? 'ok' : 'error'} acceso-aviso`} role="alert" onClick={() => setAviso(null)}>
+          {aviso.ok ? <CheckCircle2 size={18} /> : <XCircle size={18} />} {aviso.t} <span className="muted">(clic para cerrar)</span>
+        </div>
+      )}
 
       <div className="card" style={{ marginTop: 16 }}>
-        <b>Retardos registrados hoy</b>
+        <div className="fila">
+          <b>Retardos de hoy</b>
+          {esperando > 0 && <span className="pill solicitado">{esperando} esperando autorización</span>}
+          <div className="espacio" />
+          <span className="muted" style={{ fontSize: 12 }}>Se actualiza cada 15 s</span>
+          <button className="btn btn-sm" onClick={cargar}><RefreshCw size={14} /> Actualizar</button>
+        </div>
         <div className="tabla-wrap" style={{ marginTop: 10 }}>
           <table className="tabla">
-            <thead><tr><th>Empleado</th><th>Entrada</th><th>Llegó</th><th>Valida</th><th>Estado</th><th /></tr></thead>
+            <thead><tr><th>Empleado</th><th>Entrada</th><th>Llegó</th><th>Acceso a planta</th><th /></tr></thead>
             <tbody>
-              {lista.length === 0 && <tr><td colSpan={6} className="muted" style={{ textAlign: 'center' }}>Sin retardos registrados hoy.</td></tr>}
+              {lista.length === 0 && <tr><td colSpan={5} className="muted" style={{ textAlign: 'center' }}>Sin retardos registrados hoy.</td></tr>}
               {lista.map((r) => (
                 <tr key={r.id}>
                   <td>{r.nombre}<div className="muted" style={{ fontSize: 12 }}>No. {r.numero_empleado}{r.departamento ? ` · ${r.departamento}` : ''}</div></td>
                   <td>{r.hora_inicio}</td>
                   <td><b>{r.hora_fin}</b> <span className="muted">({minutos(r.hora_inicio, r.hora_fin)} min)</span></td>
-                  <td className="muted">{r.estado === 'solicitado' ? (r.va_a_gh ? 'GH' : r.aprobador_nombre) : r.autorizo}</td>
-                  <td>
-                    <span className={`pill ${r.estado}`}>{ESTADOS[r.estado]}</span>
-                    {r.motivo_rechazo && <div style={{ fontSize: 11, color: 'var(--danger)' }}>{r.motivo_rechazo}</div>}
-                  </td>
+                  <td><Acceso r={r} />{r.teams?.nota && r.estado === 'solicitado' && <div className="muted" style={{ fontSize: 11 }}><MessageSquare size={11} /> {r.teams.nota}</div>}</td>
                   <td>{r.estado === 'solicitado' && (
                     <button className="icon-btn rojo" title="Cancelar (registro equivocado)" onClick={() => cancelar(r)}><Ban size={16} /></button>
                   )}</td>

@@ -52,9 +52,10 @@ def test_caseta_retardos_y_permisos_del_dia(monkeypatch):
     ret = r.json()
     assert ret["estado"] == "solicitado" and ret["aprobador_nombre"] == "Laura Martínez" and ret["registrado_por"] == "Guardia Caseta"
     assert abs(ret["horas"] - 25 / 60) < 0.02
-    assert any("laura@empresa.com" in d and "Retardo por validar" in a for d, a in enviados)
+    assert any("laura@empresa.com" in d and "Acceso a planta" in a for d, a in enviados)
     assert cas.post("/api/caseta/retardos", json={"usuario_id": carlos["id"], "hora_llegada": llegada}).status_code == 409
     assert any(x["id"] == ret["id"] for x in cas.get("/api/caseta/retardos").json())
+    assert "Acceso a planta por retardo" in ret["motivo"] and "Tráfico" in ret["motivo"]
 
     # El jefe lo ve por aprobar, indica el tiempo en nómina y lo valida
     laura = entrar("laura@empresa.com")
@@ -68,11 +69,14 @@ def test_caseta_retardos_y_permisos_del_dia(monkeypatch):
     assert cas.post(f"/api/caseta/retardos/{ret['id']}/cancelar").status_code == 400  # ya revisado
 
     # "El jefe no está en planta": se envía a GH
-    ana = next(e for e in cas.get("/api/caseta/empleados", params={"q": "ana"}).json() if e["nombre"].startswith("Ana"))
+    # (María tiene como jefa a Laura, que no es GH)
+    ana = next(e for e in cas.get("/api/caseta/empleados", params={"q": "maria"}).json() if e["jefe_nombre"] == "Laura Martínez")
+    assert ana["entrada_hoy"], ana
     if ana["entrada_hoy"]:
         r = cas.post("/api/caseta/retardos", json={"usuario_id": ana["id"], "hora_llegada": _despues(ana["entrada_hoy"], 10),
                                                    "enviar_gh": True})
         assert r.status_code == 201 and r.json()["va_a_gh"] is True
+        assert r.json()["aprobador_nombre"] == "Administrador RH"   # GH con correo: también le llega a Teams
         assert any("admin@empresa.com" in d for d, _ in enviados)
         assert cas.post(f"/api/caseta/retardos/{r.json()['id']}/cancelar").json()["estado"] == "cancelado"
         _limpiar(r.json()["id"])

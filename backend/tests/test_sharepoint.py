@@ -260,3 +260,33 @@ def test_solo_super_admin_configura_integraciones():
     gh = login("admin@empresa.com", "Admin123")
     assert gh.get("/api/sharepoint").status_code == 403
     assert gh.get("/api/aprobacion-flujo").status_code == 403
+
+
+def test_retardo_de_caseta_se_autoriza_en_teams(graph, monkeypatch):
+    """Caseta registra el retardo, llega a la lista con aprobación en Teams y caseta ve la autorización del jefe."""
+    from app import correo
+    from app.routers import caseta as caseta_router
+    from tests.test_caseta import _caseta, _despues, _limpiar
+    monkeypatch.setattr(correo, "enviar", lambda *a: None)
+    adm = super_login()
+    cfg = adm.put("/api/sharepoint/permisos/conectar", json={"url": URL}).json()
+    teams = {"aprobacion_teams": True, "col_decision": "Decision", "col_comentario": "ComentarioTeams",
+             "col_respondio": "Respondio", "cuenta_flujo": "Flujos@o-tek.com"}
+    r = adm.put("/api/sharepoint/permisos", json={"activo": True, "mapeo": cfg["mapeo"], "valores": cfg["valores"], **teams})
+    assert r.status_code == 200, r.text
+    cas = _caseta()
+    carlos = next(e for e in cas.get("/api/caseta/empleados", params={"q": "carlos perez"}).json())
+    ret = cas.post("/api/caseta/retardos", json={"usuario_id": carlos["id"], "hora_llegada": _despues(carlos["entrada_hoy"], 15)}).json()
+    sharepoint.procesar_pendientes()
+    item_id = next(k for k, v in graph["items"].items() if v["Title"] == f"PER-{ret['id']}")
+    assert graph["items"][item_id]["CorreoJefe"] == "laura@empresa.com"
+    caseta_router._ultima_revision[0] = 0
+    fila = next(x for x in cas.get("/api/caseta/retardos").json() if x["id"] == ret["id"])
+    assert fila["estado"] == "solicitado" and fila["teams"]["estado"] == "enviado"
+    # El jefe autoriza en Teams; caseta lo ve al consultar (sin esperar la revisión de cada minuto)
+    graph["items"][item_id].update({"Decision": "Approve", "Respondio": "laura@empresa.com", "ComentarioTeams": "Que pase"})
+    caseta_router._ultima_revision[0] = 0
+    fila = next(x for x in cas.get("/api/caseta/retardos").json() if x["id"] == ret["id"])
+    assert fila["estado"] == "validado" and fila["autorizo"] == "Laura Martínez" and fila["observaciones"] == "Que pase"
+    _limpiar(ret["id"])
+    adm.delete("/api/sharepoint/permisos")

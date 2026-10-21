@@ -282,8 +282,8 @@ a { color: var(--primary); }
         <li><span>Pulsa <span class="ui">Validar</span> o <span class="ui">Rechazar</span>. Al rechazar puedes escribir el motivo.</span></li>
       </ol>
       <p>Si tu sede usa <b>jefe + GH</b>, tu aprobación deja la solicitud como <span class="estado e-jefe">Aprobada por el jefe</span> y sale de tu bandeja; GH la valida.</p>
-      <h3>Retardos de caseta</h3>
-      <p>Si caseta registra que alguien de tu equipo llegó tarde, te llega un correo y el permiso de llegada tarde aparece en <span class="ui">Por aprobar</span> con la etiqueta <i>Caseta</i>. Al validarlo indica cómo se considera el tiempo en nómina; también puedes rechazarlo.</p>
+      <h3>Acceso a planta por retardo</h3>
+      <p>Si alguien de tu equipo llega tarde, caseta te pide autorizar su acceso: te llega una <b>aprobación en Teams</b> (y un correo) y la solicitud aparece en <span class="ui">Por aprobar</span> con la etiqueta <i>Caseta</i>. Responde lo antes posible: la persona espera en caseta. En Teams pulsa <i>Aprobar</i> o <i>Rechazar</i> (con comentario); en SIP-O, al validar, indica cómo se considera el tiempo en nómina. Caseta ve tu respuesta al momento.</p>
       <h3>Validar incapacidades</h3>
       <p>Cuando el servicio médico genera una incapacidad a alguien de tu equipo, te llega un correo y aparece en <span class="ui">Por aprobar</span> → <i>Incapacidades</i> con las fechas, los días, el tipo y el folio (sin información clínica). Al pulsar <span class="ui">Validar</span> puedes <b>ajustar los días</b> (desde y hasta) y dejar un comentario; se guardan también las fechas que registró el servicio médico. Si no procede, pulsa <span class="ui">Rechazar</span> (en la tabla o dentro de la ventana de validación) y escribe el motivo, que es obligatorio. GH recibe un aviso por correo y los días validados quedan en el calendario del colaborador.</p>
       <h3>Aprobar desde Teams</h3>
@@ -314,14 +314,16 @@ a { color: var(--primary); }
       <p>El personal de caseta tiene en el menú <b>Caseta → Permisos y retardos</b> (al entrar se abre directamente), con dos pestañas. El médico de planta y caseta solo usan su apartado: no piden vacaciones ni permisos en SIP-O.</p>
       <h3>Permisos de hoy</h3>
       <p>Lista de los permisos <b>validados</b> del día en tu sede, con foto, nómina y departamento: quién <i>entra tarde</i> (y a qué hora), quién <i>sale temprano</i>, quién <i>sale y regresa</i>, y quién está <b>fuera de planta todo el día</b> (home office u otros permisos por días). Se actualiza sola cada minuto; puedes buscar por nombre o nómina.</p>
-      <h3>Registrar un retardo</h3>
+      <h3>Retardo: solicitar acceso a planta</h3>
+      <p>Cuando alguien llega después de su hora de entrada, caseta pide a su jefe que autorice el acceso:</p>
       <ol class="pasos">
         <li><span>En <span class="ui">Retardos</span>, busca a la persona por nombre, apellido o nómina. Verás su hora de entrada de hoy y su jefe.</span></li>
         <li><span>Revisa la <b>hora de llegada</b> (se llena con la hora actual) y, si quieres, escribe el motivo.</span></li>
         <li><span>Si su jefe inmediato no está en planta, marca <span class="ui">El jefe inmediato no está en planta: enviar a GH</span>.</span></li>
-        <li><span>Pulsa <span class="ui">Registrar retardo</span>. Se crea un permiso de llegada tarde que valida el jefe (o GH) y se le avisa por correo.</span></li>
+        <li><span>Pulsa <span class="ui">Solicitar acceso</span>. Al jefe (o a GH) le llega la aprobación en <b>Teams</b>, un correo y la solicitud en SIP-O.</span></li>
+        <li><span>En la tabla <b>Retardos de hoy</b> verás <i>Esperando autorización</i> y, en cuanto responda, <b>ACCESO AUTORIZADO</b> o <b>ACCESO DENEGADO</b> con su nombre y comentario. Se actualiza cada 15 segundos y aparece un aviso al llegar la respuesta.</span></li>
       </ol>
-      <p>Abajo ves los retardos del día con su estado. Si te equivocaste, puedes cancelar uno mientras siga pendiente.</p>
+      <p>El retardo queda como permiso de llegada tarde del empleado. Si te equivocaste, puedes cancelarlo mientras siga esperando.</p>
     </section>
 
     <section id="faq">

@@ -858,3 +858,12 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .caseta-nombre { font-weight: 600; }
 .caseta-mov { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 14px; }
 @media (max-width: 640px) { .caseta-item { flex-wrap: wrap; } .caseta-item > div:last-child { text-align: left !important; width: 100%; } }
+
+/* Caseta: estado del acceso a planta */
+.acceso { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; padding: 6px 10px; border-radius: 8px; font-size: 13px; }
+.acceso > span { color: var(--muted); font-size: 12px; flex-basis: 100%; padding-left: 26px; }
+.acceso.ok { background: #e7f6ec; color: #1e7a3c; }
+.acceso.no { background: #fdecec; color: #b3261e; }
+.acceso.espera { background: #fff6e0; color: #8a5a00; }
+.acceso.cancelado { background: #f1f3f6; color: var(--muted); }
+.acceso-aviso { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 15px; cursor: pointer; }

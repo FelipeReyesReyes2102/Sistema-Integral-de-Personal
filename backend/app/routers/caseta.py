@@ -2,9 +2,12 @@
 
 - Los usuarios de caseta (y GH) ven los permisos validados del día de su sede: quién sale, entra tarde o sale y regresa,
   y quién está fuera todo el día (home office u otros permisos por días).
-- Registran los retardos: se crea un permiso de llegada tarde "Solicitado" que valida el jefe inmediato del empleado.
-  Si el empleado no tiene jefe, o el jefe no está en planta, se envía a GH.
+- Registran los retardos como solicitud de acceso a planta: se crea un permiso de llegada tarde "Solicitado" que
+  autoriza el jefe inmediato en SIP-O o en Teams (lista de SharePoint con aprobación en Teams). Si el empleado no tiene
+  jefe, o el jefe no está en planta, se asigna a GH de la sede. Caseta ve la respuesta casi en tiempo real.
 """
+import threading
+import time as _reloj
 from datetime import date, time
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -17,7 +20,7 @@ from ..busqueda import buscar_usuarios
 from ..database import SessionLocal, get_db
 from ..incapacidades import gh_de_sede
 from ..models import (
-    ROLES_SIN_VACACIONES, CANCELADO, ESTADOS_ACTIVOS, ROL_CASETA, SOLICITADO, VALIDADO, NotificacionCorreo, Permiso, Usuario, es_admin,
+    ROL_ADMIN, ROLES_ADMIN, EnvioSharePoint, ListaSharePoint, ROLES_SIN_VACACIONES, CANCELADO, ESTADOS_ACTIVOS, ROL_CASETA, SOLICITADO, VALIDADO, NotificacionCorreo, Permiso, Usuario, es_admin,
 )
 from ..security import ahora, auditar, get_current_user
 from ..sedes import ahora_en, sedes_visibles
@@ -42,6 +45,18 @@ def _persona(u: Usuario) -> dict:
             "turno": u.turno.nombre if u.turno else None, "sede_nombre": u.sede.nombre if u.sede else None}
 
 
+def _teams(db: Session, p: Permiso) -> dict | None:
+    """Estado del envío a Teams (lista de SharePoint con aprobación en Teams de la sede), si está configurado."""
+    lista = db.scalar(select(ListaSharePoint).where(ListaSharePoint.sede_id == p.usuario.sede_id, ListaSharePoint.tipo == "permisos",
+                                                    ListaSharePoint.activo.is_(True), ListaSharePoint.aprobacion_teams.is_(True)))
+    if lista is None:
+        return None
+    env = db.scalar(select(EnvioSharePoint).where(EnvioSharePoint.lista_id == lista.id, EnvioSharePoint.registro_id == p.id))
+    if env is None:
+        return {"estado": "pendiente", "nota": None}
+    return {"estado": "enviado" if env.item_id else env.estado, "nota": env.error or env.decision_nota}
+
+
 def _fila(db: Session, p: Permiso) -> dict:
     u = p.usuario
     por_dias = tipos_permiso.por_dias(db, u.sede_id, p.tipo)
@@ -51,9 +66,12 @@ def _fila(db: Session, p: Permiso) -> dict:
             "hora_inicio": None if por_dias else p.hora_inicio.strftime("%H:%M"),
             "hora_fin": None if por_dias else p.hora_fin.strftime("%H:%M"), "horas": p.horas,
             "motivo": p.motivo, "autorizo": p.revisado_por.nombre if p.revisado_por else None,
-            "aprobador_nombre": p.aprobador.nombre if p.aprobador else None, "va_a_gh": p.aprobador_id is None,
+            "aprobador_nombre": p.aprobador.nombre if p.aprobador else None,
+            "va_a_gh": p.aprobador is None or (p.aprobador.rol in ROLES_ADMIN and p.aprobador_id != u.jefe_id),
             "registrado_por": p.registrado_por.nombre if p.registrado_por else None,
-            "motivo_rechazo": p.motivo_rechazo}
+            "motivo_rechazo": p.motivo_rechazo, "observaciones": p.observaciones,
+            "fecha_revision": p.fecha_revision.isoformat() if p.fecha_revision else None,
+            "teams": _teams(db, p) if p.registrado_por_id else None}
 
 
 @router.get("/hoy")
@@ -97,16 +115,16 @@ def _correo_de(u: Usuario | None) -> str | None:
 
 def mensaje_retardo(p: Permiso) -> tuple[str, str, str]:
     u = p.usuario
-    destino = "GH" if p.aprobador_id is None else "tu validación"
-    asunto = f"[SIP-O] Retardo por validar · {u.nombre} · {p.fecha:%d/%m/%Y} {p.hora_fin:%H:%M}"
+    destino = "GH" if p.aprobador_id is None else "tu autorización"
+    asunto = f"[SIP-O] Acceso a planta por retardo · {u.nombre} · {p.fecha:%d/%m/%Y} {p.hora_fin:%H:%M}"
     filas = [("Empleado", u.nombre), ("No. de nómina", u.numero_empleado), ("Departamento", u.departamento or ""),
              ("Fecha", f"{p.fecha:%d/%m/%Y}"), ("Hora de entrada", f"{p.hora_inicio:%H:%M}"),
              ("Hora de llegada", f"{p.hora_fin:%H:%M} ({p.horas:g} h de retardo)"), ("Motivo", p.motivo or ""),
              ("Registró en caseta", p.registrado_por.nombre if p.registrado_por else "")]
-    nota = (f"Caseta registró un retardo que queda como permiso de llegada tarde pendiente de {destino}. "
-            "Entra a SIP-O → Por aprobar (o Todas las solicitudes) → Permisos para validarlo o rechazarlo.")
-    html_ = correo._plantilla("RETARDO POR VALIDAR", "#a35d00", filas, nota, encabezado="SIP-O · CASETA")
-    texto = "RETARDO POR VALIDAR\n\n" + "\n".join(f"{k}: {v}" for k, v in filas if v) + f"\n\n{nota}\n"
+    nota = (f"La persona está en caseta esperando acceso a planta. Queda como permiso de llegada tarde pendiente de {destino}: "
+            "autorízalo o recházalo en Teams o en SIP-O → Por aprobar → Permisos. Caseta ve tu respuesta al momento.")
+    html_ = correo._plantilla("ACCESO A PLANTA POR RETARDO", "#a35d00", filas, nota, encabezado="SIP-O · CASETA")
+    texto = "ACCESO A PLANTA POR RETARDO\n\n" + "\n".join(f"{k}: {v}" for k, v in filas if v) + f"\n\n{nota}\n"
     return asunto, html_, texto
 
 
@@ -157,24 +175,58 @@ def registrar_retardo(data: RetardoIn, tareas: BackgroundTasks, db: Session = De
         raise HTTPException(409, f"{emp.nombre} ya tiene un permiso de llegada tarde hoy.")
     jefe = emp.jefe if emp.jefe and emp.jefe.activo and emp.jefe_id != emp.id else None
     a_gh = data.enviar_gh or jefe is None
+    aprobador = _gh_aprobador(db, emp) if a_gh else jefe
+    motivo = (data.motivo or "").strip()
+    texto = (f"Acceso a planta por retardo (llegó {data.hora_llegada:%H:%M}, entrada {entrada:%H:%M}). "
+             f"Registrado en caseta por {user.nombre}." + (f" Motivo: {motivo}" if motivo else ""))
     p = Permiso(usuario_id=emp.id, tipo=TIPO_RETARDO, fecha=dia, hora_inicio=entrada, hora_fin=data.hora_llegada,
-                horas=reglas.horas_permiso(entrada, data.hora_llegada),
-                motivo=(data.motivo or "").strip() or "Retardo registrado en caseta", departamento=emp.departamento,
-                aprobador_id=None if a_gh else jefe.id, estado=SOLICITADO, registrado_por_id=user.id)
+                horas=reglas.horas_permiso(entrada, data.hora_llegada), motivo=texto, departamento=emp.departamento,
+                aprobador_id=aprobador.id if aprobador else None, estado=SOLICITADO, registrado_por_id=user.id)
     db.add(p)
     db.flush()
     auditar(db, "retardo_registrado", usuario_id=emp.id, actor_id=user.id,
             detalle=f"permiso {p.id} · {dia:%d/%m/%Y} entrada {entrada:%H:%M} llegada {data.hora_llegada:%H:%M}"
-                    f" · {'GH' if a_gh else 'jefe ' + jefe.nombre}")
+                    f" · {'GH' if a_gh else 'jefe'} {aprobador.nombre if aprobador else ''}".rstrip())
     db.commit()
     tareas.add_task(notificar_retardo, p.id)
     return _fila(db, p)
 
 
+def _gh_aprobador(db: Session, emp: Usuario) -> Usuario | None:
+    """GH de la sede que recibe el retardo (en la app y en Teams) cuando no hay jefe o no está en planta."""
+    candidatos = [u for u in gh_de_sede(db, emp.sede_id) if _correo_de(u) and u.id != emp.id]
+    candidatos.sort(key=lambda u: (u.rol != ROL_ADMIN, u.nombre))
+    return candidatos[0] if candidatos else None
+
+
+_ultima_revision = [0.0]
+_candado_revision = threading.Lock()
+
+
+def _revisar_teams_pronto():
+    """Lee las decisiones de Teams al momento (como máximo cada 15 s) para que caseta vea la respuesta del jefe."""
+    if _reloj.monotonic() - _ultima_revision[0] < 15 or not _candado_revision.acquire(blocking=False):
+        return
+    try:
+        _ultima_revision[0] = _reloj.monotonic()
+        from .. import sharepoint
+        sharepoint.revisar_decisiones()
+    except Exception:  # noqa: BLE001 - nunca debe impedir mostrar la lista
+        import logging
+        logging.getLogger("sip.caseta").warning("No se pudieron revisar las decisiones de Teams", exc_info=True)
+    finally:
+        _candado_revision.release()
+
+
 @router.get("/retardos")
 def retardos(fecha: date | None = None, db: Session = Depends(get_db), user: Usuario = Depends(require_caseta)):
-    """Retardos registrados en caseta en el día, con su estado (pendiente, validado o rechazado)."""
+    """Retardos registrados en caseta en el día, con su estado (esperando, autorizado o denegado)."""
     dia = fecha or ahora_en(user.sede).date()
+    esperando = db.scalar(select(func.count(Permiso.id)).where(Permiso.registrado_por_id.is_not(None), Permiso.fecha == dia,
+                                                                 Permiso.estado == SOLICITADO)) or 0
+    if esperando:
+        _revisar_teams_pronto()
+        db.expire_all()
     usuarios = select(Usuario.id).where(Usuario.sede_id.in_([x for x in _sedes(db, user) if x is not None] or [-1]))
     q = (select(Permiso).where(Permiso.registrado_por_id.is_not(None), Permiso.fecha == dia, Permiso.usuario_id.in_(usuarios))
          .order_by(Permiso.hora_fin.desc()))
