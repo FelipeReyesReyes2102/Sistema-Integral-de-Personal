@@ -89,16 +89,27 @@ def hoy(fecha: date | None = None, db: Session = Depends(get_db), user: Usuario 
 
 
 @router.get("/empleados")
-def empleados(q: str | None = None, db: Session = Depends(get_db), user: Usuario = Depends(require_caseta)):
-    """Buscador de empleados de la sede para registrar un retardo; incluye su horario de entrada de hoy."""
+def empleados(q: str | None = None, con_permisos: bool = False, limite: int = 30, db: Session = Depends(get_db),
+              user: Usuario = Depends(require_caseta)):
+    """Buscador de empleados de la sede (sin acentos, por palabras, nombre/nómina/puesto/departamento/correo).
+
+    Incluye su horario de entrada de hoy y su jefe. Con `con_permisos` agrega sus permisos del día (validados y
+    pendientes) para la pestaña "Permisos de hoy"; ahí también puede buscarse uno mismo."""
     dia = ahora_en(user.sede).date()
     res = []
-    for u in buscar_usuarios(db, _sedes(db, user), q, excluir_id=user.id, limite=60):
+    for u in buscar_usuarios(db, _sedes(db, user), q, excluir_id=None if con_permisos else user.id, limite=max(limite, 1) * 2):
         if u.rol in ROLES_SIN_VACACIONES:  # médico y caseta no tienen permisos en el sistema
             continue
         h = horarios.horario_de(u.turno, dia)
-        res.append({**_persona(u), "id": u.id, "entrada_hoy": h["entrada"].strftime("%H:%M") if h else None,
-                    "jefe_nombre": u.jefe.nombre if u.jefe else None})
+        fila = {**_persona(u), "id": u.id, "entrada_hoy": h["entrada"].strftime("%H:%M") if h else None,
+                "salida_hoy": h["salida"].strftime("%H:%M") if h else None, "jefe_nombre": u.jefe.nombre if u.jefe else None}
+        if con_permisos:
+            q_p = select(Permiso).where(Permiso.usuario_id == u.id, Permiso.estado.in_((SOLICITADO, VALIDADO)),
+                                        Permiso.fecha <= dia, func.coalesce(Permiso.fecha_fin, Permiso.fecha) >= dia)
+            fila["permisos_hoy"] = [_fila(db, p) for p in db.scalars(q_p.order_by(Permiso.hora_inicio))]
+        res.append(fila)
+        if len(res) >= limite:
+            break
     return res
 
 

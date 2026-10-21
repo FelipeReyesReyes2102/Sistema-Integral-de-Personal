@@ -108,3 +108,15 @@ def test_super_administrador_ve_todas_las_pestanas():
     for ruta in ("/api/consultas/pacientes", "/api/consultas/bitacora", "/api/consultas?todos=true", "/api/caseta/hoy",
                  "/api/caseta/retardos", "/api/incapacidades?todos=true", "/api/bitacora?seccion=configuracion", "/api/pendientes"):
         assert su.get(ruta).status_code == 200, ruta
+
+
+def test_busqueda_de_caseta_sin_acentos_y_con_permisos_del_dia():
+    cas = _caseta()
+    r = cas.get("/api/caseta/empleados", params={"q": "perez carlos", "con_permisos": True}).json()
+    carlos = next(e for e in r if e["nombre"] == "Carlos Pérez")
+    assert carlos["entrada_hoy"] and carlos["permisos_hoy"] == []
+    assert any(e["nombre"] == "Laura Martínez" for e in cas.get("/api/caseta/empleados", params={"q": "MARTINEZ"}).json())
+    # En "Permisos de hoy" cada quien puede buscarse a sí mismo (GH, super administrador)
+    adm = entrar("admin@empresa.com", "Admin123")
+    assert any(e["nombre"] == "Administrador RH" for e in adm.get("/api/caseta/empleados", params={"q": "administrador", "con_permisos": True}).json())
+    assert not any(e["nombre"] == "Administrador RH" for e in adm.get("/api/caseta/empleados", params={"q": "administrador"}).json())

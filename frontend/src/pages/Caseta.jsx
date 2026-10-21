@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlarmClock, Ban, CheckCircle2, DoorOpen, Footprints, Hourglass, Laptop, MessageSquare, RefreshCw, Search, Send, XCircle } from 'lucide-react'
+import { AlarmClock, Ban, CheckCircle2, DoorOpen, Footprints, Hourglass, Laptop, MessageSquare, RefreshCw, Search, Send, X, XCircle } from 'lucide-react'
 import { api } from '../api'
 import Avatar from '../components/Avatar'
 import BuscadorPaciente from '../components/BuscadorPaciente'
@@ -31,9 +31,21 @@ function PermisosHoy() {
     const t = setInterval(cargar, 60000) // se actualiza solo cada minuto
     return () => clearInterval(t)
   }, [])
-  const filtra = (l) => l.filter((p) => !buscar || `${p.nombre} ${p.numero_empleado} ${p.departamento || ''}`.toLowerCase().includes(buscar.toLowerCase()))
-  const horas = filtra(datos?.por_horas || [])
-  const dias = filtra(datos?.por_dias || [])
+  // Búsqueda entre todo el personal de la sede (sin acentos, por palabras), con sus permisos del día
+  const [personas, setPersonas] = useState(null)
+  const [buscando, setBuscando] = useState(false)
+  useEffect(() => {
+    if (!buscar.trim()) { setPersonas(null); return undefined }
+    setBuscando(true)
+    const t = setTimeout(() => {
+      api('/caseta/empleados', { query: { q: buscar, con_permisos: true, limite: 20 } })
+        .then(setPersonas).catch((e) => setError(e.message)).finally(() => setBuscando(false))
+    }, 250)
+    return () => clearTimeout(t)
+  }, [buscar])
+  const enBusqueda = buscar.trim().length > 0
+  const horas = enBusqueda ? [] : datos?.por_horas || []
+  const dias = enBusqueda ? [] : datos?.por_dias || []
 
   return (
     <div className="card">
@@ -45,12 +57,41 @@ function PermisosHoy() {
         <div className="espacio" />
         <div className="bp-input" style={{ width: 260 }}>
           <Search size={16} />
-          <input value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar persona o nómina" />
+          <input value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar a cualquier persona (nombre o nómina)" />
+          {buscar && <button type="button" className="icon-btn plain" title="Limpiar" onClick={() => setBuscar('')}><X size={14} /></button>}
         </div>
         <button className="btn btn-sm" onClick={cargar}><RefreshCw size={14} /> Actualizar</button>
       </div>
       {error && <div className="alerta error">{error}</div>}
-      {datos && horas.length === 0 && dias.length === 0 && (
+      {enBusqueda && (
+        <div className="caseta-lista">
+          {buscando && !personas && <div className="muted" style={{ padding: 16, textAlign: 'center' }}>Buscando…</div>}
+          {personas && personas.length === 0 && (
+            <div className="muted" style={{ padding: 16, textAlign: 'center' }}>No se encontró a nadie con "{buscar}". Prueba con un apellido o el número de nómina.</div>
+          )}
+          {(personas || []).map((e) => (
+            <div key={e.id} className="caseta-item" style={{ borderLeftColor: e.permisos_hoy.some((x) => x.estado === 'validado') ? '#2e7d32' : '#c3cad6' }}>
+              <Avatar usuario={{ id: e.id, nombre: e.nombre, tiene_foto: e.tiene_foto }} tam={40} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="caseta-nombre">{e.nombre}</div>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  No. {e.numero_empleado}{e.departamento ? ` · ${e.departamento}` : ''}{e.turno ? ` · ${e.turno}` : ''}
+                  {e.entrada_hoy ? ` · hoy ${e.entrada_hoy}–${e.salida_hoy}` : ' · sin turno'}{e.jefe_nombre ? ` · Jefe: ${e.jefe_nombre}` : ''}
+                </div>
+                {e.permisos_hoy.length === 0 && <div className="caseta-mov muted">Sin permisos hoy</div>}
+                {e.permisos_hoy.map((p) => (
+                  <div key={p.id} className="caseta-mov">
+                    <span className={`pill ${p.estado}`}>{p.estado === 'validado' ? 'Autorizado' : 'Pendiente'}</span>
+                    <b>{p.tipo_nombre}</b>
+                    {p.por_dias ? <span>todo el día ({fmtFecha(p.fecha)} → {fmtFecha(p.fecha_fin)})</span> : <Movimiento p={p} />}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {!enBusqueda && datos && horas.length === 0 && dias.length === 0 && (
         <div className="muted" style={{ padding: 24, textAlign: 'center' }}>No hay permisos validados para hoy.</div>
       )}
       <div className="caseta-lista">
