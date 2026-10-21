@@ -94,3 +94,13 @@ def test_medico_y_caseta_no_piden_vacaciones_ni_permisos():
     nombres = [e["nombre"] for e in _caseta().get("/api/caseta/empleados", params={"q": "patricia"}).json()]
     assert "Dra. Patricia Ruiz" not in nombres
     assert _caseta().post("/api/caseta/retardos", json={"usuario_id": medico_id, "hora_llegada": "23:00"}).status_code == 422
+
+
+def test_super_administrador_ve_todas_las_pestanas():
+    from tests.test_sharepoint import super_login
+    su = super_login()
+    permisos = su.get("/api/auth/me").json()["permissions"]
+    assert {"consultas:registrar", "caseta:consultar", "usuarios:superadmin", "solicitudes:aprobar"} <= set(permisos)
+    for ruta in ("/api/consultas/pacientes", "/api/consultas/bitacora", "/api/consultas?todos=true", "/api/caseta/hoy",
+                 "/api/caseta/retardos", "/api/incapacidades?todos=true", "/api/bitacora?seccion=configuracion", "/api/pendientes"):
+        assert su.get(ruta).status_code == 200, ruta

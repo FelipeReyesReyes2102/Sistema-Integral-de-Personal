@@ -45,8 +45,8 @@ def solicita_vacaciones(usuario) -> bool:
 
 
 def es_medico(usuario) -> bool:
-    """Médico de planta o usuario al que GH le permitió registrar consultas médicas."""
-    return usuario is not None and (usuario.rol == ROL_MEDICO or bool(getattr(usuario, "puede_consultas", False)))
+    """Médico de planta, usuario al que GH le permitió registrar consultas médicas o super administrador."""
+    return usuario is not None and (usuario.rol in (ROL_MEDICO, ROL_SUPERADMIN) or bool(getattr(usuario, "puede_consultas", False)))
 
 # Estados de solicitudes (vacaciones y permisos)
 BORRADOR = "borrador"

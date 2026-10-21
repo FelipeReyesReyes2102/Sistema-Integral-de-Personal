@@ -29,7 +29,7 @@ export const ROLES = {
 export const esAdmin = (u) => ['admin', 'gerencia_gh', 'superadmin'].includes(u?.rol)
 export const esSuperAdmin = (u) => u?.rol === 'superadmin'
 /** Médico de planta o usuario al que GH le permitió registrar consultas médicas. */
-export const esMedico = (u) => u?.rol === 'medico' || !!u?.puede_consultas
+export const esMedico = (u) => ['medico', 'superadmin'].includes(u?.rol) || !!u?.puede_consultas
 /** Personal de caseta (y GH): permisos validados del día y registro de retardos. */
 export const esCaseta = (u) => u?.rol === 'caseta' || esAdmin(u)
 /** El médico de planta y caseta no piden vacaciones ni permisos: solo usan su apartado. */
