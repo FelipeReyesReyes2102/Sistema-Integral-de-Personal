@@ -15,6 +15,7 @@ from .models import (
     ReglaAntiguedad, SolicitudVacaciones, Usuario,
 )
 from .models import ROLES_ADMIN, es_admin  # noqa: F401
+from .models import TIPO_RETARDO as TIPO_RETARDO_SERV
 from .schemas import PeriodoOut, UsuarioOut
 from .sedes import admin_permite
 
@@ -322,3 +323,27 @@ def hay_traslape(db: Session, usuario_id: int, inicio: date, fin: date, excluir_
     if excluir_id:
         q = q.where(SolicitudVacaciones.id != excluir_id)
     return db.scalar(q.limit(1)) is not None
+
+
+MOTIVO_MIN = 5
+
+
+def motivo_rechazo_obligatorio(p) -> bool:
+    """Negar el acceso a planta por retardo exige escribir el motivo."""
+    return getattr(p, "tipo", None) == TIPO_RETARDO_SERV
+
+
+def aplicar_rechazo_teams(reg, comentario: str | None) -> bool:
+    """Motivo de un rechazo llegado desde Teams. Devuelve True si queda pendiente de capturar en SIP-O
+    (acceso por retardo negado sin comentario: Teams no permite exigirlo)."""
+    comentario = (comentario or "").strip()
+    if comentario:
+        reg.motivo_rechazo = comentario
+        if hasattr(reg, "motivo_rechazo_pendiente"):
+            reg.motivo_rechazo_pendiente = False
+        return False
+    if motivo_rechazo_obligatorio(reg):
+        reg.motivo_rechazo, reg.motivo_rechazo_pendiente = None, True
+        return True
+    reg.motivo_rechazo = "Rechazado desde Teams"
+    return False

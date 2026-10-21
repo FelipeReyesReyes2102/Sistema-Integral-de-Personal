@@ -12,10 +12,13 @@ from ..models import (
     SOLICITADO, VALIDADO, Permiso, SolicitudVacaciones, Usuario,
 )
 from ..models import ROLES_ADMIN, es_admin, solicita_vacaciones  # noqa: F401
-from ..schemas import PermisoIn, PermisoOut, RechazoIn, ValidarPermisoIn
+from ..schemas import MotivoRechazoIn, PermisoIn, PermisoOut, RechazoIn, ValidarPermisoIn
 from ..security import get_current_user
 from ..sedes import Alcance, admin_permite, alcance, hoy_de
-from ..services import  aprobar,ciclo_de, empleado_visible, festivos_de, jornada_de, puede_revisar, resolver_aprobador
+from ..services import (
+    MOTIVO_MIN, aprobar, ciclo_de, empleado_visible, festivos_de, jornada_de, motivo_rechazo_obligatorio, puede_revisar,
+    resolver_aprobador,
+)
 
 router = APIRouter(prefix="/api/permisos", tags=["permisos"])
 
@@ -210,6 +213,33 @@ def enviar(pid: int, db: Session = Depends(get_db), user: Usuario = Depends(get_
     return _out(p)
 
 
+def _sin_motivo(user: Usuario, alc: Alcance):
+    """Accesos negados en Teams sin motivo que el usuario debe completar (los suyos; GH/administración, los de sus sedes)."""
+    q = select(Permiso).where(Permiso.estado == RECHAZADO, Permiso.motivo_rechazo_pendiente.is_(True))
+    if es_admin(user):
+        return q.where((Permiso.revisado_por_id == user.id)
+                       | Permiso.usuario_id.in_(select(Usuario.id).where(alc.filtro(Usuario.sede_id))))
+    return q.where(Permiso.revisado_por_id == user.id)
+
+
+@router.get("/motivos-pendientes", response_model=list[PermisoOut])
+def motivos_pendientes(db: Session = Depends(get_db), user: Usuario = Depends(get_current_user),
+                       alc: Alcance = Depends(alcance)):
+    return [_out(p) for p in db.scalars(_sin_motivo(user, alc).order_by(Permiso.fecha.desc()))]
+
+
+@router.post("/{pid}/motivo-rechazo", response_model=PermisoOut)
+def capturar_motivo(pid: int, data: MotivoRechazoIn, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user),
+                    alc: Alcance = Depends(alcance)):
+    """Completa el motivo de un acceso negado desde Teams sin comentario."""
+    p = db.scalar(_sin_motivo(user, alc).where(Permiso.id == pid))
+    if p is None:
+        raise HTTPException(404, "No tienes pendiente el motivo de este rechazo.")
+    p.motivo_rechazo, p.motivo_rechazo_pendiente = _motivo(p, data.motivo), False
+    db.commit()
+    return _out(p)
+
+
 @router.get("/uso")
 def uso(tipo: str, fecha: date, usuario_id: int | None = None, excluir_id: int | None = None,
         db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
@@ -287,10 +317,17 @@ def validar(pid: int, tareas: BackgroundTasks, data: ValidarPermisoIn | None = N
     return _out(p)
 
 
+def _motivo(p: Permiso, motivo: str | None) -> str | None:
+    texto = (motivo or "").strip() or None
+    if motivo_rechazo_obligatorio(p) and len(texto or "") < MOTIVO_MIN:
+        raise HTTPException(422, f"Escribe el motivo por el que se niega el acceso (mínimo {MOTIVO_MIN} caracteres).")
+    return texto
+
+
 @router.post("/{pid}/rechazar", response_model=PermisoOut)
 def rechazar(pid: int, data: RechazoIn, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
     p = _revisable(db, pid, user)
-    p.estado, p.motivo_rechazo = RECHAZADO, data.motivo
+    p.estado, p.motivo_rechazo, p.motivo_rechazo_pendiente = RECHAZADO, _motivo(p, data.motivo), False
     p.revisado_por_id, p.fecha_revision = user.id, datetime.now()
     db.commit()
     return _out(p)

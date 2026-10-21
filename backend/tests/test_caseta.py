@@ -120,3 +120,20 @@ def test_busqueda_de_caseta_sin_acentos_y_con_permisos_del_dia():
     adm = entrar("admin@empresa.com", "Admin123")
     assert any(e["nombre"] == "Administrador RH" for e in adm.get("/api/caseta/empleados", params={"q": "administrador", "con_permisos": True}).json())
     assert not any(e["nombre"] == "Administrador RH" for e in adm.get("/api/caseta/empleados", params={"q": "administrador"}).json())
+
+
+def test_negar_acceso_exige_motivo(monkeypatch):
+    monkeypatch.setattr(correo, "enviar", lambda *a: None)
+    cas = _caseta()
+    carlos = next(e for e in cas.get("/api/caseta/empleados", params={"q": "perez"}).json() if e["nombre"] == "Carlos Pérez")
+    ret = cas.post("/api/caseta/retardos", json={"usuario_id": carlos["id"], "hora_llegada": _despues(carlos["entrada_hoy"], 20)}).json()
+    laura = entrar("laura@empresa.com")
+    for motivo in (None, "", "  no "):
+        r = laura.post(f"/api/permisos/{ret['id']}/rechazar", json={"motivo": motivo})
+        assert r.status_code == 422 and "motivo" in r.json()["detail"], r.text
+    r = laura.post(f"/api/permisos/{ret['id']}/rechazar", json={"motivo": "  Tercer retardo de la semana  "})
+    assert r.status_code == 200 and r.json()["motivo_rechazo"] == "Tercer retardo de la semana"
+    fila = next(x for x in cas.get("/api/caseta/retardos").json() if x["id"] == ret["id"])
+    assert fila["estado"] == "rechazado" and fila["motivo_rechazo"] == "Tercer retardo de la semana"
+    assert fila["motivo_pendiente"] is False
+    _limpiar(ret["id"])

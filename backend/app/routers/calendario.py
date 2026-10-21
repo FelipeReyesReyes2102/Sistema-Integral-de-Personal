@@ -9,7 +9,7 @@ from .. import reglas
 from .. import tipos_permiso
 from ..database import get_db
 from ..models import (
-    ESTADOS_ACTIVOS, PERMISO_HOME_OFFICE, ROL_ADMIN, ROL_MEDICO, SOLICITADO, TIPOS_PERMISO, VALIDADO, ConsultaMedica, Festivo, Incapacidad, Permiso,
+    ESTADOS_ACTIVOS, PERMISO_HOME_OFFICE, RECHAZADO, ROL_ADMIN, ROL_MEDICO, SOLICITADO, TIPOS_PERMISO, VALIDADO, ConsultaMedica, Festivo, Incapacidad, Permiso,
     SolicitudVacaciones, Usuario,
 )
 from ..models import ROLES_ADMIN, es_admin, es_medico  # noqa: F401
@@ -203,7 +203,10 @@ def pendientes(db: Session = Depends(get_db), user: Usuario = Depends(get_curren
     mias_i = (Incapacidad.aprobador_id == user.id, Incapacidad.usuario_id != user.id)
     res = {"vacaciones": contar(SolicitudVacaciones, mias), "permisos": contar(Permiso, mias_p),
            "incapacidades": contar(Incapacidad, mias_i)}
-    res["total"] = res["vacaciones"] + res["permisos"] + res["incapacidades"]
+    # Accesos negados en Teams sin motivo: el jefe debe capturarlo en SIP-O
+    res["motivos_pendientes"] = db.scalar(select(func.count(Permiso.id)).where(
+        Permiso.estado == RECHAZADO, Permiso.motivo_rechazo_pendiente.is_(True), Permiso.revisado_por_id == user.id)) or 0
+    res["total"] = res["vacaciones"] + res["permisos"] + res["incapacidades"] + res["motivos_pendientes"]
     if es_admin(user):
         de_sede = lambda m: (m.usuario_id.in_(select(Usuario.id).where(alc.filtro(Usuario.sede_id))),)  # noqa: E731
         res["todas_vacaciones"] = contar(SolicitudVacaciones, de_sede(SolicitudVacaciones))

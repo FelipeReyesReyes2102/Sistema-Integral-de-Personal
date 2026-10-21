@@ -22,6 +22,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
   const [tipo, setTipo] = useState('')
   const [verConsulta, setVerConsulta] = useState(null)
   const [rechazo, setRechazo] = useState(null)
+  const [sinMotivo, setSinMotivo] = useState([])
   const [validarPermiso, setValidarPermiso] = useState(null)
   const [validarInc, setValidarInc] = useState(null)
   const [firma, setFirma] = useState(null)
@@ -51,6 +52,10 @@ export default function Solicitudes({ modo = 'jefe' }) {
   }
   useEffect(cargar, [tab, estado, modo, tipo])
 
+  // Accesos a planta negados en Teams sin motivo: hay que capturarlo aquí
+  const cargarSinMotivo = () => api('/permisos/motivos-pendientes').then(setSinMotivo).catch(() => {})
+  useEffect(() => { cargarSinMotivo() }, [modo])
+
   // Tipos de permiso de la sede (base y agregados por GH) para el filtro
   const [tiposFiltro, setTiposFiltro] = useState(null)
   useEffect(() => {
@@ -65,7 +70,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
     window.addEventListener('pendientes:refrescar', leer)
     return () => window.removeEventListener('pendientes:refrescar', leer)
   }, [])
-  const cuenta = (t) => (admin ? pend[`todas_${t}`] : pend[t]) || 0
+  const cuenta = (t) => ((admin ? pend[`todas_${t}`] : pend[t]) || 0) + (t === 'permisos' ? sinMotivo.length : 0)
   const marca = (t) => cuenta(t) > 0 && <span className="badge tab-badge" title={`${cuenta(t)} por revisar`}>{cuenta(t)}</span>
 
   async function ejecutar(ruta, body) {
@@ -75,6 +80,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
       setValidarPermiso(null)
       setValidarInc(null)
       cargar()
+      cargarSinMotivo()
       window.dispatchEvent(new Event('pendientes:refrescar'))
     } catch (e) {
       alert(e.message)
@@ -113,6 +119,18 @@ export default function Solicitudes({ modo = 'jefe' }) {
         <input style={{ width: 220 }} placeholder="Buscar empleado…" value={buscar} onChange={(e) => setBuscar(e.target.value)} />
       </div>
       {error && <div className="alerta error">{error}</div>}
+      {sinMotivo.length > 0 && (
+        <div className="alerta error">
+          <b>Falta el motivo de {sinMotivo.length === 1 ? 'un acceso negado' : `${sinMotivo.length} accesos negados`} en Teams.</b>{' '}
+          Teams no permite escribirlo; captúralo aquí para que caseta y GH sepan por qué no se dio el acceso.
+          {sinMotivo.map((s) => (
+            <div key={s.id} className="fila" style={{ marginTop: 6, gap: 8 }}>
+              <span>{s.usuario_nombre} · {fmtFecha(s.fecha)} · llegó {hhmm(s.hora_fin)}</span>
+              <button className="btn btn-sm" onClick={() => setRechazo({ s, motivo: '', capturar: true })}>Agregar motivo</button>
+            </div>
+          ))}
+        </div>
+      )}
       {tab === 'consultas' ? (
         <div className="tabla-wrap">
           <table className="tabla">
@@ -224,6 +242,9 @@ export default function Solicitudes({ modo = 'jefe' }) {
                 )}
                 <td>
                   <span className={`pill ${s.estado}`}>{s.falta_gh ? 'Aprobada por el jefe' : ESTADOS[s.estado]}</span>
+                  {s.estado === 'rechazado' && (s.motivo_rechazo_pendiente
+                    ? <div style={{ fontSize: 11, color: 'var(--danger)' }}>Falta el motivo</div>
+                    : s.motivo_rechazo && <div className="muted" style={{ fontSize: 11 }}>{s.motivo_rechazo}</div>)}
                   {s.falta_gh && <div className="muted" style={{ fontSize: 11 }}>{s.aprobado_jefe_nombre} · falta GH</div>}
                 </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
@@ -261,21 +282,32 @@ export default function Solicitudes({ modo = 'jefe' }) {
           {firma.img ? <img className="firma-img" style={{ height: 140 }} src={firma.img} alt="Firma" /> : 'Sin firma'}
         </Modal>
       )}
-      {rechazo && (
-        <Modal titulo={tab === 'incapacidades' ? 'Rechazar incapacidad' : 'Rechazar solicitud'} onClose={() => setRechazo(null)}
-          pie={<>
-            <button className="btn" onClick={() => setRechazo(null)}>Cancelar</button>
-            <button className="btn btn-danger" disabled={tab === 'incapacidades' && !rechazo.motivo.trim()}
-              onClick={() => ejecutar(`/${tab}/${rechazo.s.id}/rechazar`, { motivo: rechazo.motivo })}>Rechazar</button>
-          </>}>
-          <p>{tab === 'incapacidades' ? 'Incapacidad' : 'Solicitud'} de <b>{rechazo.s.usuario_nombre}</b>
-            {tab === 'incapacidades' && <span className="muted"> · {fmtFecha(rechazo.s.fecha_inicio)} → {fmtFecha(rechazo.s.fecha_fin)} ({rechazo.s.dias} día(s)). Se notificará a GH y quedará en la bitácora del servicio médico.</span>}
-          </p>
-          <label className="campo">Motivo del rechazo
-            <textarea rows={3} value={rechazo.motivo} onChange={(e) => setRechazo({ ...rechazo, motivo: e.target.value })} />
-          </label>
-        </Modal>
-      )}
+      {rechazo && (() => {
+        // Negar el acceso a planta por retardo (caseta) exige el motivo
+        const acceso = rechazo.capturar || (tab === 'permisos' && rechazo.s.tipo === 'llegada_tarde')
+        const minimo = acceso ? 5 : tab === 'incapacidades' ? 1 : 0
+        const falta = rechazo.motivo.trim().length < minimo
+        const ruta = rechazo.capturar ? `/permisos/${rechazo.s.id}/motivo-rechazo` : `/${tab}/${rechazo.s.id}/rechazar`
+        return (
+          <Modal titulo={rechazo.capturar ? 'Motivo del acceso negado' : acceso ? 'Negar acceso a planta'
+            : tab === 'incapacidades' ? 'Rechazar incapacidad' : 'Rechazar solicitud'} onClose={() => setRechazo(null)}
+            pie={<>
+              <button className="btn" onClick={() => setRechazo(null)}>Cancelar</button>
+              <button className="btn btn-danger" disabled={falta}
+                onClick={() => ejecutar(ruta, { motivo: rechazo.motivo })}>{rechazo.capturar ? 'Guardar motivo' : acceso ? 'Negar acceso' : 'Rechazar'}</button>
+            </>}>
+            <p>{acceso ? 'Acceso a planta por retardo' : tab === 'incapacidades' ? 'Incapacidad' : 'Solicitud'} de <b>{rechazo.s.usuario_nombre}</b>
+              {acceso && <span className="muted"> · {fmtFecha(rechazo.s.fecha)}, llegó {hhmm(rechazo.s.hora_fin)}. Caseta verá el motivo.</span>}
+              {tab === 'incapacidades' && !acceso && <span className="muted"> · {fmtFecha(rechazo.s.fecha_inicio)} → {fmtFecha(rechazo.s.fecha_fin)} ({rechazo.s.dias} día(s)). Se notificará a GH y quedará en la bitácora del servicio médico.</span>}
+            </p>
+            <label className="campo">{acceso ? 'Motivo por el que no se da el acceso (obligatorio)' : 'Motivo del rechazo'}
+              <textarea rows={3} maxLength={500} autoFocus={acceso} value={rechazo.motivo}
+                onChange={(e) => setRechazo({ ...rechazo, motivo: e.target.value })} />
+            </label>
+            {acceso && falta && <p className="muted" style={{ fontSize: 12 }}>Escribe al menos 5 caracteres.</p>}
+          </Modal>
+        )
+      })()}
       {validarInc && (() => {
         const v = validarInc
         const dias = v.fecha_inicio && v.fecha_fin && v.fecha_fin >= v.fecha_inicio

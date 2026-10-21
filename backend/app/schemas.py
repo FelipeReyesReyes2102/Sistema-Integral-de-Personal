@@ -419,7 +419,11 @@ class TipoPermisoOut(TipoPermisoIn, ORM):
 
 
 class RechazoIn(BaseModel):
-    motivo: str | None = None
+    motivo: str | None = Field(default=None, max_length=500)
+
+
+class MotivoRechazoIn(BaseModel):
+    motivo: str = Field(min_length=1, max_length=500)
 
 
 # ---------- Permisos ----------
@@ -458,6 +462,7 @@ class PermisoOut(ORM):
     tipo_nomina: str | None = None
     estado: str
     motivo_rechazo: str | None
+    motivo_rechazo_pendiente: bool = False
     aprobador_id: int | None = None
     aprobador_nombre: str | None = None
     tiene_firma: bool = False

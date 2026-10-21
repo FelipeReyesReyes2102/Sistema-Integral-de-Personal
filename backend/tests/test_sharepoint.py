@@ -290,3 +290,44 @@ def test_retardo_de_caseta_se_autoriza_en_teams(graph, monkeypatch):
     assert fila["estado"] == "validado" and fila["autorizo"] == "Laura Martínez" and fila["observaciones"] == "Que pase"
     _limpiar(ret["id"])
     adm.delete("/api/sharepoint/permisos")
+
+
+
+def test_acceso_negado_en_teams_sin_comentario_pide_motivo(graph, monkeypatch):
+    """Teams no permite exigir comentario: el acceso queda negado y SIP-O pide el motivo al jefe."""
+    from app import correo
+    from app.routers import caseta as caseta_router
+    from tests.test_caseta import _caseta, _despues, _limpiar
+    from tests.test_consultas import entrar
+    enviados = []
+    monkeypatch.setattr(correo, "enviar", lambda cfg, dest, asunto, h, t: enviados.append((dest, asunto)))
+    adm = super_login()
+    cfg = adm.put("/api/sharepoint/permisos/conectar", json={"url": URL}).json()
+    teams = {"aprobacion_teams": True, "col_decision": "Decision", "col_comentario": "ComentarioTeams",
+             "col_respondio": "Respondio", "cuenta_flujo": "Flujos@o-tek.com"}
+    assert adm.put("/api/sharepoint/permisos", json={"activo": True, "mapeo": cfg["mapeo"], "valores": cfg["valores"],
+                                                      **teams}).status_code == 200
+    cas = _caseta()
+    carlos = next(e for e in cas.get("/api/caseta/empleados", params={"q": "carlos perez"}).json())
+    ret = cas.post("/api/caseta/retardos", json={"usuario_id": carlos["id"], "hora_llegada": _despues(carlos["entrada_hoy"], 15)}).json()
+    sharepoint.procesar_pendientes()
+    item_id = next(k for k, v in graph["items"].items() if v["Title"] == f"PER-{ret['id']}")
+    graph["items"][item_id].update({"Decision": "Reject", "Respondio": "laura@empresa.com", "ComentarioTeams": ""})
+    caseta_router._ultima_revision[0] = 0
+    fila = next(x for x in cas.get("/api/caseta/retardos").json() if x["id"] == ret["id"])
+    assert fila["estado"] == "rechazado" and fila["motivo_rechazo"] is None and fila["motivo_pendiente"] is True
+    assert any("laura@empresa.com" in d and "Falta el motivo" in a for d, a in enviados)
+
+    laura = entrar("laura@empresa.com")
+    assert laura.get("/api/pendientes").json()["motivos_pendientes"] >= 1
+    assert [p["id"] for p in laura.get("/api/permisos/motivos-pendientes").json()] == [ret["id"]]
+    assert entrar("carlos@empresa.com").post(f"/api/permisos/{ret['id']}/motivo-rechazo",
+                                              json={"motivo": "No es su turno"}).status_code == 404
+    assert laura.post(f"/api/permisos/{ret['id']}/motivo-rechazo", json={"motivo": "no"}).status_code == 422
+    r = laura.post(f"/api/permisos/{ret['id']}/motivo-rechazo", json={"motivo": "Sin autorización de horas extra"})
+    assert r.status_code == 200 and r.json()["motivo_rechazo_pendiente"] is False
+    assert laura.get("/api/permisos/motivos-pendientes").json() == []
+    fila = next(x for x in cas.get("/api/caseta/retardos").json() if x["id"] == ret["id"])
+    assert fila["motivo_rechazo"] == "Sin autorización de horas extra" and fila["motivo_pendiente"] is False
+    _limpiar(ret["id"])
+    adm.delete("/api/sharepoint/permisos")

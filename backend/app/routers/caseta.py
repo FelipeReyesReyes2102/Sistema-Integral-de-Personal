@@ -20,13 +20,12 @@ from ..busqueda import buscar_usuarios
 from ..database import SessionLocal, get_db
 from ..incapacidades import gh_de_sede
 from ..models import (
-    ROL_ADMIN, ROLES_ADMIN, EnvioSharePoint, ListaSharePoint, ROLES_SIN_VACACIONES, CANCELADO, ESTADOS_ACTIVOS, ROL_CASETA, SOLICITADO, VALIDADO, NotificacionCorreo, Permiso, Usuario, es_admin,
+    ROL_ADMIN, ROLES_ADMIN, EnvioSharePoint, ListaSharePoint, ROLES_SIN_VACACIONES, CANCELADO, ESTADOS_ACTIVOS, ROL_CASETA, SOLICITADO, TIPO_RETARDO, VALIDADO, NotificacionCorreo, Permiso, Usuario, es_admin,
 )
 from ..security import ahora, auditar, get_current_user
 from ..sedes import ahora_en, sedes_visibles
 
 router = APIRouter(prefix="/api/caseta", tags=["caseta"])
-TIPO_RETARDO = "llegada_tarde"
 
 
 def require_caseta(user: Usuario = Depends(get_current_user)) -> Usuario:
@@ -69,7 +68,8 @@ def _fila(db: Session, p: Permiso) -> dict:
             "aprobador_nombre": p.aprobador.nombre if p.aprobador else None,
             "va_a_gh": p.aprobador is None or (p.aprobador.rol in ROLES_ADMIN and p.aprobador_id != u.jefe_id),
             "registrado_por": p.registrado_por.nombre if p.registrado_por else None,
-            "motivo_rechazo": p.motivo_rechazo, "observaciones": p.observaciones,
+            "motivo_rechazo": p.motivo_rechazo, "motivo_pendiente": bool(p.motivo_rechazo_pendiente),
+            "observaciones": p.observaciones,
             "fecha_revision": p.fecha_revision.isoformat() if p.fecha_revision else None,
             "creado": p.creado.isoformat() if p.creado else None,
             "teams": _teams(db, p) if p.registrado_por_id else None}
@@ -134,7 +134,9 @@ def mensaje_retardo(p: Permiso) -> tuple[str, str, str]:
              ("Hora de llegada", f"{p.hora_fin:%H:%M} ({p.horas:g} h de retardo)"), ("Motivo", p.motivo or ""),
              ("Registró en caseta", p.registrado_por.nombre if p.registrado_por else "")]
     nota = (f"La persona está en caseta esperando acceso a planta. Queda como permiso de llegada tarde pendiente de {destino}: "
-            "autorízalo o recházalo en Teams o en SIP-O → Por aprobar → Permisos. Caseta ve tu respuesta al momento.")
+            "autorízalo o recházalo en Teams o en SIP-O → Por aprobar → Permisos. Caseta ve tu respuesta al momento. "
+            "Si niegas el acceso debes indicar el motivo: en SIP-O se pide al negar; si lo niegas en Teams, "
+            "SIP-O te pedirá capturarlo después.")
     html_ = correo._plantilla("ACCESO A PLANTA POR RETARDO", "#a35d00", filas, nota, encabezado="SIP-O · CASETA")
     texto = "ACCESO A PLANTA POR RETARDO\n\n" + "\n".join(f"{k}: {v}" for k, v in filas if v) + f"\n\n{nota}\n"
     return asunto, html_, texto
@@ -157,6 +159,30 @@ def notificar_retardo(permiso_id: int):
         sede = p.usuario.sede
         asunto, html_, texto = mensaje_retardo(p)
         notif = NotificacionCorreo(fecha=ahora(), evento="retardo_registrado", permiso_id=p.id,
+                                   sede_id=sede.id if sede else None, destinatarios=", ".join(dest), asunto=asunto[:255])
+        db.add(notif)
+        db.commit()
+        correo._registrar_y_enviar(db, notif, correo.config_sede(db, sede), html_, texto)
+
+
+def pedir_motivo_rechazo(permiso_id: int):
+    """Acceso negado en Teams sin comentario: pide a quien lo negó que capture el motivo en SIP-O."""
+    with SessionLocal() as db:
+        p = db.get(Permiso, permiso_id)
+        if not p or not p.motivo_rechazo_pendiente:
+            return
+        dest = [c for c in (_correo_de(p.revisado_por),) if c]
+        if not dest:
+            return
+        u, sede = p.usuario, p.usuario.sede
+        asunto = f"[SIP-O] Falta el motivo: negaste el acceso a planta de {u.nombre} · {p.fecha:%d/%m/%Y}"
+        filas = [("Empleado", u.nombre), ("No. de nómina", u.numero_empleado), ("Fecha", f"{p.fecha:%d/%m/%Y}"),
+                 ("Hora de llegada", f"{p.hora_fin:%H:%M}"), ("Respuesta", "Acceso denegado en Teams")]
+        nota = ("Negaste el acceso sin indicar el motivo y Teams no permite escribirlo. Captúralo en "
+                "SIP-O → Por aprobar → Permisos → «Agregar motivo». Caseta y GH lo verán ahí.")
+        html_ = correo._plantilla("FALTA EL MOTIVO DEL ACCESO DENEGADO", "#b42318", filas, nota, encabezado="SIP-O · CASETA")
+        texto = "FALTA EL MOTIVO DEL ACCESO DENEGADO\n\n" + "\n".join(f"{k}: {v}" for k, v in filas if v) + f"\n\n{nota}\n"
+        notif = NotificacionCorreo(fecha=ahora(), evento="acceso_negado_sin_motivo", permiso_id=p.id,
                                    sede_id=sede.id if sede else None, destinatarios=", ".join(dest), asunto=asunto[:255])
         db.add(notif)
         db.commit()

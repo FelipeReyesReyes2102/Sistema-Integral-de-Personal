@@ -62,6 +62,7 @@ PERMISO_LLEGADA_TARDE = "llegada_tarde"
 PERMISO_SALIDA_TEMPRANA = "salida_temprana"
 PERMISO_SALIDA_INTERMEDIA = "salida_intermedia"
 PERMISO_CONSULTA_MEDICA = "consulta_medica"  # histórico: ahora las consultas las registra el médico
+TIPO_RETARDO = "llegada_tarde"  # acceso a planta por retardo, registrado en caseta
 PERMISO_HOME_OFFICE = "home_office"  # trabajo remoto por días (no es ausencia)
 TIPOS_PERMISO = (
     PERMISO_LLEGADA_TARDE, PERMISO_SALIDA_TEMPRANA, PERMISO_SALIDA_INTERMEDIA, PERMISO_CONSULTA_MEDICA,
@@ -423,6 +424,8 @@ class Permiso(Base):
     firma: Mapped[str | None] = mapped_column(Text)
     estado: Mapped[str] = mapped_column(String(20), default=BORRADOR, index=True)
     motivo_rechazo: Mapped[str | None] = mapped_column(Text)
+    # Acceso por retardo negado en Teams sin comentario: el jefe debe capturar el motivo en SIP-O
+    motivo_rechazo_pendiente: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     aprobador_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"), index=True)
     # Dos niveles: el jefe aprueba (queda pendiente de GH) y GH valida
     aprobado_jefe_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))

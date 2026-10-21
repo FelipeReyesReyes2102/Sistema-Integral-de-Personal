@@ -147,7 +147,7 @@ function Acceso({ r }) {
     return <div className="acceso ok"><CheckCircle2 size={18} /> <b>ACCESO AUTORIZADO</b><span>{r.autorizo}{r.observaciones ? ` · "${r.observaciones}"` : ''}</span></div>
   }
   if (r.estado === 'rechazado') {
-    return <div className="acceso no"><XCircle size={18} /> <b>ACCESO DENEGADO</b><span>{r.autorizo}{r.motivo_rechazo ? ` · ${r.motivo_rechazo}` : ''}</span></div>
+    return <div className="acceso no"><XCircle size={18} /> <b>ACCESO DENEGADO</b><span>{r.autorizo}{r.motivo_rechazo ? ` · ${r.motivo_rechazo}` : r.motivo_pendiente ? ' · motivo pendiente del jefe' : ''}</span></div>
   }
   if (r.estado === 'cancelado') return <div className="acceso cancelado"><Ban size={18} /> <b>Cancelado</b></div>
   return (
