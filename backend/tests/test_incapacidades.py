@@ -166,7 +166,9 @@ def test_bitacora_de_consultas_y_rechazo_del_jefe(monkeypatch):
 
     bit = medico.get("/api/consultas/bitacora", params={"q": "carlos"}).json()
     mios = [b for b in bit if b["consulta_id"] == c["id"] and b["fecha"] >= inicio_prueba]
-    eventos = {b["evento"]: b for b in mios}
+    eventos = {}
+    for b in mios:  # la bitácora viene de la más reciente a la más antigua: se toma el evento más reciente
+        eventos.setdefault(b["evento"], b)
     assert {"consulta_registrada", "incapacidad_generada", "incapacidad_rechazada"} <= set(eventos)
     assert eventos["consulta_registrada"]["actor_nombre"] == "Dra. Patricia Ruiz"
     assert eventos["incapacidad_rechazada"]["actor_nombre"] == "Laura Martínez"

@@ -21,7 +21,7 @@ function Movimiento({ p }) {
   return <>De <b>{p.hora_inicio}</b> a <b>{p.hora_fin}</b></>
 }
 
-function PermisosHoy() {
+function PermisosHoy({ onSolicitar, pendientesIds = [] }) {
   const [datos, setDatos] = useState(null)
   const [buscar, setBuscar] = useState('')
   const [error, setError] = useState('')
@@ -87,6 +87,16 @@ function PermisosHoy() {
                   </div>
                 ))}
               </div>
+              <div>
+                {pendientesIds.includes(e.id)
+                  ? <span className="muted" style={{ fontSize: 12 }}>Ya tiene solicitud de ingreso hoy</span>
+                  : (
+                    <button className="btn btn-sm btn-primary" disabled={!e.entrada_hoy} title={e.entrada_hoy ? 'Pedir a su jefe que autorice su ingreso' : 'No tiene turno asignado'}
+                      onClick={() => onSolicitar(e)}>
+                      <Send size={14} /> Solicitar ingreso
+                    </button>
+                  )}
+              </div>
             </div>
           ))}
         </div>
@@ -150,46 +160,69 @@ function Acceso({ r }) {
   )
 }
 
-function Retardos() {
-  const [emp, setEmp] = useState(null)
+const espera = (iso) => {
+  if (!iso) return ''
+  const m = Math.max(0, Math.round((Date.now() - new Date(`${iso.slice(0, 19)}`).getTime()) / 60000))
+  return m < 1 ? 'hace un momento' : `hace ${m} min`
+}
+
+/** Solicitudes de ingreso esperando la autorización del jefe: salen de aquí en cuanto responde. */
+function Pendientes({ lista, onCancelar }) {
+  const pend = lista.filter((r) => r.estado === 'solicitado')
+  if (!pend.length) return null
+  return (
+    <div className="card pendientes-ingreso">
+      <div className="fila" style={{ marginBottom: 8 }}>
+        <Hourglass size={18} /> <b style={{ fontSize: 15 }}>Esperando autorización de ingreso ({pend.length})</b>
+        <div className="espacio" />
+        <span className="muted" style={{ fontSize: 12 }}>Salen de esta lista cuando el jefe responde</span>
+      </div>
+      <div className="caseta-lista">
+        {pend.map((r) => (
+          <div key={r.id} className="caseta-item" style={{ borderLeftColor: '#e0a100' }}>
+            <Avatar usuario={{ id: r.usuario_id, nombre: r.nombre, tiene_foto: r.tiene_foto }} tam={40} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="caseta-nombre">{r.nombre}</div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                No. {r.numero_empleado}{r.departamento ? ` · ${r.departamento}` : ''} · llegó {r.hora_fin} (entrada {r.hora_inicio}, {minutos(r.hora_inicio, r.hora_fin)} min)
+              </div>
+              <Acceso r={r} />
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div className="muted" style={{ fontSize: 12 }}>Solicitado {espera(r.creado)}</div>
+              <button className="btn btn-sm" style={{ marginTop: 6 }} title="Registro equivocado" onClick={() => onCancelar(r)}><Ban size={14} /> Cancelar</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Retardos({ lista, inicial, onRegistrado }) {
+  const [emp, setEmp] = useState(inicial || null)
   const [hora, setHora] = useState(ahoraHHMM())
   const [motivo, setMotivo] = useState('')
   const [gh, setGh] = useState(false)
-  const [lista, setLista] = useState([])
   const [msg, setMsg] = useState(null)
   const [enviando, setEnviando] = useState(false)
-  const [aviso, setAviso] = useState(null)
-  const previos = useRef({})
-  // Se consulta cada 15 s: el jefe puede responder en SIP-O o en Teams y caseta lo ve casi al momento
-  const cargar = () => api('/caseta/retardos').then((l) => {
-    const cambios = l.filter((r) => previos.current[r.id] === 'solicitado' && r.estado !== 'solicitado' && r.estado !== 'cancelado')
-    if (cambios.length) {
-      const c = cambios[0]
-      setAviso({ ok: c.estado === 'validado', t: `${c.nombre}: ${c.estado === 'validado' ? 'acceso AUTORIZADO' : 'acceso DENEGADO'} por ${c.autorizo || 'su jefe'}.` })
-    }
-    previos.current = Object.fromEntries(l.map((r) => [r.id, r.estado]))
-    setLista(l)
-  }).catch(() => {})
-  useEffect(() => {
-    cargar()
-    const t = setInterval(cargar, 15000)
-    return () => clearInterval(t)
-  }, [])
-  const esperando = lista.filter((r) => r.estado === 'solicitado').length
+  useEffect(() => { if (inicial) setEmp(inicial) }, [inicial])
   useEffect(() => { setHora(ahoraHHMM()); setGh(false) }, [emp?.id])
 
   const retraso = emp?.entrada_hoy ? minutos(emp.entrada_hoy, hora) : 0
   const destino = !emp ? '' : gh || !emp.jefe_nombre ? 'Gestión Humana (GH)' : emp.jefe_nombre
+  const yaPendiente = emp && lista.some((r) => r.usuario_id === emp.id && ['solicitado', 'validado'].includes(r.estado))
+  const resueltos = lista.filter((r) => r.estado !== 'solicitado')
 
   async function registrar() {
     setMsg(null)
     setEnviando(true)
     try {
       const r = await api('/caseta/retardos', { method: 'POST', body: { usuario_id: emp.id, hora_llegada: hora, motivo: motivo.trim() || null, enviar_gh: gh } })
-      setMsg({ ok: true, t: `Solicitud de acceso de ${r.nombre} enviada a ${r.va_a_gh ? `GH (${r.aprobador_nombre || 'Gestión Humana'})` : r.aprobador_nombre}${r.teams ? ' en SIP-O y Teams' : ''}. Su respuesta aparecerá abajo.` })
+      setMsg({ ok: true, t: `Solicitud de ingreso de ${r.nombre} enviada a ${r.va_a_gh ? `GH (${r.aprobador_nombre || 'Gestión Humana'})` : r.aprobador_nombre}${r.teams ? ' en SIP-O y Teams' : ''}. Queda en "Esperando autorización" hasta que responda.` })
       setEmp(null)
       setMotivo('')
-      cargar()
+      onRegistrado()
     } catch (e) {
       setMsg({ ok: false, t: e.message })
     } finally {
@@ -197,29 +230,20 @@ function Retardos() {
     }
   }
 
-  async function cancelar(r) {
-    if (!window.confirm(`¿Cancelar el retardo de ${r.nombre}?`)) return
-    try {
-      await api(`/caseta/retardos/${r.id}/cancelar`, { method: 'POST' })
-      cargar()
-    } catch (e) {
-      alert(e.message)
-    }
-  }
-
   return (
     <>
       <div className="card">
-        <b style={{ fontSize: 16 }}>Retardo: solicitar acceso a planta</b>
+        <b style={{ fontSize: 16 }}>Solicitar ingreso a planta (retardo)</b>
         <p className="muted" style={{ marginTop: 4, fontSize: 13 }}>
-          Si alguien llega después de su hora de entrada, regístralo aquí: se pide a su <b>jefe inmediato</b> que autorice el acceso a
-          planta, en SIP-O y en <b>Teams</b>. Si no tiene jefe o el jefe no está en planta, se pide a GH. Queda como permiso de llegada tarde.
+          Selecciona a la persona que llegó después de su hora de entrada y envía la solicitud a su <b>jefe inmediato</b> (en SIP-O y en
+          <b> Teams</b>). Si no tiene jefe o el jefe no está en planta, se pide a GH. Queda como permiso de llegada tarde.
         </p>
         <BuscadorPaciente value={emp} onChange={setEmp} endpoint="/caseta/empleados"
           placeholder="Nombre, apellido o número de nómina…"
           extra={(p) => [p.entrada_hoy ? `Entrada hoy ${p.entrada_hoy}` : 'Sin turno', p.jefe_nombre ? `Jefe: ${p.jefe_nombre}` : 'Sin jefe (GH)'].join(' · ')} />
         {emp && (
           <div className="form-grid" style={{ marginTop: 12 }}>
+            {yaPendiente && <div className="full alerta warn" style={{ margin: 0 }}>{emp.nombre} ya tiene una solicitud de ingreso hoy (pendiente o autorizada).</div>}
             <label className="campo">Hora de llegada
               <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} />
               <span className="muted" style={{ fontSize: 11 }}>
@@ -236,42 +260,28 @@ function Retardos() {
             <div className="full fila">
               <span className="muted">Se enviará a: <b>{destino}</b></span>
               <div className="espacio" />
-              <button className="btn btn-primary" onClick={registrar} disabled={enviando || !emp.entrada_hoy || retraso <= 0}>
-                <Send size={15} /> {enviando ? 'Enviando…' : 'Solicitar acceso'}
+              <button className="btn btn-primary" onClick={registrar} disabled={enviando || !emp.entrada_hoy || retraso <= 0 || yaPendiente}>
+                <Send size={15} /> {enviando ? 'Enviando…' : 'Enviar solicitud de ingreso'}
               </button>
             </div>
           </div>
         )}
         {msg && <div className={`alerta ${msg.ok ? 'ok' : 'error'}`} style={{ marginTop: 12 }}>{msg.t}</div>}
       </div>
-      {aviso && (
-        <div className={`alerta ${aviso.ok ? 'ok' : 'error'} acceso-aviso`} role="alert" onClick={() => setAviso(null)}>
-          {aviso.ok ? <CheckCircle2 size={18} /> : <XCircle size={18} />} {aviso.t} <span className="muted">(clic para cerrar)</span>
-        </div>
-      )}
 
       <div className="card" style={{ marginTop: 16 }}>
-        <div className="fila">
-          <b>Retardos de hoy</b>
-          {esperando > 0 && <span className="pill solicitado">{esperando} esperando autorización</span>}
-          <div className="espacio" />
-          <span className="muted" style={{ fontSize: 12 }}>Se actualiza cada 15 s</span>
-          <button className="btn btn-sm" onClick={cargar}><RefreshCw size={14} /> Actualizar</button>
-        </div>
+        <b>Resueltas hoy</b>
         <div className="tabla-wrap" style={{ marginTop: 10 }}>
           <table className="tabla">
-            <thead><tr><th>Empleado</th><th>Entrada</th><th>Llegó</th><th>Acceso a planta</th><th /></tr></thead>
+            <thead><tr><th>Empleado</th><th>Entrada</th><th>Llegó</th><th>Ingreso a planta</th></tr></thead>
             <tbody>
-              {lista.length === 0 && <tr><td colSpan={5} className="muted" style={{ textAlign: 'center' }}>Sin retardos registrados hoy.</td></tr>}
-              {lista.map((r) => (
+              {resueltos.length === 0 && <tr><td colSpan={4} className="muted" style={{ textAlign: 'center' }}>Aún no hay solicitudes resueltas hoy.</td></tr>}
+              {resueltos.map((r) => (
                 <tr key={r.id}>
                   <td>{r.nombre}<div className="muted" style={{ fontSize: 12 }}>No. {r.numero_empleado}{r.departamento ? ` · ${r.departamento}` : ''}</div></td>
                   <td>{r.hora_inicio}</td>
                   <td><b>{r.hora_fin}</b> <span className="muted">({minutos(r.hora_inicio, r.hora_fin)} min)</span></td>
-                  <td><Acceso r={r} />{r.teams?.nota && r.estado === 'solicitado' && <div className="muted" style={{ fontSize: 11 }}><MessageSquare size={11} /> {r.teams.nota}</div>}</td>
-                  <td>{r.estado === 'solicitado' && (
-                    <button className="icon-btn rojo" title="Cancelar (registro equivocado)" onClick={() => cancelar(r)}><Ban size={16} /></button>
-                  )}</td>
+                  <td><Acceso r={r} />{r.teams?.nota && <div className="muted" style={{ fontSize: 11 }}><MessageSquare size={11} /> {r.teams.nota}</div>}</td>
                 </tr>
               ))}
             </tbody>
@@ -282,16 +292,60 @@ function Retardos() {
   )
 }
 
-/** Caseta: permisos validados del día y registro de retardos. */
+/** Caseta: permisos validados del día y solicitudes de ingreso por retardo. */
 export default function Caseta() {
   const [tab, setTab] = useState('hoy')
+  const [seleccion, setSeleccion] = useState(null)
+  const [lista, setLista] = useState([])
+  const [aviso, setAviso] = useState(null)
+  const previos = useRef({})
+
+  // Cada 15 s (en las dos pestañas): el jefe puede responder en SIP-O o en Teams y caseta lo ve casi al momento
+  const cargar = () => api('/caseta/retardos').then((l) => {
+    const cambios = l.filter((r) => previos.current[r.id] === 'solicitado' && ['validado', 'rechazado'].includes(r.estado))
+    if (cambios.length) {
+      const c = cambios[0]
+      setAviso({ ok: c.estado === 'validado', t: `${c.nombre}: ingreso ${c.estado === 'validado' ? 'AUTORIZADO' : 'DENEGADO'} por ${c.autorizo || 'su jefe'}${c.estado === 'rechazado' && c.motivo_rechazo ? ` (${c.motivo_rechazo})` : ''}.` })
+    }
+    previos.current = Object.fromEntries(l.map((r) => [r.id, r.estado]))
+    setLista(l)
+  }).catch(() => {})
+  useEffect(() => {
+    cargar()
+    const t = setInterval(cargar, 15000)
+    return () => clearInterval(t)
+  }, [])
+
+  async function cancelar(r) {
+    if (!window.confirm(`¿Cancelar la solicitud de ingreso de ${r.nombre}?`)) return
+    try {
+      await api(`/caseta/retardos/${r.id}/cancelar`, { method: 'POST' })
+      cargar()
+    } catch (e) {
+      alert(e.message)
+    }
+  }
+
+  const solicitar = (persona) => { setSeleccion({ ...persona }); setTab('retardos') }
+  const pendientes = lista.filter((r) => r.estado === 'solicitado').length
+
   return (
     <>
       <div className="tabs" style={{ marginBottom: 12 }}>
         <button className={tab === 'hoy' ? 'activo' : ''} onClick={() => setTab('hoy')}>PERMISOS DE HOY</button>
-        <button className={tab === 'retardos' ? 'activo' : ''} onClick={() => setTab('retardos')}>RETARDOS</button>
+        <button className={tab === 'retardos' ? 'activo' : ''} onClick={() => setTab('retardos')}>
+          INGRESO POR RETARDO{pendientes > 0 && <span className="badge tab-badge" title={`${pendientes} esperando autorización`}>{pendientes}</span>}
+        </button>
       </div>
-      {tab === 'hoy' ? <PermisosHoy /> : <Retardos />}
+      {aviso && (
+        <div className={`alerta ${aviso.ok ? 'ok' : 'error'} acceso-aviso`} role="alert" onClick={() => setAviso(null)} style={{ marginTop: 0, marginBottom: 12 }}>
+          {aviso.ok ? <CheckCircle2 size={18} /> : <XCircle size={18} />} {aviso.t} <span className="muted">(clic para cerrar)</span>
+        </div>
+      )}
+      <Pendientes lista={lista} onCancelar={cancelar} />
+      {tab === 'hoy'
+        ? <PermisosHoy onSolicitar={solicitar} pendientesIds={lista.filter((r) => ['solicitado', 'validado'].includes(r.estado)).map((r) => r.usuario_id)} />
+        : <Retardos lista={lista} inicial={seleccion} onRegistrado={cargar} />}
     </>
   )
 }

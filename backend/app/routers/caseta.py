@@ -71,6 +71,7 @@ def _fila(db: Session, p: Permiso) -> dict:
             "registrado_por": p.registrado_por.nombre if p.registrado_por else None,
             "motivo_rechazo": p.motivo_rechazo, "observaciones": p.observaciones,
             "fecha_revision": p.fecha_revision.isoformat() if p.fecha_revision else None,
+            "creado": p.creado.isoformat() if p.creado else None,
             "teams": _teams(db, p) if p.registrado_por_id else None}
 
 

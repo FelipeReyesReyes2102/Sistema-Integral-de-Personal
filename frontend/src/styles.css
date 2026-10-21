@@ -867,3 +867,6 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .acceso.espera { background: #fff6e0; color: #8a5a00; }
 .acceso.cancelado { background: #f1f3f6; color: var(--muted); }
 .acceso-aviso { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 15px; cursor: pointer; }
+
+.pendientes-ingreso { margin-bottom: 12px; border: 1px solid #f0d58a; background: #fffcf2; }
+.pendientes-ingreso .acceso { margin-top: 6px; }
