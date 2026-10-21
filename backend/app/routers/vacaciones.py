@@ -10,7 +10,7 @@ from ..models import (
     BORRADOR, CANCELADO, RECHAZADO, ROL_ADMIN, SOLICITADO, VALIDADO, PeriodoVacaciones, SolicitudVacaciones,
     Usuario,
 )
-from ..models import ROLES_ADMIN, es_admin  # noqa: F401
+from ..models import ROLES_ADMIN, es_admin, solicita_vacaciones  # noqa: F401
 from ..models import Festivo
 from ..schemas import (
     CalculoIn, CalculoOut, DiaExcluido, DiasLaboralesIn, DiasLaboralesOut, RechazoIn,
@@ -44,14 +44,16 @@ FALTA_FIRMA = "Firma la solicitud para poder enviarla."
 
 def _destino(db: Session, user: Usuario, usuario_id: int | None) -> Usuario:
     """Para crear solicitudes: el propio usuario, o cualquiera si es administrador."""
+    u = user
     if usuario_id and usuario_id != user.id:
         if not es_admin(user):
             raise HTTPException(403, "Solo el administrador puede capturar solicitudes de otros empleados")
         u = db.get(Usuario, usuario_id)
         if not u or not admin_permite(user, u.sede_id):
             raise HTTPException(404, "Empleado no encontrado")
-        return u
-    return user
+    if not solicita_vacaciones(u):
+        raise HTTPException(403, "El médico de planta y el personal de caseta no solicitan vacaciones en el sistema.")
+    return u
 
 
 def _calcular(db: Session, empleado: Usuario, actor: Usuario, periodo_id: int, inicio: date, fin: date,

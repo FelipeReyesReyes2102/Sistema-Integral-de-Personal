@@ -101,9 +101,14 @@ def test_permisos_en_bitacora():
 
     from tests.test_api import FIRMA, login
     adm, ana = _admin(), login("ana@empresa.com", "Cambiar123")
-    d = date.today() + timedelta(days=10)
-    r = ana.post("/api/permisos", json={"tipo": "home_office", "fecha": str(d), "fecha_fin": str(d), "motivo": "Bitácora",
-                                        "firma": FIRMA, "enviar": True})
+    for k in range(10, 40):  # primer día laboral (sin fin de semana ni festivo) desde dentro de 10 días
+        d = date.today() + timedelta(days=k)
+        if d.weekday() >= 5:
+            continue
+        r = ana.post("/api/permisos", json={"tipo": "home_office", "fecha": str(d), "fecha_fin": str(d), "motivo": "Bitácora",
+                                            "firma": FIRMA, "enviar": True})
+        if r.status_code != 422 or not ("días laborales" in r.text or "ya tienes" in r.text.lower()):
+            break
     assert r.status_code == 201, r.text
     e = _ultima(adm, "vacaciones", entidad="Permiso")
     assert e["accion"] == "crear" and "Home office" in e["descripcion"]

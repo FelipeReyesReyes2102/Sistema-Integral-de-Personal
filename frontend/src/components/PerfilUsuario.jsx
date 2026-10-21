@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Briefcase, Cake, Pencil, CalendarDays, Clock, Cloud, IdCard, KeyRound, LogOut, Mail, MapPin, Phone, PhoneCall, ShieldCheck, Stethoscope, UserRound, Users } from 'lucide-react'
 import { api } from '../api'
 import { useAuth } from '../auth'
-import { ROLES, diaMes, fmtFecha, num } from '../utils'
+import { ROLES, diaMes, fmtFecha, num, sinVacaciones } from '../utils'
 import Avatar from './Avatar'
 import Modal from './Modal'
 import MisDatosForm from './MisDatosForm'
@@ -26,7 +26,7 @@ export default function PerfilUsuario({ onClose, onPassword }) {
   const [editar, setEditar] = useState(false)
 
   useEffect(() => {
-    api('/periodos').then((ps) => {
+    if (!sinVacaciones(user)) api('/periodos').then((ps) => {
       const vig = ps.filter((p) => p.vigente)
       setSaldo({ dias: vig.reduce((t, p) => t + p.dias_disponible, 0), periodos: vig })
     }).catch(() => {})

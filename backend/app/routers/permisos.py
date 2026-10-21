@@ -11,7 +11,7 @@ from ..models import (
     BORRADOR, CANCELADO, ESTADOS_ACTIVOS, PERMISO_CONSULTA_MEDICA, PERMISO_HOME_OFFICE, RECHAZADO, ROL_ADMIN,
     SOLICITADO, VALIDADO, Permiso, SolicitudVacaciones, Usuario,
 )
-from ..models import ROLES_ADMIN, es_admin  # noqa: F401
+from ..models import ROLES_ADMIN, es_admin, solicita_vacaciones  # noqa: F401
 from ..schemas import PermisoIn, PermisoOut, RechazoIn, ValidarPermisoIn
 from ..security import get_current_user
 from ..sedes import Alcance, admin_permite, alcance, hoy_de
@@ -144,6 +144,8 @@ def crear(data: PermisoIn, db: Session = Depends(get_db), user: Usuario = Depend
         empleado = db.get(Usuario, data.usuario_id) or _404()
         if not admin_permite(user, empleado.sede_id):
             _404()
+    if not solicita_vacaciones(empleado):
+        raise HTTPException(403, "El médico de planta y el personal de caseta no solicitan permisos en el sistema.")
     _tipo_habilitado(db, empleado, data.tipo)
     aprobador_id = resolver_aprobador(db, empleado, data.aprobador_id)
     v = _preparar(db, data, empleado, user)

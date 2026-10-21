@@ -32,6 +32,10 @@ export const esSuperAdmin = (u) => u?.rol === 'superadmin'
 export const esMedico = (u) => u?.rol === 'medico' || !!u?.puede_consultas
 /** Personal de caseta (y GH): permisos validados del día y registro de retardos. */
 export const esCaseta = (u) => u?.rol === 'caseta' || esAdmin(u)
+/** El médico de planta y caseta no piden vacaciones ni permisos: solo usan su apartado. */
+export const sinVacaciones = (u) => ['medico', 'caseta'].includes(u?.rol)
+/** Pantalla de inicio de cada tipo de usuario. */
+export const inicioDe = (u) => (u?.rol === 'medico' ? '/consultas' : u?.rol === 'caseta' ? '/caseta' : '/')
 
 // Permisos que el empleado puede pedir (las consultas médicas las registra el médico)
 export const TIPOS_PERMISO_SOLICITABLES = {

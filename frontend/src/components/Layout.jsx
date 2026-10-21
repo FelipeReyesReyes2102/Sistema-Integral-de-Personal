@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { api, elegirSede, sedeActiva } from '../api'
 import { useAuth } from '../auth'
-import { ROLES, esAdmin as esAdminFn, esMedico } from '../utils'
+import { ROLES, esAdmin as esAdminFn, esMedico, sinVacaciones } from '../utils'
 import Avatar from './Avatar'
 import CambiarPassword from './CambiarPassword'
 import PerfilUsuario from './PerfilUsuario'
@@ -94,7 +94,7 @@ export default function Layout() {
           ) : user.sede_nombre && <div className="sede-nombre nav-texto" title="Tu sede">{user.sede_nombre}</div>}
         </div>
         <nav>
-          {link('/', Home, 'Mis vacaciones')}
+          {!sinVacaciones(user) && link('/', Home, 'Mis vacaciones')}
           {user.rol === 'caseta' && (
             <>
               <div className="seccion">Caseta</div>
@@ -164,7 +164,7 @@ export default function Layout() {
       </div>
 
       <nav className="bottom-nav">
-        <NavLink to="/" end><Home size={22} />Inicio</NavLink>
+        {!sinVacaciones(user) && <NavLink to="/" end><Home size={22} />Inicio</NavLink>}
         {jefe && (
           <NavLink to="/aprobaciones">
             <ListChecks size={22} />Por aprobar

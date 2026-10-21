@@ -17,7 +17,7 @@ from ..busqueda import buscar_usuarios
 from ..database import SessionLocal, get_db
 from ..incapacidades import gh_de_sede
 from ..models import (
-    CANCELADO, ESTADOS_ACTIVOS, ROL_CASETA, SOLICITADO, VALIDADO, NotificacionCorreo, Permiso, Usuario, es_admin,
+    ROLES_SIN_VACACIONES, CANCELADO, ESTADOS_ACTIVOS, ROL_CASETA, SOLICITADO, VALIDADO, NotificacionCorreo, Permiso, Usuario, es_admin,
 )
 from ..security import ahora, auditar, get_current_user
 from ..sedes import ahora_en, sedes_visibles
@@ -75,7 +75,9 @@ def empleados(q: str | None = None, db: Session = Depends(get_db), user: Usuario
     """Buscador de empleados de la sede para registrar un retardo; incluye su horario de entrada de hoy."""
     dia = ahora_en(user.sede).date()
     res = []
-    for u in buscar_usuarios(db, _sedes(db, user), q, excluir_id=user.id, limite=30):
+    for u in buscar_usuarios(db, _sedes(db, user), q, excluir_id=user.id, limite=60):
+        if u.rol in ROLES_SIN_VACACIONES:  # médico y caseta no tienen permisos en el sistema
+            continue
         h = horarios.horario_de(u.turno, dia)
         res.append({**_persona(u), "id": u.id, "entrada_hoy": h["entrada"].strftime("%H:%M") if h else None,
                     "jefe_nombre": u.jefe.nombre if u.jefe else None})
@@ -139,6 +141,8 @@ def registrar_retardo(data: RetardoIn, tareas: BackgroundTasks, db: Session = De
         raise HTTPException(404, "Empleado no encontrado en tu sede.")
     if emp.id == user.id:
         raise HTTPException(422, "No puedes registrar tu propio retardo.")
+    if emp.rol in ROLES_SIN_VACACIONES:
+        raise HTTPException(422, "Al médico de planta y al personal de caseta no se les registran retardos en el sistema.")
     dia = ahora_en(emp.sede).date()
     h = horarios.horario_de(emp.turno, dia)
     if not h:

@@ -36,6 +36,14 @@ def es_admin(usuario) -> bool:
     return usuario is not None and usuario.rol in ROLES_ADMIN
 
 
+ROLES_SIN_VACACIONES = (ROL_MEDICO, ROL_CASETA)  # solo usan su apartado (servicio médico / caseta)
+
+
+def solicita_vacaciones(usuario) -> bool:
+    """El médico de planta y caseta no piden vacaciones ni permisos en el sistema."""
+    return usuario is not None and usuario.rol not in ROLES_SIN_VACACIONES
+
+
 def es_medico(usuario) -> bool:
     """Médico de planta o usuario al que GH le permitió registrar consultas médicas."""
     return usuario is not None and (usuario.rol == ROL_MEDICO or bool(getattr(usuario, "puede_consultas", False)))

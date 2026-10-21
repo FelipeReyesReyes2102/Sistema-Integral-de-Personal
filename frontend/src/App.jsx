@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { useAuth } from './auth'
-import { esAdmin, esCaseta, esMedico, esSuperAdmin } from './utils'
+import { esAdmin, esCaseta, esMedico, esSuperAdmin, inicioDe, sinVacaciones } from './utils'
 import Layout, { esJefe } from './components/Layout'
 import Login from './pages/Login'
 import CambioObligatorio from './pages/CambioObligatorio'
@@ -66,7 +66,7 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<MisVacaciones />} />
+        <Route index element={sinVacaciones(user) ? <Navigate to={inicioDe(user)} replace /> : <MisVacaciones />} />
         <Route path="/consultas" element={<SoloMedico><Consultas /></SoloMedico>} />
         <Route path="/caseta" element={<SoloCaseta><Caseta /></SoloCaseta>} />
         <Route path="/aprobaciones" element={<SoloJefe><Solicitudes modo="jefe" /></SoloJefe>} />

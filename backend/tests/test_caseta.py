@@ -77,3 +77,20 @@ def test_caseta_retardos_y_permisos_del_dia(monkeypatch):
         assert cas.post(f"/api/caseta/retardos/{r.json()['id']}/cancelar").json()["estado"] == "cancelado"
         _limpiar(r.json()["id"])
     _limpiar(ret["id"])
+
+
+def test_medico_y_caseta_no_piden_vacaciones_ni_permisos():
+    rango = {"fecha_inicio": "2030-03-04", "fecha_fin": "2030-03-05"}
+    for c in (entrar("medico@empresa.com"), _caseta()):
+        assert c.post("/api/vacaciones/calcular", json=rango).status_code == 403
+        assert c.post("/api/vacaciones", json={**rango, "enviar": False}).status_code in (403, 422)
+        r = c.post("/api/permisos", json={"tipo": "home_office", "fecha": "2030-03-04", "fecha_fin": "2030-03-04", "motivo": "x"})
+        assert r.status_code == 403 and "no solicitan" in r.json()["detail"]
+    # GH tampoco puede capturarles vacaciones, y caseta no les registra retardos
+    adm = entrar("admin@empresa.com", "Admin123")
+    with SessionLocal() as db:
+        medico_id = db.query(Usuario).filter(Usuario.email == "medico@empresa.com").one().id
+    assert adm.post("/api/vacaciones/calcular", json={**rango, "usuario_id": medico_id}).status_code == 403
+    nombres = [e["nombre"] for e in _caseta().get("/api/caseta/empleados", params={"q": "patricia"}).json()]
+    assert "Dra. Patricia Ruiz" not in nombres
+    assert _caseta().post("/api/caseta/retardos", json={"usuario_id": medico_id, "hora_llegada": "23:00"}).status_code == 422

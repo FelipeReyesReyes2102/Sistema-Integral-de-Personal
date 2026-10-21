@@ -465,6 +465,12 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
             </select>
           </label>
         ) : <div className="emp-hueco" />}
+        {['medico', 'caseta'].includes(form.rol) ? (
+          <div className="full alerta warn" style={{ margin: 0 }}>
+            {form.rol === 'medico' ? 'El médico de planta' : 'El personal de caseta'} no pide vacaciones ni permisos en SIP-O: solo usa su apartado
+            ({form.rol === 'medico' ? 'Consultas médicas' : 'Caseta'}).
+          </div>
+        ) : (
         <label className="campo full">Días de vacaciones disponibles (opcional)
           <input type="number" min="0" step="0.5" value={form.dias_disponibles ?? ''} onChange={set('dias_disponibles')}
             placeholder={saldoActual ? `Actualmente ${num(saldoActual.total)}` : 'Ej. 18'} style={{ maxWidth: 220 }} />
@@ -474,6 +480,7 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
             {inicial.id ? ' Vacío: sin cambios.' : ' Vacío: los días completos según su antigüedad.'}
           </span>
         </label>
+        )}
         <div className="full muted" style={{ fontSize: 12 }}>
           {form.rol === 'planta'
             ? 'Planta: días de 12 h (año 1 = 8 días). Al menos una vez por periodo debe tomar 4 días seguidos.'

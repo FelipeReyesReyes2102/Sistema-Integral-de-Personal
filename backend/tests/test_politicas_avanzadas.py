@@ -80,9 +80,12 @@ def test_aprobacion_jefe_mas_gh():
               "modulo_consultas", "modulo_cumpleanos", "generacion_dias", "aprobacion_gh_vacaciones", "aprobacion_gh_permisos")
     base = {k: pol[k] for k in campos}
     assert adm.put("/api/politica", json={**base, "aprobacion_gh_permisos": True}).status_code == 200
-    d = date.today() + timedelta(days=12)
-    r = carlos.post("/api/permisos", json={"tipo": "home_office", "fecha": str(d), "fecha_fin": str(d),
-                                           "motivo": "Dos niveles", "firma": FIRMA, "enviar": True})
+    for k in range(12, 45):  # primer día laboral de su ciclo (planta) sin otras solicitudes
+        d = date.today() + timedelta(days=k)
+        r = carlos.post("/api/permisos", json={"tipo": "home_office", "fecha": str(d), "fecha_fin": str(d),
+                                               "motivo": "Dos niveles", "firma": FIRMA, "enviar": True})
+        if r.status_code != 422 or not ("días laborales" in r.text or "ya tienes" in r.text.lower()):
+            break
     assert r.status_code == 201, r.text
     pid = r.json()["id"]
     antes = laura.get("/api/pendientes").json()["permisos"]
