@@ -870,3 +870,25 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 
 .pendientes-ingreso { margin-bottom: 12px; border: 1px solid #f0d58a; background: #fffcf2; }
 .pendientes-ingreso .acceso { margin-top: 6px; }
+
+/* Formato F-630-03 (salida de equipo de cómputo) */
+.formato-equipo { font-size: 13px; color: #1d2433; background: #fff; border: 1px solid #1d2433; padding: 10px; }
+.formato-equipo .fe-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.formato-equipo .fe-cab img { height: 34px; }
+.formato-equipo .fe-cab b { font-size: 16px; text-align: right; }
+.formato-equipo table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.formato-equipo th, .formato-equipo td { border: 1px solid #1d2433; padding: 5px 7px; vertical-align: middle; text-align: left; overflow-wrap: anywhere; }
+.formato-equipo th { background: #f1f3f6; width: 22%; }
+.formato-equipo .fe-c { text-align: center; }
+.formato-equipo .fe-nota { color: #667085; text-align: center; }
+.formato-equipo .fe-etq { background: #f1f3f6; font-weight: 600; }
+.formato-equipo .fe-x { display: inline-block; min-width: 18px; font-weight: 700; text-align: center; }
+.formato-equipo .fe-firma td { height: 70px; }
+.formato-equipo .fe-firma td img { max-height: 60px; max-width: 220px; display: block; }
+.formato-equipo .fe-firma td span { display: block; }
+.formato-equipo .fe-pie { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; font-size: 10px; color: #667085; }
+@media print {
+  body * { visibility: hidden !important; }
+  .formato-equipo, .formato-equipo * { visibility: visible !important; }
+  .formato-equipo { position: fixed; inset: 0; border: 0; }
+}

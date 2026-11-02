@@ -294,6 +294,17 @@ def reintentar(db: Session, notif: NotificacionCorreo):
         notif.asunto = asunto[:255]
         _registrar_y_enviar(db, notif, cfg, html_, texto)
         return
+    if notif.salida_equipo_id and notif.evento.startswith("equipo_"):
+        from . import equipos
+        from .models import SalidaEquipo
+        s = db.get(SalidaEquipo, notif.salida_equipo_id)
+        if s is None:
+            return
+        asunto, html_, texto = equipos.mensaje(s, notif.evento)
+        notif.destinatarios = ", ".join(equipos.destinatarios(s, notif.evento)) or notif.destinatarios
+        notif.asunto = asunto[:255]
+        _registrar_y_enviar(db, notif, cfg, html_, texto)
+        return
     if notif.evento == "retardo_registrado" and notif.permiso is not None:
         from .routers.caseta import destinatarios_retardo, mensaje_retardo
         asunto, html_, texto = mensaje_retardo(notif.permiso)

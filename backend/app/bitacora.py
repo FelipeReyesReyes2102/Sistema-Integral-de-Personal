@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, object_session
 
 from .models import (
     PERMISO_CONSULTA_MEDICA, Permiso, AdminSede, Bitacora, ConfiguracionApp, Festivo, Grupo, HorarioEspecial, PeriodoVacaciones, ReglaAntiguedad,
-    CanalAprobacion, ListaSharePoint, RotacionTurnos, Sede, SolicitudVacaciones, TipoJornada, TipoPermisoSede, Incapacidad, Turno, TurnoDia, Usuario,
+    CanalAprobacion, ListaSharePoint, RotacionTurnos, Sede, SolicitudVacaciones, TipoJornada, TipoPermisoSede, Incapacidad, SalidaEquipo, Turno, TurnoDia, Usuario,
 )
 
 CONFIG, VACACIONES = "configuracion", "vacaciones"
@@ -35,7 +35,7 @@ PROPIAS = {
     Festivo: (CONFIG, "Festivo"), RotacionTurnos: (CONFIG, "Rotación de turnos"),
     SolicitudVacaciones: (VACACIONES, "Solicitud de vacaciones"), Permiso: (VACACIONES, "Permiso"), ListaSharePoint: (CONFIG, "Lista de SharePoint"),
     CanalAprobacion: (CONFIG, "Aprobación en Teams"), TipoPermisoSede: (CONFIG, "Tipo de permiso"),
-    Incapacidad: (VACACIONES, "Incapacidad"),
+    Incapacidad: (VACACIONES, "Incapacidad"), SalidaEquipo: (VACACIONES, "Salida de equipo"),
 }
 OMITIR = {"id", "columnas", "sitio_id", "lista_id", "creado", "actualizado", "ultimo_aviso", "ultima_sincronizacion", "fecha_revision", "actualizado_por_id",
           "cifrado"}
@@ -63,7 +63,9 @@ CAMPOS = {
     "aprobacion_gh_permisos": "Permisos: aprobación jefe + GH", "modalidad": "Se pide por",
     "pide_nomina": "Pide tipo de nómina", "limite_cantidad": "Límite", "limite_unidad": "Unidad del límite",
     "limite_periodo": "Periodo del límite", "fecha_inicio_original": "Inicio registrado por el médico",
-    "fecha_fin_original": "Fin registrado por el médico", "nota_revision": "Comentario del jefe", "max_dias_solicitud": "Máximo de días por solicitud", "descuento": "Saldo en", "minimo_horas": "Mínimo de horas", "tipo": "Tipo", "url": "URL", "sitio_nombre": "Sitio", "lista_nombre": "Lista",
+    "fecha_fin_original": "Fin registrado por el médico", "nota_revision": "Comentario del jefe", "tipo_equipo": "Tipo de equipo", "serie": "SN / Service Tag",
+    "justificacion": "Justificación", "ti_estado": "Revisión de TI", "ti_nota": "Nota de TI", "salida_registrada": "Salida",
+    "regreso_registrado": "Regreso", "max_dias_solicitud": "Máximo de días por solicitud", "descuento": "Saldo en", "minimo_horas": "Mínimo de horas", "tipo": "Tipo", "url": "URL", "sitio_nombre": "Sitio", "lista_nombre": "Lista",
     "mapeo": "Columnas y datos", "valores": "Equivalencia de opciones", "aprobacion_teams": "Aprobación en Teams",
     "col_decision": "Columna de decisión", "val_aprobado": "Valor de aprobado", "val_rechazado": "Valor de rechazado",
     "col_comentario": "Columna de comentarios", "col_respondio": "Columna de quién respondió", "cuenta_flujo": "Cuenta del flujo", "flujo_url": "URL del flujo", "tipos": "Tipos de solicitud",
@@ -144,7 +146,7 @@ def _valor(ctx: _Ctx, obj, col, v):
     """Valor legible de una columna."""
     if v is None:
         return None
-    if col.key == "firma":
+    if col.key in ("firma", "ti_firma"):
         return "(firma)"
     if col.key in ("estado",):
         return ESTADOS.get(v, v)
@@ -268,6 +270,9 @@ def _descripcion(ctx: _Ctx, obj, viejo=False) -> str:
             cuando += f" {_fmt(g('hora_inicio'))}–{_fmt(g('hora_fin'))}"
         tipo = PERMISOS.get(g("tipo")) or _nombre_tipo(ctx, g("usuario_id"), g("tipo"))
         return f"{ctx.nombre('usuarios', g('usuario_id'))} · {tipo} · {cuando}"
+    if isinstance(obj, SalidaEquipo):
+        return (f"{ctx.nombre('usuarios', g('usuario_id'))} · {g('marca')} {g('modelo')} SN {g('serie')}"
+                f" · {_fmt(g('fecha_inicio'))} al {_fmt(g('fecha_fin'))}")
     if isinstance(obj, Incapacidad):
         return (f"{ctx.nombre('usuarios', g('usuario_id'))} · {_fmt(g('fecha_inicio'))} al {_fmt(g('fecha_fin'))}"
                 f" ({g('dias')} día(s))")

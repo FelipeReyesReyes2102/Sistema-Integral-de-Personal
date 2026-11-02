@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-Rol = Literal["superadmin", "gerencia_gh", "admin", "oficina", "planta", "medico", "caseta"]
+Rol = Literal["superadmin", "gerencia_gh", "admin", "oficina", "planta", "medico", "caseta", "ti"]
 TipoPermiso = Literal["llegada_tarde", "salida_temprana", "salida_intermedia", "consulta_medica", "home_office"]
 TipoNomina = Literal["con_goce", "sin_goce", "reposicion"]
 Firma = Annotated[str, Field(max_length=400_000, pattern=r"^data:image/png;base64,[A-Za-z0-9+/=]+$")]
@@ -638,3 +638,67 @@ class JornadaOut(JornadaIn, ORM):
     id: int
     sede_id: int
     empleados: int = 0
+
+
+# ---------- Salida de equipos de cómputo (F-630-03) ----------
+class SalidaEquipoIn(BaseModel):
+    tipo_equipo: Literal["laptop", "escritorio"] = "laptop"
+    marca: str = Field(min_length=1, max_length=80)
+    modelo: str = Field(min_length=1, max_length=80)
+    serie: str = Field(min_length=2, max_length=80)
+    accesorios: str | None = Field(None, max_length=255)
+    justificacion: str = Field(min_length=3, max_length=2000)
+    fecha_inicio: date
+    fecha_fin: date
+    detalles: str | None = Field(None, max_length=2000)
+    aprobador_id: int | None = None
+    usuario_id: int | None = None   # GH puede capturarla a nombre de un empleado
+    firma: str | None = Field(None, max_length=400_000)
+    enviar: bool = False
+
+
+class SalidaEquipoOut(ORM):
+    id: int
+    usuario_id: int
+    usuario_nombre: str | None = None
+    usuario_numero: str | None = None
+    usuario_departamento: str | None = None
+    usuario_puesto: str | None = None
+    tiene_foto: bool = False
+    tipo_equipo: str
+    marca: str
+    modelo: str
+    serie: str
+    accesorios: str | None = None
+    justificacion: str
+    fecha_inicio: date
+    fecha_fin: date
+    detalles: str | None = None
+    estado: str
+    aprobador_id: int | None = None
+    aprobador_nombre: str | None = None
+    revisado_por_nombre: str | None = None
+    fecha_revision: datetime | None = None
+    motivo_rechazo: str | None = None
+    ti_estado: str | None = None
+    ti_por_nombre: str | None = None
+    ti_fecha: datetime | None = None
+    ti_nota: str | None = None
+    salida_registrada: datetime | None = None
+    salida_por_nombre: str | None = None
+    regreso_registrado: datetime | None = None
+    regreso_por_nombre: str | None = None
+    tiene_firma: bool = False
+    tiene_firma_ti: bool = False
+    creado: datetime | None = None
+    situacion: str = ""            # resumen legible del estado (para listas)
+    puede_salir: bool = False      # autorizada por el jefe, sin rechazo de TI y dentro del plazo
+
+
+class RevisionTIIn(BaseModel):
+    nota: str | None = Field(None, max_length=1000)
+    firma: str | None = Field(None, max_length=400_000)
+
+
+class MotivoIn(BaseModel):
+    motivo: str = Field(min_length=3, max_length=1000)

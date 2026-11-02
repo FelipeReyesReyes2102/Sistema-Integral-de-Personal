@@ -85,13 +85,16 @@ def entorno(monkeypatch):
 
 def permiso_de_carlos(tipo="salida_temprana", dias=3):
     carlos = entrar("carlos@empresa.com")
-    fecha = date.today() + timedelta(days=dias)
-    datos = {"tipo": tipo, "fecha": str(fecha), "motivo": "Trámite", "tipo_nomina": "con_goce", "firma": FIRMA, "enviar": True}
-    if tipo == "home_office":
-        datos["fecha_fin"] = str(fecha + timedelta(days=2))
-    else:
-        datos.update(hora_inicio="15:00", hora_fin="19:00")
-    r = carlos.post("/api/permisos", json=datos)
+    for extra in range(0, 30):  # el primer día laboral de su ciclo de planta desde la fecha pedida
+        fecha = date.today() + timedelta(days=dias + extra)
+        datos = {"tipo": tipo, "fecha": str(fecha), "motivo": "Trámite", "tipo_nomina": "con_goce", "firma": FIRMA, "enviar": True}
+        if tipo == "home_office":
+            datos["fecha_fin"] = str(fecha + timedelta(days=2))
+        else:
+            datos.update(hora_inicio="15:00", hora_fin="19:00")
+        r = carlos.post("/api/permisos", json=datos)
+        if r.status_code != 422 or not ("días laborales" in r.text or "ya tienes" in r.text.lower()):
+            break
     assert r.status_code == 201, r.text
     return r.json()
 

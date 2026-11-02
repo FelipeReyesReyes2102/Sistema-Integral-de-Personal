@@ -220,6 +220,8 @@ def permisos_de(user: Usuario) -> list[str]:
         p += ["consultas:registrar"]
     if user.rol == "caseta" or es_admin(user):
         p += ["caseta:consultar"]
+    if user.rol == "ti" or es_admin(user):
+        p += ["equipos:revisar"]
     return p
 
 

@@ -21,6 +21,62 @@ function Movimiento({ p }) {
   return <>De <b>{p.hora_inicio}</b> a <b>{p.hora_fin}</b></>
 }
 
+const TIPOS_EQUIPO = { laptop: 'Laptop', escritorio: 'De escritorio' }
+
+/** Salidas de equipo de cómputo del día: autorizadas (registrar salida), fuera de planta (registrar regreso) y rechazadas por TI. */
+function EquiposHoy() {
+  const [lista, setLista] = useState([])
+  const [error, setError] = useState('')
+  const cargar = () => api('/equipos/hoy').then((d) => { setLista(d.salidas); setError('') }).catch((e) => setError(e.message))
+  useEffect(() => {
+    cargar()
+    const t = setInterval(cargar, 60000)
+    return () => clearInterval(t)
+  }, [])
+  async function registrar(s, que) {
+    try {
+      await api(`/equipos/${s.id}/${que}`, { method: 'POST' })
+      cargar()
+    } catch (e) {
+      alert(e.message)
+    }
+  }
+  if (!lista.length && !error) return null
+  return (
+    <div className="card" style={{ marginBottom: 12 }}>
+      <h4 className="fila" style={{ gap: 6, margin: '0 0 8px', fontSize: 14 }}><Laptop size={16} /> Salidas de equipo de cómputo (F-630-03)</h4>
+      {error && <div className="alerta error">{error}</div>}
+      <div className="caseta-lista">
+        {lista.map((s) => {
+          const rechazada = s.estado === 'rechazado'
+          const fuera = s.salida_registrada && !s.regreso_registrado
+          return (
+            <div key={s.id} className="caseta-item" style={{ borderLeftColor: rechazada ? '#c62828' : fuera ? '#e0a100' : '#2e7d32' }}>
+              <Avatar usuario={{ id: s.usuario_id, nombre: s.usuario_nombre, tiene_foto: s.tiene_foto }} tam={40} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="caseta-nombre">{s.usuario_nombre}</div>
+                <div className="muted" style={{ fontSize: 12 }}>No. {s.usuario_numero}{s.usuario_departamento ? ` · ${s.usuario_departamento}` : ''} · plazo {fmtFecha(s.fecha_inicio)} → {fmtFecha(s.fecha_fin)}</div>
+                <div className="caseta-mov"><Laptop size={14} /> <b>{TIPOS_EQUIPO[s.tipo_equipo]} {s.marca} {s.modelo}</b> · SN <b>{s.serie}</b>{s.accesorios ? ` · ${s.accesorios}` : ''}</div>
+                {rechazada
+                  ? <div className="acceso no"><XCircle size={18} /> <b>NO DEJAR SALIR</b><span>{s.motivo_rechazo}</span></div>
+                  : <div className="muted" style={{ fontSize: 12 }}>Autorizó: {s.revisado_por_nombre}{s.ti_estado === 'autorizado' ? ` · TI: ${s.ti_por_nombre}` : ''}</div>}
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span className={`pill ${rechazada ? 'rechazado' : fuera ? 'solicitado' : 'validado'}`}>{s.situacion}</span>
+                <div style={{ marginTop: 6 }}>
+                  {s.puede_salir && <button className="btn btn-sm btn-primary" onClick={() => registrar(s, 'salida')}>Registrar salida</button>}
+                  {fuera && <button className="btn btn-sm" onClick={() => registrar(s, 'regreso')}>Registrar regreso</button>}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>Revisa que el equipo coincida (marca, modelo y número de serie) antes de registrar la salida.</p>
+    </div>
+  )
+}
+
 function PermisosHoy({ onSolicitar, pendientesIds = [] }) {
   const [datos, setDatos] = useState(null)
   const [buscar, setBuscar] = useState('')
@@ -344,7 +400,7 @@ export default function Caseta() {
       )}
       <Pendientes lista={lista} onCancelar={cancelar} />
       {tab === 'hoy'
-        ? <PermisosHoy onSolicitar={solicitar} pendientesIds={lista.filter((r) => ['solicitado', 'validado'].includes(r.estado)).map((r) => r.usuario_id)} />
+        ? <><EquiposHoy /><PermisosHoy onSolicitar={solicitar} pendientesIds={lista.filter((r) => ['solicitado', 'validado'].includes(r.estado)).map((r) => r.usuario_id)} /></>
         : <Retardos lista={lista} inicial={seleccion} onRegistrado={cargar} />}
     </>
   )

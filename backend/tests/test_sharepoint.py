@@ -120,7 +120,8 @@ def test_envio_y_actualizacion(graph):
     # Ana pide vacaciones: el borrador no se envía; al enviarla, se crea el elemento
     p = ana.get("/api/periodos").json()[0]
     adm.put(f"/api/periodos/{p['id']}/ajuste", json={"ajuste_horas": 80, "nota_ajuste": "prueba sharepoint"})
-    d = date.today() + timedelta(weeks=40)
+    # Lejos en el futuro, pero dentro de la vigencia del periodo
+    d = min(date.today() + timedelta(weeks=40), date.fromisoformat(p["fecha_vencimiento"]) - timedelta(days=14))
     lunes = d - timedelta(days=d.weekday())
     sol = ana.post("/api/vacaciones", json={"periodo_id": p["id"], "fecha_inicio": str(lunes),
                                             "fecha_fin": str(lunes + timedelta(days=7)), "firma": FIRMA}).json()

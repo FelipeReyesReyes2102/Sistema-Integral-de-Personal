@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Check, Eye, PenLine, X } from 'lucide-react'
 import { api } from '../api'
 import DetalleConsulta from '../components/DetalleConsulta'
+import FormatoEquipo from '../components/FormatoEquipo'
+import TablaSalidas from '../components/TablaSalidas'
 import Modal from '../components/Modal'
 import {
   ESTADOS, ESTADOS_INCAPACIDAD, RESULTADOS_CONSULTA, ROLES, TIPOS_INCAPACIDAD, TIPOS_NOMINA, TIPOS_PERMISO_SOLICITABLES, fmtFecha,
@@ -25,6 +27,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
   const [sinMotivo, setSinMotivo] = useState([])
   const [validarPermiso, setValidarPermiso] = useState(null)
   const [validarInc, setValidarInc] = useState(null)
+  const [formatoEq, setFormatoEq] = useState(null)
   const [firma, setFirma] = useState(null)
 
   function verFirma(s) {
@@ -42,9 +45,9 @@ export default function Solicitudes({ modo = 'jefe' }) {
       return
     }
     const query = admin ? { todos: true, estado } : { por_aprobar: true, estado }
-    if (tab === 'incapacidades') {
+    if (tab === 'incapacidades' || tab === 'equipos') {
       if (!query.estado) delete query.estado
-      api('/incapacidades', { query }).then(setLista).catch((e) => setError(e.message))
+      api(`/${tab}`, { query }).then(setLista).catch((e) => setError(e.message))
       return
     }
     if (tab === 'permisos' && tipo) query.tipo = tipo
@@ -99,6 +102,8 @@ export default function Solicitudes({ modo = 'jefe' }) {
             onClick={() => setTab('permisos')}>Permisos y home office{marca('permisos')}</button>
           <button style={{ fontWeight: tab === 'incapacidades' ? 700 : 400, color: tab === 'incapacidades' ? 'var(--primary)' : '' }}
             onClick={() => setTab('incapacidades')}>Incapacidades{marca('incapacidades')}</button>
+          <button style={{ fontWeight: tab === 'equipos' ? 700 : 400, color: tab === 'equipos' ? 'var(--primary)' : '' }}
+            onClick={() => setTab('equipos')}>Salida de equipo{marca('equipos')}</button>
           {admin && (
             <button style={{ fontWeight: tab === 'consultas' ? 700 : 400, color: tab === 'consultas' ? 'var(--primary)' : '' }}
               onClick={() => setTab('consultas')}>Consultas médicas</button>
@@ -151,6 +156,18 @@ export default function Solicitudes({ modo = 'jefe' }) {
             </tbody>
           </table>
         </div>
+      ) : tab === 'equipos' ? (
+        <>
+          <TablaSalidas lista={filtrada} vacio="Sin solicitudes de salida de equipo."
+            onFormato={(s) => setFormatoEq(s)}
+            acciones={(s) => s.estado === 'solicitado' && (
+              <span className="fila" style={{ display: 'inline-flex', gap: 6, flexWrap: 'nowrap' }}>
+                <button className="btn btn-sm btn-success" onClick={() => ejecutar(`/equipos/${s.id}/validar`)}><Check size={14} /> Autorizar</button>
+                <button className="btn btn-sm btn-danger" onClick={() => setRechazo({ s, motivo: '' })}><X size={14} /> Rechazar</button>
+              </span>
+            )} />
+          <p className="muted" style={{ fontSize: 12 }}>Formato F-630-03. Al autorizarla, TI puede revisarla (sellarla o rechazarla) antes de que el equipo salga; caseta registra la salida y el regreso.</p>
+        </>
       ) : tab === 'incapacidades' ? (
         <div className="tabla-wrap">
           <table className="tabla">
@@ -275,6 +292,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
       </div>
 
       )}
+      {formatoEq && <FormatoEquipo salida={formatoEq} onClose={() => setFormatoEq(null)} />}
       {verConsulta && <DetalleConsulta consultaId={verConsulta} onClose={() => setVerConsulta(null)} />}
       {firma && (
         <Modal titulo={`Firma de ${firma.nombre}`} onClose={() => setFirma(null)}
@@ -285,12 +303,12 @@ export default function Solicitudes({ modo = 'jefe' }) {
       {rechazo && (() => {
         // Negar el acceso a planta por retardo (caseta) exige el motivo
         const acceso = rechazo.capturar || (tab === 'permisos' && rechazo.s.tipo === 'llegada_tarde')
-        const minimo = acceso ? 5 : tab === 'incapacidades' ? 1 : 0
+        const minimo = acceso ? 5 : tab === 'equipos' ? 3 : tab === 'incapacidades' ? 1 : 0
         const falta = rechazo.motivo.trim().length < minimo
         const ruta = rechazo.capturar ? `/permisos/${rechazo.s.id}/motivo-rechazo` : `/${tab}/${rechazo.s.id}/rechazar`
         return (
           <Modal titulo={rechazo.capturar ? 'Motivo del acceso negado' : acceso ? 'Negar acceso a planta'
-            : tab === 'incapacidades' ? 'Rechazar incapacidad' : 'Rechazar solicitud'} onClose={() => setRechazo(null)}
+            : tab === 'incapacidades' ? 'Rechazar incapacidad' : tab === 'equipos' ? 'Rechazar salida de equipo' : 'Rechazar solicitud'} onClose={() => setRechazo(null)}
             pie={<>
               <button className="btn" onClick={() => setRechazo(null)}>Cancelar</button>
               <button className="btn btn-danger" disabled={falta}

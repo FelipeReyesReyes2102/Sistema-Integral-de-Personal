@@ -32,7 +32,13 @@ def test_flujo_vacaciones_oficina():
     periodos = ana.get("/api/periodos").json()
     assert periodos and periodos[0]["horas_por_dia"] == 8
     p = periodos[0]
-    lunes = proximo_lunes()
+    # Una semana completa sin festivos (p. ej. el día de la Revolución cae en lunes)
+    for semanas in range(2, 12):
+        lunes = proximo_lunes(semanas)
+        c = ana.post("/api/vacaciones/calcular", json={
+            "periodo_id": p["id"], "fecha_inicio": str(lunes), "fecha_fin": str(lunes + timedelta(days=7))}).json()
+        if c.get("dias_habiles") == 6:
+            break
 
     # 5 días sueltos: permitidos porque el saldo (16) todavía alcanza para el bloque de 6, con aviso
     r = ana.post("/api/vacaciones/calcular", json={

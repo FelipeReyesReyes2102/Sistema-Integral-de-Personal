@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  CalendarDays, ClipboardCheck, Clock, DoorOpen, Home, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
+  CalendarDays, ClipboardCheck, Clock, DoorOpen, Home, Laptop, MonitorCheck, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
   History, PartyPopper, Settings, ShieldCheck, Users, UsersRound, X,
 } from 'lucide-react'
 import { api, elegirSede, sedeActiva } from '../api'
 import { useAuth } from '../auth'
-import { ROLES, esAdmin as esAdminFn, esMedico, sinVacaciones } from '../utils'
+import { ROLES, esAdmin as esAdminFn, esMedico, esTI, sinVacaciones } from '../utils'
 import Avatar from './Avatar'
 import CambiarPassword from './CambiarPassword'
 import PerfilUsuario from './PerfilUsuario'
@@ -14,6 +14,8 @@ import PerfilUsuario from './PerfilUsuario'
 const TITULOS = {
   '/': 'Mis vacaciones y ausencias',
   '/caseta': 'Caseta · permisos del día y retardos',
+  '/equipos': 'Salida de equipo de cómputo',
+  '/ti': 'TI · salidas de equipo de cómputo',
   '/aprobaciones': 'Solicitudes por aprobar',
   '/mi-equipo': 'Mi equipo',
   '/solicitudes': 'Todas las solicitudes',
@@ -47,8 +49,9 @@ export default function Layout() {
   useEffect(() => { if (sedeActiva() && !sedeElegida) elegirSede('') }, [])
   const jefe = esJefe(user)
 
+  const conPendientes = jefe || esTI(user)
   useEffect(() => {
-    if (!jefe) return
+    if (!conPendientes) return
     const cargar = () => api('/pendientes').then(setPendientes).catch(() => {})
     cargar()
     const t = setInterval(cargar, 60000)
@@ -57,7 +60,7 @@ export default function Layout() {
       clearInterval(t)
       window.removeEventListener('pendientes:refrescar', cargar)
     }
-  }, [jefe])
+  }, [conPendientes])
 
   useEffect(() => setMenu(false), [pathname])
   useEffect(() => {
@@ -95,6 +98,13 @@ export default function Layout() {
         </div>
         <nav>
           {!sinVacaciones(user) && link('/', Home, 'Mis vacaciones')}
+          {!sinVacaciones(user) && link('/equipos', Laptop, 'Salida de equipo')}
+          {user.rol === 'ti' && (
+            <>
+              <div className="seccion">TI</div>
+              {link('/ti', MonitorCheck, 'Salidas de equipo', badge(pendientes.ti_equipos))}
+            </>
+          )}
           {user.rol === 'caseta' && (
             <>
               <div className="seccion">Caseta</div>
@@ -120,6 +130,7 @@ export default function Layout() {
               {link('/solicitudes', ClipboardCheck, 'Todas las solicitudes', badge(pendientes.todas))}
               {link('/equipo', CalendarDays, 'Calendario general')}
               {link('/caseta', DoorOpen, 'Caseta')}
+              {link('/ti', MonitorCheck, 'Salidas de equipo (TI)', badge(pendientes.ti_equipos))}
               {link('/empleados', Users, 'Empleados')}
               {link('/grupos', UsersRound, 'Grupos')}
               {link('/turnos', Clock, 'Turnos')}
@@ -174,6 +185,7 @@ export default function Layout() {
         {jefe && <NavLink to="/mi-equipo"><UsersRound size={22} />Mi equipo</NavLink>}
         {esMedico(user) && <NavLink to="/consultas"><Stethoscope size={22} />Consultas</NavLink>}
         {user.rol === 'caseta' && <NavLink to="/caseta"><DoorOpen size={22} />Caseta</NavLink>}
+        {user.rol === 'ti' && <NavLink to="/ti"><MonitorCheck size={22} />TI{badge(pendientes.ti_equipos)}</NavLink>}
         <button className={menu ? 'active' : ''} onClick={() => setMenu(!menu)}>
           {menu ? <X size={22} /> : <Menu size={22} />}Menú
         </button>

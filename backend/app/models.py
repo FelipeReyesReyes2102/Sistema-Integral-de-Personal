@@ -17,7 +17,8 @@ ROL_SUPERADMIN = "superadmin"  # todo lo del administrador + configuración de M
 # "admin" se muestra como GH (Gestión Humana): administra solo su sede.
 ROL_GERENCIA_GH = "gerencia_gh"  # Gerencia GH: mismos accesos que GH en las sedes que le asigne un super administrador
 ROL_CASETA = "caseta"  # vigilancia: ve los permisos validados del día y registra retardos; vacaciones como oficinas
-ROLES = (ROL_SUPERADMIN, ROL_GERENCIA_GH, ROL_ADMIN, ROL_OFICINA, ROL_PLANTA, ROL_MEDICO, ROL_CASETA)
+ROL_TI = "ti"  # TI: revisa (sella o rechaza) las salidas de equipo de cómputo; vacaciones como oficinas
+ROLES = (ROL_SUPERADMIN, ROL_GERENCIA_GH, ROL_ADMIN, ROL_OFICINA, ROL_PLANTA, ROL_MEDICO, ROL_CASETA, ROL_TI)
 ROLES_ADMIN = (ROL_ADMIN, ROL_GERENCIA_GH, ROL_SUPERADMIN)
 
 
@@ -42,6 +43,11 @@ ROLES_SIN_VACACIONES = (ROL_MEDICO, ROL_CASETA)  # solo usan su apartado (servic
 def solicita_vacaciones(usuario) -> bool:
     """El médico de planta y caseta no piden vacaciones ni permisos en el sistema."""
     return usuario is not None and usuario.rol not in ROLES_SIN_VACACIONES
+
+
+def es_ti(usuario) -> bool:
+    """Personal de TI (y GH / super administrador, que también pueden revisar las salidas de equipo)."""
+    return usuario is not None and (usuario.rol == ROL_TI or usuario.rol in ROLES_ADMIN)
 
 
 def es_medico(usuario) -> bool:
@@ -685,6 +691,54 @@ class MedicamentoRecetado(Base):
     consulta: Mapped[ConsultaMedica] = relationship(back_populates="medicamentos")
 
 
+TIPOS_EQUIPO = ("laptop", "escritorio")
+
+
+class SalidaEquipo(Base):
+    """Entrada y salida de equipos de cómputo (formato F-630-03).
+
+    El empleado la solicita y firma; su jefe directo la autoriza; TI sella la autorización o la rechaza en cualquier
+    momento antes de que el equipo salga (se avisa al empleado y al jefe); caseta registra la salida y el regreso."""
+    __tablename__ = "salidas_equipo"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), index=True)
+    tipo_equipo: Mapped[str] = mapped_column(String(20), default="laptop")       # laptop | escritorio
+    marca: Mapped[str] = mapped_column(String(80))
+    modelo: Mapped[str] = mapped_column(String(80))
+    serie: Mapped[str] = mapped_column(String(80))                                # SN / Service Tag
+    accesorios: Mapped[str | None] = mapped_column(String(255))
+    justificacion: Mapped[str] = mapped_column(Text)
+    fecha_inicio: Mapped[date] = mapped_column(Date, index=True)
+    fecha_fin: Mapped[date] = mapped_column(Date)
+    detalles: Mapped[str | None] = mapped_column(Text)
+    firma: Mapped[str | None] = mapped_column(Text)
+    estado: Mapped[str] = mapped_column(String(20), default=BORRADOR, index=True)
+    aprobador_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"), index=True)
+    revisado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    fecha_revision: Mapped[datetime | None] = mapped_column(DateTime)
+    motivo_rechazo: Mapped[str | None] = mapped_column(Text)
+    # Revisión de TI: autorizado (sello) o rechazado; sin revisar = None
+    ti_estado: Mapped[str | None] = mapped_column(String(20), index=True)
+    ti_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    ti_fecha: Mapped[datetime | None] = mapped_column(DateTime)
+    ti_nota: Mapped[str | None] = mapped_column(Text)
+    ti_firma: Mapped[str | None] = mapped_column(Text)
+    # Revisión de seguridad en caseta
+    salida_registrada: Mapped[datetime | None] = mapped_column(DateTime)
+    salida_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    regreso_registrado: Mapped[datetime | None] = mapped_column(DateTime)
+    regreso_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    creado: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    usuario: Mapped[Usuario] = relationship(foreign_keys=[usuario_id])
+    aprobador: Mapped[Usuario | None] = relationship(foreign_keys=[aprobador_id])
+    revisado_por: Mapped[Usuario | None] = relationship(foreign_keys=[revisado_por_id])
+    ti_por: Mapped[Usuario | None] = relationship(foreign_keys=[ti_por_id])
+    salida_por: Mapped[Usuario | None] = relationship(foreign_keys=[salida_por_id])
+    regreso_por: Mapped[Usuario | None] = relationship(foreign_keys=[regreso_por_id])
+
+
 class NotificacionCorreo(Base):
     """Bitácora de correos enviados (p. ej. avisos a caseta de permisos autorizados)."""
     __tablename__ = "notificaciones_correo"
@@ -695,6 +749,7 @@ class NotificacionCorreo(Base):
     sede_id: Mapped[int | None] = mapped_column(ForeignKey("sedes.id"), index=True)
     permiso_id: Mapped[int | None] = mapped_column(ForeignKey("permisos.id", ondelete="SET NULL"), index=True)
     incapacidad_id: Mapped[int | None] = mapped_column(ForeignKey("incapacidades.id", ondelete="SET NULL"), index=True)
+    salida_equipo_id: Mapped[int | None] = mapped_column(ForeignKey("salidas_equipo.id", ondelete="SET NULL"), index=True)
     destinatarios: Mapped[str] = mapped_column(Text)
     asunto: Mapped[str] = mapped_column(String(255))
     estado: Mapped[str] = mapped_column(String(20), default="pendiente")  # pendiente | enviado | error

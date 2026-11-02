@@ -1,11 +1,13 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { useAuth } from './auth'
-import { esAdmin, esCaseta, esMedico, esSuperAdmin, inicioDe, sinVacaciones } from './utils'
+import { esAdmin, esCaseta, esMedico, esSuperAdmin, esTI, inicioDe, sinVacaciones } from './utils'
 import Layout, { esJefe } from './components/Layout'
 import Login from './pages/Login'
 import CambioObligatorio from './pages/CambioObligatorio'
 import ConfirmarDatos from './pages/ConfirmarDatos'
 import Caseta from './pages/Caseta'
+import SalidasEquipo from './pages/SalidasEquipo'
+import TI from './pages/TI'
 import MisVacaciones from './pages/MisVacaciones'
 import Solicitudes from './pages/Solicitudes'
 import MiEquipo from './pages/MiEquipo'
@@ -32,6 +34,16 @@ function SoloSuperAdmin({ children }) {
 function SoloCaseta({ children }) {
   const { user } = useAuth()
   return esCaseta(user) ? children : <Navigate to="/" replace />
+}
+
+function SoloTI({ children }) {
+  const { user } = useAuth()
+  return esTI(user) ? children : <Navigate to="/" replace />
+}
+
+function ConVacaciones({ children }) {
+  const { user } = useAuth()
+  return sinVacaciones(user) ? <Navigate to={inicioDe(user)} replace /> : children
 }
 
 function SoloMedico({ children }) {
@@ -69,6 +81,8 @@ export default function App() {
         <Route index element={sinVacaciones(user) ? <Navigate to={inicioDe(user)} replace /> : <MisVacaciones />} />
         <Route path="/consultas" element={<SoloMedico><Consultas /></SoloMedico>} />
         <Route path="/caseta" element={<SoloCaseta><Caseta /></SoloCaseta>} />
+        <Route path="/equipos" element={<ConVacaciones><SalidasEquipo /></ConVacaciones>} />
+        <Route path="/ti" element={<SoloTI><TI /></SoloTI>} />
         <Route path="/aprobaciones" element={<SoloJefe><Solicitudes modo="jefe" /></SoloJefe>} />
         <Route path="/mi-equipo" element={<SoloJefe><MiEquipo /></SoloJefe>} />
         <Route path="/mi-equipo/:id/vacaciones" element={<SoloJefe><VacacionesEmpleado /></SoloJefe>} />

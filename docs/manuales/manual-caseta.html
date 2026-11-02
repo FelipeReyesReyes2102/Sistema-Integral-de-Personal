@@ -124,7 +124,7 @@ a { color: var(--primary); }
 <div class="marco">
   <nav class="indice" aria-label="Contenido">
     <b>Contenido</b>
-    <ol><li><a href="#entrar">Entrar</a></li><li><a href="#hoy">Permisos de hoy</a></li><li><a href="#ingreso">Solicitar ingreso por retardo</a></li><li><a href="#espera">Esperar la respuesta</a></li><li><a href="#errores">Corregir un error</a></li><li><a href="#faq">Preguntas frecuentes</a></li></ol>
+    <ol><li><a href="#entrar">Entrar</a></li><li><a href="#hoy">Permisos de hoy</a></li><li><a href="#equipo">Salidas de equipo de cómputo</a></li><li><a href="#ingreso">Solicitar ingreso por retardo</a></li><li><a href="#espera">Esperar la respuesta</a></li><li><a href="#errores">Corregir un error</a></li><li><a href="#faq">Preguntas frecuentes</a></li></ol>
   </nav>
   <main>
     <section id="entrar">
@@ -135,24 +135,28 @@ a { color: var(--primary); }
       <h2><span class="n">02</span>Permisos de hoy</h2>
       <p>Muestra los permisos <b>autorizados</b> del día en tu sede, con foto, nómina, departamento, turno y quién autorizó:</p><div class="tabla"><table><thead><tr><th>Permiso</th><th>Qué esperar en la puerta</th></tr></thead><tbody><tr><td>Llegada tarde</td><td><b>Entra</b> a la hora indicada (se muestra también su entrada normal).</td></tr><tr><td>Salida temprana</td><td><b>Sale</b> a la hora indicada y ya no regresa.</td></tr><tr><td>Salida durante la jornada</td><td><b>Sale</b> y <b>regresa</b> a las horas indicadas.</td></tr><tr><td>Fuera de planta todo el día</td><td>Home office u otros permisos por días: no debe estar en planta.</td></tr></tbody></table></div><p>La lista se actualiza sola cada minuto; también puedes pulsar <span class="ui">Actualizar</span>.</p><h3>Buscar a cualquier persona</h3><p>Escribe nombre, apellido o nómina (sin importar acentos). Aparece cada persona de la sede con su horario de hoy, su jefe y su situación: <b>Sin permisos hoy</b>, o cada permiso como <b>Autorizado</b> o <b>Pendiente</b>. Desde ahí puedes pulsar <span class="ui">Solicitar ingreso</span>.</p>
     </section>
+    <section id="equipo">
+      <h2><span class="n">03</span>Salidas de equipo de cómputo</h2>
+      <p>Arriba de <i>Permisos de hoy</i> aparece <b>Salidas de equipo de cómputo (F-630-03)</b> cuando hay equipos que salen o están fuera de planta. Es la <b>revisión de seguridad</b> del formato:</p><div class="tabla"><table><thead><tr><th>Lo que ves</th><th>Qué hacer</th></tr></thead><tbody><tr><td>Autorizada (con el jefe que autorizó y, si lo hizo, TI)</td><td>Revisa que el equipo coincida: tipo, marca, modelo, <b>número de serie</b> y accesorios. Pulsa <span class="ui">Registrar salida</span>.</td></tr><tr><td>Fuera de planta</td><td>Cuando el equipo regrese, revísalo y pulsa <span class="ui">Registrar regreso</span>.</td></tr><tr><td><span class="estado e-rechazado">NO DEJAR SALIR</span></td><td>TI rechazó la salida; se muestra el motivo. No dejes salir el equipo.</td></tr></tbody></table></div><p>Solo puedes registrar la salida dentro del plazo autorizado. Si el equipo no aparece, no tiene autorización: pide a la persona que la solicite en SIP-O.</p>
+    </section>
     <section id="ingreso">
-      <h2><span class="n">03</span>Solicitar ingreso por retardo</h2>
+      <h2><span class="n">04</span>Solicitar ingreso por retardo</h2>
       <p>Si alguien llega después de su hora de entrada <b>sin un permiso autorizado</b>, pide a su jefe que autorice su ingreso:</p><ol class="pasos"><li><span>Pulsa <span class="ui">Solicitar ingreso</span> junto a la persona en <i>Permisos de hoy</i>, o búscala en la pestaña <span class="ui">Ingreso por retardo</span>. Verás su entrada de hoy y su jefe.</span></li><li><span>Revisa la <b>hora de llegada</b> (se llena con la hora actual) y los minutos de retardo. Si quieres, escribe el motivo que te dé la persona.</span></li><li><span>Si su jefe no está en planta, marca <span class="ui">El jefe inmediato no está en planta: enviar a GH</span>. Si no tiene jefe, va a GH automáticamente.</span></li><li><span>Pulsa <span class="ui">Enviar solicitud de ingreso</span>. El jefe (o GH) la recibe en <b>Teams</b>, por correo y en SIP-O.</span></li></ol><p>No se puede enviar si la hora no es posterior a su entrada, si no tiene turno o si ya tiene una solicitud de ingreso hoy.</p>
     </section>
     <section id="espera">
-      <h2><span class="n">04</span>Esperar la respuesta</h2>
+      <h2><span class="n">05</span>Esperar la respuesta</h2>
       <p>Arriba, en las dos pestañas, aparece <b>Esperando autorización de ingreso</b> con cada persona, su hora de llegada, a quién se le pidió y cuánto lleva esperando. La pestaña muestra un círculo con cuántas esperan. Se revisa cada 15 segundos.</p><div class="tabla"><table><thead><tr><th>Respuesta</th><th>Qué ves</th><th>Qué hacer</th></tr></thead><tbody><tr><td><span class="estado e-validado">ACCESO AUTORIZADO</span></td><td>Aviso verde con quién autorizó y su comentario. Sale de pendientes y pasa a <i>Resueltas hoy</i>.</td><td>Deja pasar a la persona.</td></tr><tr><td><span class="estado e-rechazado">ACCESO DENEGADO</span></td><td>Aviso rojo con quién lo negó y el motivo. Pasa a <i>Resueltas hoy</i>.</td><td>No la dejes pasar; sigue el procedimiento de la planta.</td></tr><tr><td><span class="estado e-solicitado">Esperando</span></td><td>Sigue en pendientes; indica si ya se envió a Teams.</td><td>Espera. Si tarda, avisa a GH o al jefe por teléfono.</td></tr></tbody></table></div><p>Si el jefe negó desde Teams sin escribir el motivo, el acceso queda denegado de inmediato y el motivo aparece cuando lo capture.</p>
     </section>
     <section id="errores">
-      <h2><span class="n">05</span>Corregir un error</h2>
+      <h2><span class="n">06</span>Corregir un error</h2>
       <p>Si registraste a la persona equivocada o una hora incorrecta, pulsa <span class="ui">Cancelar</span> en la tarjeta mientras siga esperando y vuelve a registrarla. Una vez que el jefe respondió, solo él o GH pueden cancelarla.</p>
     </section>
     <section id="faq">
-      <h2><span class="n">06</span>Preguntas frecuentes</h2>
+      <h2><span class="n">07</span>Preguntas frecuentes</h2>
       <details><summary>No encuentro a la persona.</summary><p>Prueba con un apellido o la nómina. Solo aparecen empleados activos de tu sede. El médico de planta y caseta no tienen permisos en SIP-O.</p></details><details><summary>Dice que no tiene turno.</summary><p>Sin turno no se puede calcular el retardo. Pide a GH que le asigne uno.</p></details><details><summary>Su jefe no responde.</summary><p>Si el jefe no está en planta, cancela la solicitud y vuelve a enviarla marcando “enviar a GH”, o comunícate con GH.</p></details><details><summary>Llegó con un permiso de llegada tarde.</summary><p>Búscala en Permisos de hoy: si aparece Autorizado, no necesitas pedir ingreso.</p></details>
     </section>
   </main>
 </div>
-<footer class="pie">SIP-O · Sistema Integral de Personal · O-tek. Para dudas o correcciones de tus datos, contacta a Gestión Humana de tu sede. Actualizado: noviembre de 2026.<div class="otros">Otros manuales: <a href="manual-empleado.html">Empleado</a> · <a href="manual-jefe.html">Jefe</a> · <a href="manual-servicio-medico.html">Servicio médico</a> · <a href="manual-gh.html">Gestión Humana</a> · <a href="manual-superadmin.html">Super administrador</a></div></footer>
+<footer class="pie">SIP-O · Sistema Integral de Personal · O-tek. Para dudas o correcciones de tus datos, contacta a Gestión Humana de tu sede. Actualizado: noviembre de 2026.<div class="otros">Otros manuales: <a href="manual-empleado.html">Empleado</a> · <a href="manual-jefe.html">Jefe</a> · <a href="manual-servicio-medico.html">Servicio médico</a> · <a href="manual-gh.html">Gestión Humana</a> · <a href="manual-ti.html">TI</a> · <a href="manual-superadmin.html">Super administrador</a></div></footer>
 </body>
 </html>

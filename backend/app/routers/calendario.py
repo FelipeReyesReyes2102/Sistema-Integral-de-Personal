@@ -206,13 +206,17 @@ def pendientes(db: Session = Depends(get_db), user: Usuario = Depends(get_curren
     # Accesos negados en Teams sin motivo: el jefe debe capturarlo en SIP-O
     res["motivos_pendientes"] = db.scalar(select(func.count(Permiso.id)).where(
         Permiso.estado == RECHAZADO, Permiso.motivo_rechazo_pendiente.is_(True), Permiso.revisado_por_id == user.id)) or 0
-    res["total"] = res["vacaciones"] + res["permisos"] + res["incapacidades"] + res["motivos_pendientes"]
+    from .equipos import pendientes as pendientes_equipos
+    res.update(pendientes_equipos(db, user))
+    res["total"] = res["vacaciones"] + res["permisos"] + res["incapacidades"] + res["equipos"] + res["motivos_pendientes"]
     if es_admin(user):
         de_sede = lambda m: (m.usuario_id.in_(select(Usuario.id).where(alc.filtro(Usuario.sede_id))),)  # noqa: E731
         res["todas_vacaciones"] = contar(SolicitudVacaciones, de_sede(SolicitudVacaciones))
         res["todas_permisos"] = contar(Permiso, de_sede(Permiso))
         res["todas_incapacidades"] = contar(Incapacidad, de_sede(Incapacidad))
         res["todas"] = res["todas_vacaciones"] + res["todas_permisos"] + res["todas_incapacidades"]
+        from .equipos import pendientes as _pend_eq
+        res["todas"] += _pend_eq(db, user).get("todas_equipos", 0)
     return res
 
 
