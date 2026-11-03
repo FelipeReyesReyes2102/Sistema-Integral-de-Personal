@@ -278,7 +278,12 @@ export default function MisVacaciones({ usuarioId }) {
             <select className="ps-select" value={periodoSel ?? ''}
               onChange={(e) => elegirPeriodo(e.target.value === 'general' ? 'general' : Number(e.target.value))}>
               {hayGeneral && <option value="general">General</option>}
-              {periodos.map((p) => <option key={p.id} value={p.id}>{p.nombre}{!p.vigente ? ' (vencido)' : ''}</option>)}
+              {periodos.filter((p) => p.vigente).map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              {periodos.some((p) => !p.vigente) && (
+                <optgroup label="Vencidos">
+                  {periodos.filter((p) => !p.vigente).map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </optgroup>
+              )}
             </select>
           ) : periodo && <span className="muted">{periodo.nombre}</span>}
         </div>
@@ -296,11 +301,14 @@ export default function MisVacaciones({ usuarioId }) {
           </>
         ) : periodo ? (
           <>
-            <div className="ps-numero">
+            <div className="ps-numero" title={[
+              `${num(diasLey)} días por antigüedad${esPlanta ? ' (de 12 h)' : ''}`,
+              tomadosAntes > 0 && `${num(aDias(tomadosAntes))} tomados antes del sistema`,
+              extra > 0 && `+${num(aDias(extra))} de ajuste`,
+            ].filter(Boolean).join(' · ')}>
               <b>{num(periodo.dias_disponible)}</b> de {num(diasLey + aDias(extra))} días disponibles
             </div>
-            <div className="barra delgada"
-              title={`Disponible ${num(periodo.dias_disponible)} d · Borrador ${num(periodo.dias_borrador)} d · Solicitado ${num(periodo.dias_solicitado)} d · Tomados ${num(periodo.dias_validado + aDias(tomadosAntes))} d`}>
+            <div className="barra delgada">
               <div className="c-disp" style={{ width: pct(periodo.horas_disponible) }} />
               <div className="c-borr" style={{ width: pct(periodo.horas_borrador) }} />
               <div className="c-soli" style={{ width: pct(periodo.horas_solicitado) }} />
@@ -308,24 +316,20 @@ export default function MisVacaciones({ usuarioId }) {
               <div className="c-antes" style={{ width: pct(tomadosAntes) }} />
               <div style={{ width: pct(periodo.horas_perdidas), background: 'var(--danger)' }} />
             </div>
-            <div className="ps-pie">
-              {num(diasLey)} d por antigüedad{esPlanta ? ' (de 12 h)' : ''}
-              {tomadosAntes > 0 && ` · ${num(aDias(tomadosAntes))} tomado(s) antes`}
-              {extra > 0 && ` · +${num(aDias(extra))} de ajuste`}
-              {periodo.dias_solicitado > 0 && ` · ${num(periodo.dias_solicitado)} solicitado(s)`}
-              {periodo.dias_validado > 0 && ` · ${num(periodo.dias_validado)} tomado(s)`}
-              {` · vence ${fmtFecha(periodo.fecha_vencimiento, false)}`}
+            <div className="ps-cifras">
+              <div><b>{num(periodo.dias_solicitado)}</b>por aprobar</div>
+              <div><b>{num(periodo.dias_validado + aDias(tomadosAntes))}</b>tomados</div>
+              <div><b>{fmtFecha(periodo.fecha_vencimiento, false)}</b>{periodo.vigente ? 'vencen' : 'vencieron'}</div>
             </div>
             {periodo.vigente ? (
               <div className={`ps-bloque ${periodo.bloque_cumplido ? 'ok' : ''}`}>
                 {periodo.bloque_cumplido
-                  ? `✓ Bloque de ${periodo.minimo_dias} días seguidos cumplido`
-                  : `Pendiente: un bloque de ${periodo.minimo_dias} días seguidos`}
+                  ? `✓ Ya tomaste tus ${periodo.minimo_dias} días seguidos`
+                  : `Recuerda tomar ${periodo.minimo_dias} días seguidos al menos una vez`}
               </div>
             ) : (
               <div className="ps-bloque vencido">
-                Venció el {fmtFecha(periodo.fecha_vencimiento, false)}
-                {periodo.dias_perdidos > 0 ? `; se perdieron ${num(periodo.dias_perdidos)} día(s)` : ''}
+                {periodo.dias_perdidos > 0 ? `Periodo vencido: se perdieron ${num(periodo.dias_perdidos)} día(s)` : 'Periodo vencido'}
               </div>
             )}
           </>
@@ -334,8 +338,8 @@ export default function MisVacaciones({ usuarioId }) {
         )}
         {porVencer && (
           <div className="ps-bloque vencido" title="Después de 18 meses los días no usados se pierden">
-            {num(porVencer.dias_disponible)} d del {porVencer.nombre} vencen el {fmtFecha(porVencer.fecha_vencimiento, false)}
-            {diasParaVencer !== null && ` (en ${diasParaVencer} días)`}
+            Usa antes del {fmtFecha(porVencer.fecha_vencimiento, false)} tus {num(porVencer.dias_disponible)} día(s) del {porVencer.nombre}
+            {diasParaVencer !== null && ` (faltan ${diasParaVencer} días)`}
           </div>
         )}
       </div>
@@ -376,7 +380,9 @@ export default function MisVacaciones({ usuarioId }) {
             permisoPorDias={(tiposSede || []).some((t) => t.modalidad === 'dias' && t.clave !== 'home_office')}
             onVacaciones={() => setModal({ tipo: 'vac', inicial: { fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin || seleccion.inicio, periodo_id: esGeneral ? null : periodoSolicitud } })}
             onPermiso={() => setModal({ tipo: 'perm', fechaInicial: seleccion.inicio, fechaFinInicial: seleccion.fin || seleccion.inicio })}
-            onHomeOffice={() => setModal({ tipo: 'perm', tipoPermiso: 'home_office', fechaInicial: seleccion.inicio, fechaFinInicial: seleccion.fin || seleccion.inicio })} />
+            onHomeOffice={() => setModal({ tipo: 'perm', tipoPermiso: 'home_office', fechaInicial: seleccion.inicio, fechaFinInicial: seleccion.fin || seleccion.inicio })}
+            onNuevaVacacion={periodosConSaldo.length > 0 ? () => setModal({ tipo: 'vac' }) : null}
+            onNuevoPermiso={() => setModal({ tipo: 'perm' })} />
         )}
         <YearCalendar anio={anio} onAnio={setAnio} datos={calendario} seleccion={seleccion} compacto
           onSeleccion={soloLectura ? undefined : setSeleccion}
@@ -425,6 +431,9 @@ export default function MisVacaciones({ usuarioId }) {
 function PanelRegistros({ anio, registros, franjas, foco, onFoco, onAbrir, ocultos, onPeriodo, onTodosPeriodos, aniversario, miCumple,
   visible = () => true }) {
   const algunoVisible = franjas.some((x) => !ocultos.includes(x.nombre))
+  // Solo las categorías con algo registrado en el año (vacaciones siempre)
+  const cats = Object.entries(CATEGORIAS).filter(([k]) => k !== 'consulta_medica' && k !== 'aniversario' && visible(k)
+    && (k === 'vacaciones' || (registros[k]?.dias || 0) > 0))
   const texto = (k, r) => {
     if (k === 'vacaciones' || k === 'home_office') return `${r.dias} día(s)${r.pendientes ? ` · ${r.pendientes} pend.` : ''}`
     if (k === 'consulta') return `${r.dias} consulta(s)`
@@ -436,18 +445,23 @@ function PanelRegistros({ anio, registros, franjas, foco, onFoco, onAbrir, ocult
     <div className="registros">
       <div className="registros-cab">
         <b>Registros {anio}</b>
-        <span className="muted">Clic: resaltar en el calendario · doble clic: ver solicitudes</span>
-        {foco && <button type="button" className="btn btn-sm" onClick={() => onFoco(foco)}>Quitar resaltado</button>}
-        <button type="button" className="btn btn-sm" onClick={() => onAbrir('todas')}>Ver todas</button>
+        <span className="muted">Toca una para marcarla en el calendario</span>
+        {foco && <button type="button" className="btn btn-sm" onClick={() => onFoco(foco)}>Quitar marca</button>}
+        <button type="button" className="btn btn-sm" onClick={() => onAbrir('todas')}>Mis solicitudes</button>
       </div>
-      {Object.entries(CATEGORIAS).filter(([k]) => k !== 'consulta_medica' && k !== 'aniversario' && visible(k)).map(([k, c]) => (
-        <button key={k} type="button" className={`registro ${foco === k ? 'activo' : ''}`}
-          style={foco === k ? { borderColor: c.color, background: `${c.color}14` } : undefined}
-          onClick={(e) => { if (e.detail <= 1) onFoco(k) }} onDoubleClick={() => onAbrir(k)}>
-          <span className="reg-icono" style={{ background: c.color }}><IconoCategoria cat={k} size={12} /></span>
-          <span>{c.label}</span>
-          <b>{texto(k, registros[k])}</b>
-        </button>
+      {cats.map(([k, c]) => (
+        <div key={k} className="registro-fila">
+          <button type="button" className={`registro ${foco === k ? 'activo' : ''}`} aria-pressed={foco === k}
+            style={foco === k ? { borderColor: c.color, background: `${c.color}14` } : undefined}
+            onClick={() => onFoco(k)} onDoubleClick={() => onAbrir(k)}>
+            <span className="reg-icono" style={{ background: c.color }}><IconoCategoria cat={k} size={12} /></span>
+            <span>{c.label}</span>
+            <b>{texto(k, registros[k])}</b>
+          </button>
+          <button type="button" className="icon-btn plain" title={`Ver la lista: ${c.label}`} onClick={() => onAbrir(k)}>
+            <Eye size={14} />
+          </button>
+        </div>
       ))}
       <div className="registros-leyenda">
         {franjas.map((x) => {
@@ -462,7 +476,7 @@ function PanelRegistros({ anio, registros, franjas, foco, onFoco, onAbrir, ocult
         })}
         {franjas.length > 0 && (
           <button type="button" className="ley-todos" onClick={() => onTodosPeriodos(!algunoVisible)}>
-            {algunoVisible ? 'Ocultar colores de periodo' : 'Mostrar colores de periodo'}
+            {algunoVisible ? 'Quitar colores de periodo' : 'Ver colores de periodo'}
           </button>
         )}
         {aniversario && (
@@ -610,7 +624,7 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
 
 function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, hayGeneral, diasGeneral, maxDias, fechaMax, onLimpiar,
   homeOffice = true, permisos = true, permisoPorDias = false,
-  onVacaciones, onPermiso, onHomeOffice }) {
+  onVacaciones, onPermiso, onHomeOffice, onNuevaVacacion, onNuevoPermiso }) {
   // Periodo del que se tomarán los días (General: primero el más antiguo)
   const selectorPeriodo = periodos.length > 0 && (
     <div className="sel-periodos" role="radiogroup" aria-label="Periodo vacacional">
@@ -634,10 +648,13 @@ function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, hayGe
     return (
       <div className="barra-sel vacia">
         <MousePointerClick size={16} />
-        <span><b>Clic izquierdo</b>: elige el primer y el último día para pedir vacaciones, home office o un permiso ·{' '}
-          <b>clic derecho</b>: ver los eventos y cumpleaños del día.</span>
+        <span>Marca en el calendario el <b>primer</b> y el <b>último</b> día que necesitas. Clic derecho en un día para ver qué hay.</span>
         <div className="espacio" />
         {selectorPeriodo}
+        <span className="acciones-rapidas">
+          {onNuevaVacacion && <button className="btn btn-sm btn-primary" onClick={onNuevaVacacion}><TreePalm size={14} /> Pedir vacaciones</button>}
+          {permisos && <button className="btn btn-sm" onClick={onNuevoPermiso}><Clock size={14} /> Pedir permiso</button>}
+        </span>
       </div>
     )
   }

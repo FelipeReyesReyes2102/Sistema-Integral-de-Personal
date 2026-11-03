@@ -44,9 +44,8 @@ export default function TI() {
       <div className="card">
         <div className="fila" style={{ marginBottom: 14 }}>
           <div style={{ flex: 1, minWidth: 220 }}>
-            <b style={{ fontSize: 16 }}>Salidas de equipo de cómputo</b>
             <div className="muted" style={{ fontSize: 13 }}>
-              El jefe directo autoriza la salida. TI puede sellarla o <b>rechazarla</b> mientras el equipo no haya salido; al rechazarla se avisa al empleado y a su jefe.
+              Puedes rechazarla mientras el equipo no haya salido; se avisa al empleado y a su jefe.
             </div>
           </div>
           <select value={estado} onChange={(e) => setEstado(e.target.value)} style={{ width: 260 }}>

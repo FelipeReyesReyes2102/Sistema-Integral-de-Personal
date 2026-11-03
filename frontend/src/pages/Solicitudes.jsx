@@ -16,6 +16,11 @@ import {
  * modo="jefe": solicitudes donde el usuario es el jefe aprobador.
  * modo="admin": todas las solicitudes de la empresa.
  */
+const PESTANAS = [
+  ['vacaciones', 'Vacaciones'], ['permisos', 'Permisos y home office'], ['incapacidades', 'Incapacidades'],
+  ['equipos', 'Salida de equipo'], ['consultas', 'Consultas médicas'],
+]
+
 export default function Solicitudes({ modo = 'jefe' }) {
   const [tab, setTab] = useState('vacaciones')
   const [estado, setEstado] = useState('solicitado')
@@ -73,6 +78,14 @@ export default function Solicitudes({ modo = 'jefe' }) {
     window.addEventListener('pendientes:refrescar', leer)
     return () => window.removeEventListener('pendientes:refrescar', leer)
   }, [])
+  // Al entrar se abre la primera pestaña que tiene algo por revisar
+  const [elegida, setElegida] = useState(false)
+  useEffect(() => {
+    if (elegida || !Object.keys(pend).length) return
+    setElegida(true)
+    const k = PESTANAS.map(([t]) => t).find((t) => t !== 'consultas' && cuenta(t) > 0)
+    if (k) setTab(k)
+  }, [pend])
   const cuenta = (t) => ((admin ? pend[`todas_${t}`] : pend[t]) || 0) + (t === 'permisos' ? sinMotivo.length : 0)
   const marca = (t) => cuenta(t) > 0 && <span className="badge tab-badge" title={`${cuenta(t)} por revisar`}>{cuenta(t)}</span>
 
@@ -90,25 +103,20 @@ export default function Solicitudes({ modo = 'jefe' }) {
     }
   }
 
+  // Sin resultados: al ver solo lo pendiente se aclara que no hay nada por hacer
+  const vacio = estado === 'solicitado' && !buscar
+    ? <div className="vacio-ok"><b>No hay nada pendiente</b>Cuando alguien envíe una solicitud aparecerá aquí.</div>
+    : 'No hay solicitudes con estos filtros.'
   const filtrada = lista.filter((s) => !buscar || (s.usuario_nombre || s.paciente_nombre)?.toLowerCase().includes(buscar.toLowerCase()))
 
   return (
     <div className="card">
+      <div className="pestanas" role="tablist">
+        {PESTANAS.filter(([k]) => admin || k !== 'consultas').map(([k, t]) => (
+          <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'activo' : ''} onClick={() => setTab(k)}>{t}{marca(k)}</button>
+        ))}
+      </div>
       <div className="fila" style={{ marginBottom: 14 }}>
-        <div className="cal-nav">
-          <button style={{ fontWeight: tab === 'vacaciones' ? 700 : 400, color: tab === 'vacaciones' ? 'var(--primary)' : '' }}
-            onClick={() => setTab('vacaciones')}>Vacaciones{marca('vacaciones')}</button>
-          <button style={{ fontWeight: tab === 'permisos' ? 700 : 400, color: tab === 'permisos' ? 'var(--primary)' : '' }}
-            onClick={() => setTab('permisos')}>Permisos y home office{marca('permisos')}</button>
-          <button style={{ fontWeight: tab === 'incapacidades' ? 700 : 400, color: tab === 'incapacidades' ? 'var(--primary)' : '' }}
-            onClick={() => setTab('incapacidades')}>Incapacidades{marca('incapacidades')}</button>
-          <button style={{ fontWeight: tab === 'equipos' ? 700 : 400, color: tab === 'equipos' ? 'var(--primary)' : '' }}
-            onClick={() => setTab('equipos')}>Salida de equipo{marca('equipos')}</button>
-          {admin && (
-            <button style={{ fontWeight: tab === 'consultas' ? 700 : 400, color: tab === 'consultas' ? 'var(--primary)' : '' }}
-              onClick={() => setTab('consultas')}>Consultas médicas</button>
-          )}
-        </div>
         {tab !== 'consultas' && (
           <select style={{ width: 180 }} value={estado} onChange={(e) => setEstado(e.target.value)}>
             <option value="">Todos los estados</option>
@@ -158,7 +166,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
         </div>
       ) : tab === 'equipos' ? (
         <>
-          <TablaSalidas lista={filtrada} vacio="Sin solicitudes de salida de equipo."
+          <TablaSalidas lista={filtrada} vacio={vacio}
             onFormato={(s) => setFormatoEq(s)}
             acciones={(s) => s.estado === 'solicitado' && (
               <span className="fila" style={{ display: 'inline-flex', gap: 6, flexWrap: 'nowrap' }}>
@@ -173,7 +181,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
           <table className="tabla">
             <thead><tr><th>Empleado</th><th>Fechas</th><th>Días</th><th>Tipo</th><th>Folio / observaciones</th><th>Registró</th><th>Estado</th><th /></tr></thead>
             <tbody>
-              {filtrada.length === 0 && <tr><td colSpan={8} className="muted" style={{ textAlign: 'center' }}>Sin incapacidades</td></tr>}
+              {filtrada.length === 0 && <tr><td colSpan={8} className="muted" style={{ textAlign: 'center' }}>{vacio}</td></tr>}
               {filtrada.map((i) => (
                 <tr key={i.id}>
                   <td>{i.usuario_nombre}<div className="muted" style={{ fontSize: 12 }}>No. {i.usuario_numero}{i.usuario_departamento ? ` · ${i.usuario_departamento}` : ''}</div></td>
@@ -221,7 +229,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
             )}
           </thead>
           <tbody>
-            {filtrada.length === 0 && <tr><td colSpan={7} className="muted" style={{ textAlign: 'center' }}>Sin solicitudes</td></tr>}
+            {filtrada.length === 0 && <tr><td colSpan={7} className="muted" style={{ textAlign: 'center' }}>{vacio}</td></tr>}
             {filtrada.map((s) => (
               <tr key={s.id}>
                 <td>

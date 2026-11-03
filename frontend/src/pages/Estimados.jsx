@@ -51,10 +51,8 @@ export default function Estimados() {
   return (
     <div className="estimados">
       <div className="card">
-        <b style={{ fontSize: 16 }}>Cumpleaños y aniversarios en tu calendario</b>
-        <p className="muted" style={{ margin: '4px 0 10px', fontSize: 13 }}>
-          Tu cumpleaños y tu aniversario en la empresa solo los ven las personas a las que tú autorizas. Para ver los de un compañero,
-          envíale una solicitud: si la acepta, aparecen en tu calendario.
+        <p className="muted" style={{ margin: '0 0 10px', fontSize: 13 }}>
+          Solo las personas que tú autorizas ven tu cumpleaños y tu aniversario.
         </p>
         <div className="fila" style={{ gap: 24 }}>
           <label className="checkbox"><input type="checkbox" checked={pref.ver_cumpleanos} onChange={(e) => preferencia('ver_cumpleanos', e.target.checked)} />

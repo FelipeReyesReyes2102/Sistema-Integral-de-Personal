@@ -44,9 +44,9 @@ export default function Consultas() {
         <button className="btn btn-primary" onClick={() => setModal({ tipo: 'nueva' })}><Plus size={16} /> Registrar consulta</button>
       </div>
 
-      <div className="tabs" style={{ marginBottom: 12 }}>
-        <button className={vista === 'consultas' ? 'activo' : ''} onClick={() => setVista('consultas')}>CONSULTAS</button>
-        <button className={vista === 'bitacora' ? 'activo' : ''} onClick={() => setVista('bitacora')}>BITÁCORA</button>
+      <div className="pestanas" role="tablist">
+        <button className={vista === 'consultas' ? 'activo' : ''} onClick={() => setVista('consultas')}>Consultas</button>
+        <button className={vista === 'bitacora' ? 'activo' : ''} onClick={() => setVista('bitacora')}>Bitácora</button>
       </div>
       {vista === 'bitacora' && <BitacoraConsultas onVer={(id) => setModal({ tipo: 'ver', consulta: { id } })} />}
 

@@ -22,7 +22,6 @@ export default function MiEquipo() {
     personas: equipo?.length || 0,
     hoy: equipo?.filter((m) => m.de_vacaciones_hoy).length || 0,
     pendientes: equipo?.reduce((s, m) => s + m.pendientes_por_aprobar, 0) || 0,
-    restantes: equipo?.reduce((s, m) => s + m.dias_restantes, 0) || 0,
     porVencer: equipo?.filter((m) => m.dias_por_vencer > 0).length || 0,
   }), [equipo])
 
@@ -33,9 +32,8 @@ export default function MiEquipo() {
       <div className="card fila" style={{ gap: 40, marginBottom: 16 }}>
         <div className="stat"><b>{totales.personas}</b><span>Personas a cargo</span></div>
         <div className="stat"><b>{totales.hoy}</b><span>De vacaciones hoy</span></div>
-        <div className="stat"><b>{totales.pendientes}</b><span>Solicitudes pendientes</span></div>
-        <div className="stat"><b>{num(totales.restantes, 1)}</b><span>Días restantes del equipo (periodo actual)</span></div>
-        <div className="stat"><b style={{ color: totales.porVencer ? '#8a6400' : undefined }}>{totales.porVencer}</b><span>Con días por vencer (18 meses)</span></div>
+        <div className="stat"><b>{totales.pendientes}</b><span>Solicitudes por aprobar</span></div>
+        <div className="stat"><b style={{ color: totales.porVencer ? '#8a6400' : undefined }}>{totales.porVencer}</b><span>Con días por vencer</span></div>
       </div>
 
       <div className="card">
@@ -53,13 +51,12 @@ export default function MiEquipo() {
           <table className="tabla">
             <thead>
               <tr>
-                <th>Colaborador</th><th>Periodo</th><th>Uso del periodo</th><th>Otorgados</th><th>Tomados</th>
-                <th>Solicitados</th><th>Restantes</th><th>Vence</th><th>Próximas vacaciones</th><th>Pendientes</th><th />
+                <th>Colaborador</th><th>Días disponibles</th><th>Vencen</th><th>Próximas vacaciones</th><th>Por aprobar</th><th />
               </tr>
             </thead>
             <tbody>
               {equipo && filtrado.length === 0 && (
-                <tr><td colSpan={11} className="muted" style={{ textAlign: 'center', padding: 24 }}>
+                <tr><td colSpan={6} className="muted" style={{ textAlign: 'center', padding: 24 }}>
                   No tienes personal a cargo. El administrador asigna el jefe de cada empleado en Empleados.
                 </td></tr>
               )}
@@ -76,29 +73,20 @@ export default function MiEquipo() {
                       </div>
                     </div>
                   </td>
-                  <td>{m.periodo_actual || '—'}</td>
-                  <td>
+                  <td style={{ minWidth: 190 }}>
+                    <b>{num(m.dias_restantes)} d</b> <span className="muted">de {num(m.dias_total)}{m.periodo_actual ? ` · ${m.periodo_actual}` : ''}</span>
                     <div className="mini-barra" title={`${num(m.dias_tomados)} tomados / ${num(m.dias_solicitados)} solicitados / ${num(m.dias_restantes)} restantes`}>
                       <div style={{ width: pct(m.dias_tomados, m.dias_total), background: 'var(--blue)' }} />
                       <div style={{ width: pct(m.dias_solicitados, m.dias_total), background: 'var(--yellow)' }} />
                       <div style={{ width: pct(m.dias_restantes, m.dias_total), background: 'var(--green)' }} />
                     </div>
-                  </td>
-                  <td>{num(m.dias_total)} d</td>
-                  <td>{num(m.dias_tomados)} d</td>
-                  <td>{num(m.dias_solicitados)} d</td>
-                  <td>
-                    <b>{num(m.dias_restantes)} d</b>
                     {m.dias_restantes_vigentes > m.dias_restantes && (
-                      <div className="muted" style={{ fontSize: 11 }}>{num(m.dias_restantes_vigentes)} d en todos los periodos</div>
+                      <div className="muted" style={{ fontSize: 11 }}>{num(m.dias_restantes_vigentes)} d sumando periodos anteriores</div>
                     )}
                     {m.dias_por_vencer > 0 && (
                       <div style={{ fontSize: 11, color: '#8a6400' }}>
                         ⚠ {num(m.dias_por_vencer)} d vencen el {fmtFecha(m.fecha_por_vencer, false)}
                       </div>
-                    )}
-                    {m.dias_perdidos > 0 && (
-                      <div style={{ fontSize: 11, color: 'var(--danger)' }}>{num(m.dias_perdidos)} d perdidos</div>
                     )}
                   </td>
                   <td>{m.vence ? fmtFecha(m.vence, false) : '—'}</td>

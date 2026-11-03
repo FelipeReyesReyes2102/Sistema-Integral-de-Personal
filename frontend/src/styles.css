@@ -485,7 +485,7 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .ps-bloque.vencido { background: #fdecea; color: var(--danger); }
 .barra.delgada { height: 6px; margin: 6px 0 4px; }
 .dropdown-menu.derecha { left: auto; right: 0; }
-.panel-sup .registros { margin: 0; border: none; padding: 0; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 2px 8px; }
+.panel-sup .registros { margin: 0; border: none; padding: 0; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 2px 8px; }
 .panel-sup .registros-cab { grid-column: 1 / -1; justify-content: flex-start; gap: 10px; align-items: center; margin-bottom: 2px; }
 .panel-sup .registros-cab .btn { margin-left: auto; padding: 1px 8px; }
 .panel-sup .registro { padding: 4px 6px; font-size: 12.5px; }
@@ -899,3 +899,28 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .est-fila:last-child { border-bottom: 0; }
 .est-recibidas { border: 1px solid #f0d58a; background: #fffcf2; }
 @media (max-width: 640px) { .est-fila { flex-wrap: wrap; } }
+
+/* ---------- Encabezado de página (título y para qué sirve) ---------- */
+.pagina-cab { margin: 0 0 14px; }
+.pagina-cab h1 { font-family: Poppins, Inter, sans-serif; font-size: 20px; font-weight: 600; color: var(--navy); margin: 0; }
+.pagina-cab p { margin: 2px 0 0; color: var(--muted); font-size: 13.5px; }
+@media (max-width: 900px) { .pagina-cab h1 { display: none; } .pagina-cab { margin-bottom: 10px; } }
+
+/* ---------- Pestañas visibles en cualquier tamaño ---------- */
+.pestanas { display: flex; gap: 4px; border-bottom: 1px solid var(--border); flex-wrap: wrap; margin-bottom: 14px; }
+.pestanas button { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border: 0; background: none; cursor: pointer;
+  font: inherit; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1px; }
+.pestanas button.activo { color: var(--primary); border-bottom-color: var(--primary); }
+@media (max-width: 640px) { .pestanas button { flex: 1; justify-content: center; padding: 10px 8px; } }
+
+/* ---------- Inicio: saldo simple y registros con botón de ver ---------- */
+.ps-cifras { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 6px; }
+.ps-cifras div { background: var(--bg); border-radius: 6px; padding: 4px 6px; text-align: center; font-size: 11px; color: var(--muted); }
+.ps-cifras b { display: block; font-size: 15px; color: var(--navy); }
+.registro-fila { display: flex; align-items: center; gap: 2px; }
+.registro-fila .registro { flex: 1; min-width: 0; }
+.registro-fila .icon-btn { padding: 3px; }
+.registros-vacio { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); padding: 4px 6px; }
+.barra-sel .acciones-rapidas { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.vacio-ok { text-align: center; padding: 28px 12px; color: var(--muted); }
+.vacio-ok b { display: block; color: var(--navy); font-size: 15px; margin-bottom: 2px; }

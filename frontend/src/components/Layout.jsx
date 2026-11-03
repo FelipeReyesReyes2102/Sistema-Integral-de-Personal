@@ -11,22 +11,25 @@ import Avatar from './Avatar'
 import CambiarPassword from './CambiarPassword'
 import PerfilUsuario from './PerfilUsuario'
 
-const TITULOS = {
-  '/': 'Mis vacaciones y ausencias',
-  '/caseta': 'Caseta · permisos del día y retardos',
-  '/equipos': 'Salida de equipo de cómputo',
-  '/cumpleanos': 'Cumpleaños y aniversarios',
-  '/ti': 'TI · salidas de equipo de cómputo',
-  '/aprobaciones': 'Solicitudes por aprobar',
-  '/mi-equipo': 'Mi equipo',
-  '/solicitudes': 'Todas las solicitudes',
-  '/equipo': 'Calendario general del personal',
-  '/empleados': 'Empleados',
-  '/turnos': 'Turnos y rotación',
-  '/grupos': 'Grupos de planta',
-  '/festivos': 'Días festivos',
-  '/configuracion': 'Configuración de vacaciones',
-  '/consultas': 'Consultas médicas',
+// Título de cada página y, en una línea, para qué sirve
+const PAGINAS = {
+  '/': ['Mis vacaciones y ausencias'],
+  '/caseta': ['Caseta', 'Revisa quién tiene permiso de salir hoy y solicita el ingreso de quien llega tarde.'],
+  '/equipos': ['Salida de equipo de cómputo', 'Pide permiso para sacar un equipo de la empresa y consulta en qué va tu solicitud.'],
+  '/cumpleanos': ['Cumpleaños y aniversarios', 'Elige de quién quieres ver el cumpleaños en tu calendario y quién puede ver el tuyo.'],
+  '/ti': ['Salidas de equipo (TI)', 'Revisa las salidas de equipo ya autorizadas por el jefe: séllalas o recházalas.'],
+  '/aprobaciones': ['Por aprobar', 'Solicitudes de tu personal que esperan tu respuesta.'],
+  '/mi-equipo': ['Mi equipo', 'Las personas que te reportan, sus días disponibles y su calendario.'],
+  '/solicitudes': ['Todas las solicitudes', 'Todas las solicitudes de tus sedes, con su estado.'],
+  '/equipo': ['Calendario general', 'Quién está de vacaciones, con permiso o incapacidad cada día.'],
+  '/empleados': ['Empleados', 'Alta, datos y permisos de cada persona.'],
+  '/turnos': ['Turnos y rotación', 'Horarios de trabajo y rotación de los grupos de planta.'],
+  '/grupos': ['Grupos de planta', 'Grupos de personal de planta y sus integrantes.'],
+  '/festivos': ['Días festivos', 'Días que no se trabajan y no se descuentan de las vacaciones.'],
+  '/configuracion': ['Configuración', 'Reglas de vacaciones y permisos, correo, Microsoft y SharePoint por sede.'],
+  '/consultas': ['Consultas médicas', 'Registra consultas e incapacidades y revisa la bitácora.'],
+  '/bitacora': ['Bitácora', 'Quién cambió qué y cuándo.'],
+  '/super-admin': ['Super administrador'],
 }
 
 export const esJefe = (u) => u?.es_jefe || esAdminFn(u)
@@ -68,7 +71,9 @@ export default function Layout() {
     try { localStorage.setItem('sip-menu-colapsado', colapsado ? '1' : '0') } catch { /* sin almacenamiento */ }
   }, [colapsado])
 
-  const titulo = TITULOS[pathname] || (pathname.includes('/vacaciones') ? 'Vacaciones del colaborador' : '')
+  const [titulo, descripcion] = PAGINAS[pathname] || [pathname.includes('/vacaciones') ? 'Vacaciones del colaborador' : '']
+  // El inicio y el calendario de un colaborador ocupan toda la pantalla: no llevan encabezado
+  const conEncabezado = pathname !== '/' && !pathname.includes('/vacaciones')
   const badge = (n) => n > 0 && <span className="badge">{n}</span>
   const link = (to, Icon, texto, extra) => (
     <NavLink to={to} end className="nav-link" title={colapsado ? texto : undefined}>
@@ -98,9 +103,21 @@ export default function Layout() {
           ) : user.sede_nombre && <div className="sede-nombre nav-texto" title="Tu sede">{user.sede_nombre}</div>}
         </div>
         <nav>
-          {!sinVacaciones(user) && link('/', Home, 'Mis vacaciones')}
-          {!sinVacaciones(user) && link('/equipos', Laptop, 'Salida de equipo')}
-          {!sinVacaciones(user) && link('/cumpleanos', Cake, 'Cumpleaños', badge(pendientes.estimados))}
+          {!sinVacaciones(user) && (
+            <>
+              <div className="seccion">Mi espacio</div>
+              {link('/', Home, 'Mis vacaciones')}
+              {link('/equipos', Laptop, 'Salida de equipo')}
+              {link('/cumpleanos', Cake, 'Cumpleaños', badge(pendientes.estimados))}
+            </>
+          )}
+          {jefe && (
+            <>
+              <div className="seccion">Mi personal</div>
+              {link('/aprobaciones', ListChecks, 'Por aprobar', badge(pendientes.total))}
+              {link('/mi-equipo', UsersRound, 'Mi equipo')}
+            </>
+          )}
           {user.puede_ti && !esAdmin && (
             <>
               <div className="seccion">TI</div>
@@ -119,21 +136,15 @@ export default function Layout() {
               {link('/consultas', Stethoscope, 'Consultas médicas')}
             </>
           )}
-          {jefe && (
-            <>
-              <div className="seccion">Jefe</div>
-              {link('/aprobaciones', ListChecks, 'Por aprobar', badge(pendientes.total))}
-              {link('/mi-equipo', UsersRound, 'Mi equipo')}
-            </>
-          )}
           {esAdmin && (
             <>
-              <div className="seccion">Administración</div>
+              <div className="seccion">Gestión Humana</div>
               {link('/solicitudes', ClipboardCheck, 'Todas las solicitudes', badge(pendientes.todas))}
               {link('/equipo', CalendarDays, 'Calendario general')}
+              {link('/empleados', Users, 'Empleados')}
               {link('/caseta', DoorOpen, 'Caseta')}
               {link('/ti', MonitorCheck, 'Salidas de equipo (TI)', badge(pendientes.ti_equipos))}
-              {link('/empleados', Users, 'Empleados')}
+              <div className="seccion">Ajustes</div>
               {link('/grupos', UsersRound, 'Grupos')}
               {link('/turnos', Clock, 'Turnos')}
               {link('/festivos', PartyPopper, 'Festivos')}
@@ -169,9 +180,14 @@ export default function Layout() {
       <div className="main">
         <header className="topbar">
           <h1>{titulo}</h1>
-          <span className="chip oculto-movil">{ROLES[user.rol]}{user.es_jefe && !esAdmin ? ' · Jefe' : ''}</span>
         </header>
         <main className="contenido">
+          {conEncabezado && titulo && (
+            <div className="pagina-cab">
+              <h1>{titulo}</h1>
+              {descripcion && <p>{descripcion}</p>}
+            </div>
+          )}
           <Outlet />
         </main>
       </div>

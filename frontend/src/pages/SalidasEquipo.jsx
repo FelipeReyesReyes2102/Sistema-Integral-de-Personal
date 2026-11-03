@@ -28,9 +28,8 @@ export default function SalidasEquipo() {
       <div className="card fila" style={{ marginBottom: 16 }}>
         <Laptop size={22} />
         <div style={{ flex: 1, minWidth: 220 }}>
-          <b style={{ fontSize: 16 }}>Salida de equipo de cómputo</b>
           <div className="muted" style={{ fontSize: 13 }}>
-            Para sacar de planta una laptop o un equipo de escritorio. La autoriza tu jefe directo; TI puede revisarla y caseta registra la salida y el regreso.
+            1. Tu jefe la autoriza · 2. TI la revisa · 3. Caseta registra la salida y el regreso.
           </div>
         </div>
         <button className="btn btn-primary" onClick={() => setModal({ tipo: 'nueva' })}><Plus size={16} /> Nueva solicitud</button>

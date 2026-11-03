@@ -387,10 +387,10 @@ export default function Caseta() {
 
   return (
     <>
-      <div className="tabs" style={{ marginBottom: 12 }}>
-        <button className={tab === 'hoy' ? 'activo' : ''} onClick={() => setTab('hoy')}>PERMISOS DE HOY</button>
+      <div className="pestanas" role="tablist">
+        <button className={tab === 'hoy' ? 'activo' : ''} onClick={() => setTab('hoy')}>Permisos de hoy</button>
         <button className={tab === 'retardos' ? 'activo' : ''} onClick={() => setTab('retardos')}>
-          INGRESO POR RETARDO{pendientes > 0 && <span className="badge tab-badge" title={`${pendientes} esperando autorización`}>{pendientes}</span>}
+          Ingreso por retardo{pendientes > 0 && <span className="badge tab-badge" title={`${pendientes} esperando autorización`}>{pendientes}</span>}
         </button>
       </div>
       {aviso && (
