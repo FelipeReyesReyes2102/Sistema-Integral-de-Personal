@@ -18,7 +18,7 @@ HOY = date.today()
 def _ti():
     with SessionLocal() as db:
         if not db.query(Usuario).filter(Usuario.email == "ti@empresa.com").first():
-            db.add(Usuario(numero_empleado="TI-1", nombre="Analista TI", email="ti@empresa.com", rol="ti",
+            db.add(Usuario(numero_empleado="TI-1", nombre="Analista TI", email="ti@empresa.com", rol="oficina", puede_ti=True,
                            password_hash=hash_password("Cambiar123"), fecha_ingreso=date(2023, 1, 1),
                            sede_id=sede_principal(db).id))
             db.commit()
@@ -105,3 +105,19 @@ def test_ti_rechaza_y_avisa_al_empleado_y_al_jefe(monkeypatch):
     # Otro empleado no la ve
     assert entrar("ana@empresa.com").get(f"/api/equipos/{s['id']}").status_code == 404
     _limpiar(s["id"], s2["id"], s3["id"])
+
+
+def test_ti_es_una_casilla_del_empleado():
+    """TI no es un tipo de usuario: GH marca la casilla en la ficha y el empleado conserva sus vacaciones."""
+    from tests.test_incapacidades import _guardar, _usuario
+    adm = entrar("admin@empresa.com", "Admin123")
+    ana = _usuario(adm, "ana@empresa.com")
+    assert adm.put(f"/api/usuarios/{ana['id']}", json={**{k: ana.get(k) for k in ("numero_empleado", "nombre", "email", "fecha_ingreso")}, "rol": "ti"}).status_code == 422
+    r = _guardar(adm, ana, puede_ti=True)
+    assert r.status_code == 200 and r.json()["puede_ti"] and r.json()["rol"] == "oficina"
+    a = entrar("ana@empresa.com")
+    assert "equipos:revisar" in a.get("/api/auth/me").json()["permissions"]
+    assert a.get("/api/equipos", params={"todos": True}).status_code == 200
+    assert a.post("/api/vacaciones/calcular", json={"fecha_inicio": "2030-03-04", "fecha_fin": "2030-03-04"}).status_code == 200
+    assert _guardar(adm, _usuario(adm, "ana@empresa.com"), puede_ti=False).json()["puede_ti"] is False
+    assert "equipos:revisar" not in a.get("/api/auth/me").json()["permissions"]

@@ -22,7 +22,7 @@ export const TIPOS_NOMINA = {
 
 export const ROLES = {
   superadmin: 'Super administrador', gerencia_gh: 'Gerencia GH', admin: 'GH', oficina: 'Oficinas', planta: 'Planta',
-  medico: 'Médico de planta', caseta: 'Caseta', ti: 'TI',
+  medico: 'Médico de planta', caseta: 'Caseta',
 }
 
 /** GH, Gerencia GH o super administrador (el super administrador tiene acceso a todo). */
@@ -33,7 +33,7 @@ export const esMedico = (u) => ['medico', 'superadmin'].includes(u?.rol) || !!u?
 /** Personal de caseta (y GH): permisos validados del día y registro de retardos. */
 export const esCaseta = (u) => u?.rol === 'caseta' || esAdmin(u)
 /** TI (y GH / super administrador): revisión de las salidas de equipo de cómputo. */
-export const esTI = (u) => u?.rol === 'ti' || esAdmin(u)
+export const esTI = (u) => !!u?.puede_ti || esAdmin(u)
 /** El médico de planta y caseta no piden vacaciones ni permisos: solo usan su apartado. */
 export const sinVacaciones = (u) => ['medico', 'caseta'].includes(u?.rol)
 /** Pantalla de inicio de cada tipo de usuario. */

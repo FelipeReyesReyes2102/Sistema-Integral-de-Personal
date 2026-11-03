@@ -94,7 +94,7 @@ def listar(estado: str | None = None, por_aprobar: bool = False, todos: bool = F
 @router.get("/hoy")
 def hoy(db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
     """Caseta (y TI / GH): salidas de equipo autorizadas del día y equipos que están fuera de planta."""
-    if user.rol not in (ROL_CASETA, "ti") and not es_admin(user):
+    if user.rol != ROL_CASETA and not es_ti(user):
         raise HTTPException(403, "No tienes acceso a este apartado.")
     sedes = {s.id for s in sedes_visibles(db, user)} | {user.sede_id} if es_admin(user) else {user.sede_id}
     dia = hoy_de(user)

@@ -9,7 +9,7 @@ import { useAuth } from '../auth'
 
 const VACIO = {
   numero_empleado: '', nombre: '', sede_id: '', sedes_admin: [], tipo_jornada_id: '', email: '', email_personal: '', rol: 'oficina', fecha_ingreso: '', fecha_nacimiento: '', puesto: '', departamento: '',
-  turno_id: '', grupo_id: '', jefe_id: '', es_jefe: false, puede_consultas: false, activo: true, password: '', microsoft_oid: '', dias_disponibles: '',
+  turno_id: '', grupo_id: '', jefe_id: '', es_jefe: false, puede_consultas: false, puede_ti: false, activo: true, password: '', microsoft_oid: '', dias_disponibles: '',
   direccion: '', telefono: '', contacto_nombre: '', contacto_telefono: '',
 }
 
@@ -258,6 +258,7 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
       contacto_nombre: (form.contacto_nombre || '').trim() || null,
       contacto_telefono: (form.contacto_telefono || '').trim() || null,
       puede_consultas: form.rol !== 'medico' && !!form.puede_consultas,
+      puede_ti: !['medico', 'caseta'].includes(form.rol) && !!form.puede_ti,
       sede_id: sedeId,
       tipo_jornada_id: form.tipo_jornada_id ? Number(form.tipo_jornada_id) : null,
       sedes_admin: soySuper && form.rol === 'gerencia_gh' ? (form.sedes_admin || []).filter((x) => x !== sedeId) : (soySuper ? [] : null),
@@ -498,6 +499,11 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
           {form.rol !== 'medico' && (
             <label className="checkbox">
               <input type="checkbox" checked={!!form.puede_consultas} onChange={set('puede_consultas')} /> Puede registrar consultas médicas e incapacidades
+            </label>
+          )}
+          {!['medico', 'caseta'].includes(form.rol) && (
+            <label className="checkbox">
+              <input type="checkbox" checked={!!form.puede_ti} onChange={set('puede_ti')} /> TI: puede revisar (sellar o rechazar) las salidas de equipo de cómputo
             </label>
           )}
         </div>

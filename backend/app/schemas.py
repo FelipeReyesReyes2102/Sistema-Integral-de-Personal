@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-Rol = Literal["superadmin", "gerencia_gh", "admin", "oficina", "planta", "medico", "caseta", "ti"]
+Rol = Literal["superadmin", "gerencia_gh", "admin", "oficina", "planta", "medico", "caseta"]
 TipoPermiso = Literal["llegada_tarde", "salida_temprana", "salida_intermedia", "consulta_medica", "home_office"]
 TipoNomina = Literal["con_goce", "sin_goce", "reposicion"]
 Firma = Annotated[str, Field(max_length=400_000, pattern=r"^data:image/png;base64,[A-Za-z0-9+/=]+$")]
@@ -119,6 +119,7 @@ class UsuarioBase(BaseModel):
     jefe_id: int | None = None
     es_jefe: bool = False
     puede_consultas: bool = False   # además del médico: puede registrar consultas e incapacidades
+    puede_ti: bool = False          # TI: revisa las salidas de equipo de cómputo de su sede
     activo: bool = True
     direccion: str | None = Field(None, max_length=255)
     telefono: str | None = Field(None, max_length=30)

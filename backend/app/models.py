@@ -17,8 +17,8 @@ ROL_SUPERADMIN = "superadmin"  # todo lo del administrador + configuración de M
 # "admin" se muestra como GH (Gestión Humana): administra solo su sede.
 ROL_GERENCIA_GH = "gerencia_gh"  # Gerencia GH: mismos accesos que GH en las sedes que le asigne un super administrador
 ROL_CASETA = "caseta"  # vigilancia: ve los permisos validados del día y registra retardos; vacaciones como oficinas
-ROL_TI = "ti"  # TI: revisa (sella o rechaza) las salidas de equipo de cómputo; vacaciones como oficinas
-ROLES = (ROL_SUPERADMIN, ROL_GERENCIA_GH, ROL_ADMIN, ROL_OFICINA, ROL_PLANTA, ROL_MEDICO, ROL_CASETA, ROL_TI)
+ROL_TI = "ti"  # ya no es un tipo de usuario: TI es la casilla "puede_ti" (los usuarios con este rol se convierten)
+ROLES = (ROL_SUPERADMIN, ROL_GERENCIA_GH, ROL_ADMIN, ROL_OFICINA, ROL_PLANTA, ROL_MEDICO, ROL_CASETA)
 ROLES_ADMIN = (ROL_ADMIN, ROL_GERENCIA_GH, ROL_SUPERADMIN)
 
 
@@ -46,8 +46,8 @@ def solicita_vacaciones(usuario) -> bool:
 
 
 def es_ti(usuario) -> bool:
-    """Personal de TI (y GH / super administrador, que también pueden revisar las salidas de equipo)."""
-    return usuario is not None and (usuario.rol == ROL_TI or usuario.rol in ROLES_ADMIN)
+    """Usuario con permiso de TI (y GH / super administrador, que también pueden revisar las salidas de equipo)."""
+    return usuario is not None and (bool(getattr(usuario, "puede_ti", False)) or usuario.rol in ROLES_ADMIN)
 
 
 def es_medico(usuario) -> bool:
@@ -274,6 +274,8 @@ class Usuario(Base):
     es_jefe: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # Además del médico de planta, GH puede permitir a otros usuarios registrar consultas (e incapacidades)
     puede_consultas: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Permiso de TI: revisa (sella o rechaza) las salidas de equipo de cómputo de su sede
+    puede_ti: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     # Datos de contacto
     direccion: Mapped[str | None] = mapped_column(String(255))

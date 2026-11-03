@@ -60,7 +60,7 @@ CAMPOS = {
     "observaciones": "Observaciones", "departamento": "Departamento", "tipo_nomina": "Tipo en nómina", "aprobado_jefe_id": "Aprobó el jefe",
     "fecha_aprobado_jefe": "Fecha de aprobación del jefe", "por_horas": "Por horas", "planeada": "Planeada por GH",
     "generacion_dias": "Generación de días", "aprobacion_gh_vacaciones": "Vacaciones: aprobación jefe + GH",
-    "aprobacion_gh_permisos": "Permisos: aprobación jefe + GH", "modalidad": "Se pide por",
+    "aprobacion_gh_permisos": "Permisos: aprobación jefe + GH", "puede_ti": "Permiso de TI", "modalidad": "Se pide por",
     "pide_nomina": "Pide tipo de nómina", "limite_cantidad": "Límite", "limite_unidad": "Unidad del límite",
     "limite_periodo": "Periodo del límite", "fecha_inicio_original": "Inicio registrado por el médico",
     "fecha_fin_original": "Fin registrado por el médico", "nota_revision": "Comentario del jefe", "tipo_equipo": "Tipo de equipo", "serie": "SN / Service Tag",

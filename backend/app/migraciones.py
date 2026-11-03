@@ -152,6 +152,8 @@ def _ajustes_idempotentes(conn: Connection):
     # Un administrador con sedes adicionales pasa a Gerencia GH (GH solo administra su sede)
     conn.execute(text("UPDATE usuarios SET rol = 'gerencia_gh' WHERE rol = 'admin' "
                       "AND id IN (SELECT usuario_id FROM admin_sedes)"))
+    # TI dejó de ser un tipo de usuario: es la casilla "puede_ti" (vacaciones como oficinas)
+    conn.execute(text("UPDATE usuarios SET rol = 'oficina', puede_ti = :si WHERE rol = 'ti'"), {"si": True})
 
 
 # Jornadas iniciales de cada sede: (nombre, horas por día, bloque mínimo de días seguidos, ¿ciclo del grupo?)

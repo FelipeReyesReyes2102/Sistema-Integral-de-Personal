@@ -99,7 +99,7 @@ export default function Layout() {
         <nav>
           {!sinVacaciones(user) && link('/', Home, 'Mis vacaciones')}
           {!sinVacaciones(user) && link('/equipos', Laptop, 'Salida de equipo')}
-          {user.rol === 'ti' && (
+          {user.puede_ti && !esAdmin && (
             <>
               <div className="seccion">TI</div>
               {link('/ti', MonitorCheck, 'Salidas de equipo', badge(pendientes.ti_equipos))}
@@ -185,7 +185,7 @@ export default function Layout() {
         {jefe && <NavLink to="/mi-equipo"><UsersRound size={22} />Mi equipo</NavLink>}
         {esMedico(user) && <NavLink to="/consultas"><Stethoscope size={22} />Consultas</NavLink>}
         {user.rol === 'caseta' && <NavLink to="/caseta"><DoorOpen size={22} />Caseta</NavLink>}
-        {user.rol === 'ti' && <NavLink to="/ti"><MonitorCheck size={22} />TI{badge(pendientes.ti_equipos)}</NavLink>}
+        {user.puede_ti && !esAdmin && <NavLink to="/ti"><MonitorCheck size={22} />TI{badge(pendientes.ti_equipos)}</NavLink>}
         <button className={menu ? 'active' : ''} onClick={() => setMenu(!menu)}>
           {menu ? <X size={22} /> : <Menu size={22} />}Menú
         </button>

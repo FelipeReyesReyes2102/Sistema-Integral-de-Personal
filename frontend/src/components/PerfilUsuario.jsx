@@ -91,6 +91,7 @@ export default function PerfilUsuario({ onClose, onPassword }) {
       <Dato icono={Users} etiqueta="Grupo">{user.grupo_nombre}</Dato>
       <Dato icono={UserRound} etiqueta="Jefe directo">{user.jefe_nombre || 'Sin jefe asignado'}</Dato>
       {user.puede_consultas && <Dato icono={Stethoscope} etiqueta="Servicio médico">Puede registrar consultas e incapacidades</Dato>}
+      {user.puede_ti && <Dato icono={ShieldCheck} etiqueta="TI">Revisa las salidas de equipo de cómputo</Dato>}
       {(user.es_jefe || user.total_a_cargo > 0) && <Dato icono={Users} etiqueta="Personal a cargo">{`${user.total_a_cargo} persona(s)`}</Dato>}
 
       <div className="perfil-seccion">Contacto</div>
