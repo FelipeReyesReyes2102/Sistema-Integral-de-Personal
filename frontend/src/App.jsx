@@ -8,6 +8,7 @@ import ConfirmarDatos from './pages/ConfirmarDatos'
 import Caseta from './pages/Caseta'
 import SalidasEquipo from './pages/SalidasEquipo'
 import TI from './pages/TI'
+import Estimados from './pages/Estimados'
 import MisVacaciones from './pages/MisVacaciones'
 import Solicitudes from './pages/Solicitudes'
 import MiEquipo from './pages/MiEquipo'
@@ -83,6 +84,7 @@ export default function App() {
         <Route path="/caseta" element={<SoloCaseta><Caseta /></SoloCaseta>} />
         <Route path="/equipos" element={<ConVacaciones><SalidasEquipo /></ConVacaciones>} />
         <Route path="/ti" element={<SoloTI><TI /></SoloTI>} />
+        <Route path="/cumpleanos" element={<ConVacaciones><Estimados /></ConVacaciones>} />
         <Route path="/aprobaciones" element={<SoloJefe><Solicitudes modo="jefe" /></SoloJefe>} />
         <Route path="/mi-equipo" element={<SoloJefe><MiEquipo /></SoloJefe>} />
         <Route path="/mi-equipo/:id/vacaciones" element={<SoloJefe><VacacionesEmpleado /></SoloJefe>} />

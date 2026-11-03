@@ -175,6 +175,8 @@ class MeOut(UsuarioOut):
     permissions: list[str] = []
     puede_usar_password: bool = True
     sedes: list[dict] = []   # sedes que puede consultar (selector del menú)
+    ver_cumpleanos: bool = True       # preferencias del calendario
+    ver_aniversarios: bool = True
     debe_confirmar_datos: bool = False      # cada 6 meses: confirmar o actualizar datos personales
     proxima_confirmacion: datetime | None = None
 

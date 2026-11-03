@@ -95,8 +95,17 @@ def test_cumpleanos_y_festivos_por_sede(mundo):
     cal_mx = ana.get(f"/api/calendario?anio={HOY.year}").json()
     assert not any(c["nombre"] == "Empleado Medellín" for c in cal_mx["cumpleanos"])
     assert not any(f["fecha"] == mundo["festivo"] for f in cal_mx["festivos"])
-    cal_jefe = entrar("jefe.med@o-tek.com", "Clave12345").get(f"/api/calendario?anio={HOY.year}").json()
-    assert any(c["nombre"] == "Empleado Medellín" for c in cal_jefe["cumpleanos"])
+    # Los cumpleaños de otros solo se ven con su autorización
+    jefe = entrar("jefe.med@o-tek.com", "Clave12345")
+    assert not any(c["nombre"] == "Empleado Medellín" for c in jefe.get(f"/api/calendario?anio={HOY.year}").json()["cumpleanos"])
+    persona = next(p for p in jefe.get("/api/estimados/buscar", params={"q": "empleado medellin"}).json())
+    if persona["estado"] != "aceptada":
+        if persona["estado"] != "pendiente":
+            jefe.post("/api/estimados", json={"persona_id": persona["id"]})
+        cid = emp.get("/api/estimados").json()["recibidas"][0]["id"]
+        assert emp.post(f"/api/estimados/{cid}/aceptar").status_code == 200
+    cal_jefe = jefe.get(f"/api/calendario?anio={HOY.year}").json()
+    assert any(c["nombre"] == "Empleado Medellín" and c["tipo"] == "cumpleanos" for c in cal_jefe["cumpleanos"])
 
 
 def test_jefes_solo_de_la_misma_sede(mundo):

@@ -35,6 +35,11 @@ export const esCaseta = (u) => u?.rol === 'caseta' || esAdmin(u)
 /** TI (y GH / super administrador): revisión de las salidas de equipo de cómputo. */
 export const esTI = (u) => !!u?.puede_ti || esAdmin(u)
 /** El médico de planta y caseta no piden vacaciones ni permisos: solo usan su apartado. */
+/** Texto de un cumpleaños o aniversario del calendario. */
+export const textoCumple = (c) => (c.tipo === 'aniversario'
+  ? `${c.nombre} · ${c.anios} año${c.anios === 1 ? '' : 's'} en la empresa`
+  : c.propio ? '¡Tu cumpleaños!' : c.nombre)
+
 export const sinVacaciones = (u) => ['medico', 'caseta'].includes(u?.rol)
 /** Pantalla de inicio de cada tipo de usuario. */
 export const inicioDe = (u) => (u?.rol === 'medico' ? '/consultas' : u?.rol === 'caseta' ? '/caseta' : '/')
@@ -59,7 +64,7 @@ export const CATEGORIAS = {
   consulta_medica: { label: 'Consulta médica (permiso)', color: '#00897b' },
   incapacidad: { label: 'Incapacidad', color: '#b23c17' },
   festivo: { label: 'Festivo', color: '#e53935' },
-  cumpleanos: { label: 'Cumpleaños', color: '#ec407a' },
+  cumpleanos: { label: 'Cumpleaños y aniversarios', color: '#ec407a' },
   aniversario: { label: 'Aniversario', color: '#c99a06' },
 }
 

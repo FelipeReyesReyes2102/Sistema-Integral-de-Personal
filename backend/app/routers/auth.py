@@ -45,7 +45,8 @@ def me_out(user: Usuario, metodo: str | None) -> MeOut:
     sedes = [{"id": s.id, "nombre": s.nombre, "zona_horaria": s.zona_horaria} for s in sedes_visibles(db, user)] if db else []
     return MeOut(**base, authenticated=True, display_name=user.nombre, role=user.rol, auth_method=metodo,
                  permissions=permisos_de(user), puede_usar_password=puede_usar_password(user), sedes=sedes,
-                 debe_confirmar_datos=debe_confirmar_datos(user), proxima_confirmacion=proxima_confirmacion(user))
+                 debe_confirmar_datos=debe_confirmar_datos(user), proxima_confirmacion=proxima_confirmacion(user),
+                 ver_cumpleanos=user.ver_cumpleanos, ver_aniversarios=user.ver_aniversarios)
 
 
 @router.get("/config")

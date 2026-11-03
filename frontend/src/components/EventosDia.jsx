@@ -100,11 +100,16 @@ export default function EventosDia({ fecha, eventos, festivo, descanso, persona,
       )}
       {cumpleanos.length > 0 && (
         <div className="ev-cumples">
-          <div className="ev-cumples-tit"><IconoCategoria cat="cumpleanos" size={14} /> Cumpleaños</div>
+          <div className="ev-cumples-tit"><IconoCategoria cat="cumpleanos" size={14} /> Cumpleaños y aniversarios</div>
           {cumpleanos.map((c) => (
-            <div key={c.usuario_id} className="ev-cumple">
+            <div key={`${c.tipo}-${c.usuario_id}`} className="ev-cumple">
               <Avatar usuario={{ id: c.usuario_id, nombre: c.nombre, tiene_foto: c.tiene_foto }} tam={34} />
-              <div><b>{c.nombre}</b>{c.puesto && <div className="muted" style={{ fontSize: 12 }}>{c.puesto}</div>}</div>
+              <div><b>{c.nombre}</b>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  {c.tipo === 'aniversario' ? `🏅 ${c.anios} año${c.anios === 1 ? '' : 's'} en la empresa` : c.propio ? '🎂 ¡Tu cumpleaños!' : '🎂 Cumpleaños'}
+                  {c.puesto ? ` · ${c.puesto}` : ''}
+                </div>
+              </div>
             </div>
           ))}
         </div>

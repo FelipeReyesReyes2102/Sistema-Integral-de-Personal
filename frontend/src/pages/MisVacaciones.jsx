@@ -429,7 +429,7 @@ function PanelRegistros({ anio, registros, franjas, foco, onFoco, onAbrir, ocult
     if (k === 'vacaciones' || k === 'home_office') return `${r.dias} día(s)${r.pendientes ? ` · ${r.pendientes} pend.` : ''}`
     if (k === 'consulta') return `${r.dias} consulta(s)`
     if (k === 'festivo') return `${r.dias} día(s)`
-    if (k === 'cumpleanos') return `${r.dias} persona(s)`
+    if (k === 'cumpleanos') return `${r.dias} fecha(s)`
     return `${r.dias} · ${num(r.horas)} h`
   }
   return (
@@ -506,14 +506,17 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
     const hoy = hoyISO()
     const proximo = cumpleanos.find((c) => c.fecha >= hoy)
     return (
-      <Modal titulo={`Cumpleaños ${anio}`} onClose={onClose} pie={<button className="btn" onClick={onClose}>Cerrar</button>}>
-        {cumpleanos.length === 0 && <div className="muted">Aún no hay fechas de cumpleaños registradas.</div>}
+      <Modal titulo={`Cumpleaños y aniversarios ${anio}`} onClose={onClose}
+        pie={<><a className="btn" href="/cumpleanos">Pedir ver los de un compañero</a><button className="btn" onClick={onClose}>Cerrar</button></>}>
+        <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>Solo ves los de las personas que te autorizaron.</p>
+        {cumpleanos.length === 0 && <div className="muted">Aún no hay cumpleaños ni aniversarios que mostrar.</div>}
         <div className="lista-cumples">
           {cumpleanos.map((c) => (
-            <div key={c.usuario_id} className={`cumple-fila ${c.fecha === hoy ? 'hoy' : ''} ${c === proximo && c.fecha !== hoy ? 'proximo' : ''}`}>
+            <div key={`${c.tipo}-${c.usuario_id}`} className={`cumple-fila ${c.fecha === hoy ? 'hoy' : ''} ${c === proximo && c.fecha !== hoy ? 'proximo' : ''}`}>
               <Avatar usuario={{ id: c.usuario_id, nombre: c.nombre, tiene_foto: c.tiene_foto }} tam={30} />
-              <div className="cf-datos"><b>{c.nombre}</b>{c.puesto && <span className="muted"> · {c.puesto}</span>}</div>
-              <span className="cf-fecha">{c.fecha === hoy ? '🎂 ¡Hoy!' : diaMes(c.fecha)}</span>
+              <div className="cf-datos"><b>{c.nombre}</b>
+                <span className="muted"> · {c.tipo === 'aniversario' ? `${c.anios} año${c.anios === 1 ? '' : 's'} en la empresa` : 'cumpleaños'}</span></div>
+              <span className="cf-fecha">{c.fecha === hoy ? (c.tipo === 'aniversario' ? '🏅 ¡Hoy!' : '🎂 ¡Hoy!') : diaMes(c.fecha)}</span>
             </div>
           ))}
         </div>

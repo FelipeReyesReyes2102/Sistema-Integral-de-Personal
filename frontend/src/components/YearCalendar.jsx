@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { CalendarDays, ChevronLeft, ChevronRight, LayoutGrid } from 'lucide-react'
 import IconoCategoria from './IconoCategoria'
-import { CATEGORIAS, DIAS_SEMANA, ESTADOS, MESES, eventosPorFecha, estiloEvento, fmtFecha, hoyISO, parseISO, toISO } from '../utils'
+import { CATEGORIAS, DIAS_SEMANA, ESTADOS, MESES, eventosPorFecha, estiloEvento, fmtFecha, hoyISO, parseISO, textoCumple, toISO } from '../utils'
 
 const PRIORIDAD = ['incapacidad', 'vacaciones', 'home_office', 'otro_permiso', 'salida_intermedia', 'salida_temprana', 'llegada_tarde', 'consulta', 'consulta_medica']
 
@@ -111,12 +111,13 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
   }
 
   const principal = (evs) => [...evs].sort((a, b) => PRIORIDAD.indexOf(a.cat) - PRIORIDAD.indexOf(b.cat))[0]
-  const miCumple = (f) => (cumples[f] || []).some((c) => c.propio)
+  const miCumple = (f) => (cumples[f] || []).some((c) => c.propio && c.tipo !== 'aniversario')
   const esAniversario = (f) => aniversario?.fecha === f
   const titulo = (f, evs) => [
     esAniversario(f) && `🏅 ${aniversario.titulo}`,
     miCumple(f) && '🎂 ¡Tu cumpleaños!',
-    cumples[f] && `🎂 Cumpleaños: ${cumples[f].map((c) => c.nombre).join(', ')}`,
+    (cumples[f] || []).some((c) => c.tipo !== 'aniversario' && !c.propio) && `🎂 Cumpleaños: ${cumples[f].filter((c) => c.tipo !== 'aniversario' && !c.propio).map((c) => c.nombre).join(', ')}`,
+    (cumples[f] || []).some((c) => c.tipo === 'aniversario') && `🏅 Aniversario: ${cumples[f].filter((c) => c.tipo === 'aniversario').map(textoCumple).join(', ')}`,
     festivos[f] && `Festivo: ${festivos[f]}`,
     noLab.has(f) && 'Día de descanso',
     ...evs.map((e) => `${e.tipo_nombre && e.cat === 'otro_permiso' ? e.tipo_nombre : CATEGORIAS[e.cat]?.label}${e.estado && e.estado !== 'registrada' ? ` · ${ESTADOS[e.estado]}` : ''}${e.hora_inicio && e.cat !== 'home_office' ? ` · ${e.hora_inicio}` : ''}`),
@@ -243,8 +244,9 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
                   {esAniversario(f) && <span className="zoom-chip aniv"><IconoCategoria cat="aniversario" size={11} /> {aniversario.titulo}</span>}
                   {festivos[f] && <span className="zoom-chip rojo"><IconoCategoria cat="festivo" size={11} /> {festivos[f]}</span>}
                   {(cumples[f] || []).map((c) => (
-                    <span key={c.usuario_id} className="zoom-chip cumple" title="Cumpleaños">
-                      <IconoCategoria cat="cumpleanos" size={11} /> {c.propio ? '¡Tu cumpleaños!' : c.nombre}
+                    <span key={`${c.tipo}-${c.usuario_id}`} className={`zoom-chip ${c.tipo === 'aniversario' ? 'aniv' : 'cumple'}`}
+                      title={c.tipo === 'aniversario' ? 'Aniversario en la empresa' : 'Cumpleaños'}>
+                      <IconoCategoria cat={c.tipo === 'aniversario' ? 'aniversario' : 'cumpleanos'} size={11} /> {textoCumple(c)}
                     </span>
                   ))}
                   {noLab.has(f) && !evs.length && <span className="zoom-chip gris">Descanso</span>}

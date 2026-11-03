@@ -892,3 +892,10 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
   .formato-equipo, .formato-equipo * { visibility: visible !important; }
   .formato-equipo { position: fixed; inset: 0; border: 0; }
 }
+
+/* Cumpleaños y aniversarios (autorizaciones) */
+.estimados { display: grid; gap: 16px; }
+.est-fila { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border, #e3e7ee); }
+.est-fila:last-child { border-bottom: 0; }
+.est-recibidas { border: 1px solid #f0d58a; background: #fffcf2; }
+@media (max-width: 640px) { .est-fila { flex-wrap: wrap; } }

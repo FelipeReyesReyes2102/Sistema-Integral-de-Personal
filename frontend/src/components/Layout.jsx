@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  CalendarDays, ClipboardCheck, Clock, DoorOpen, Home, Laptop, MonitorCheck, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
+  Cake, CalendarDays, ClipboardCheck, Clock, DoorOpen, Home, Laptop, MonitorCheck, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
   History, PartyPopper, Settings, ShieldCheck, Users, UsersRound, X,
 } from 'lucide-react'
 import { api, elegirSede, sedeActiva } from '../api'
@@ -15,6 +15,7 @@ const TITULOS = {
   '/': 'Mis vacaciones y ausencias',
   '/caseta': 'Caseta · permisos del día y retardos',
   '/equipos': 'Salida de equipo de cómputo',
+  '/cumpleanos': 'Cumpleaños y aniversarios',
   '/ti': 'TI · salidas de equipo de cómputo',
   '/aprobaciones': 'Solicitudes por aprobar',
   '/mi-equipo': 'Mi equipo',
@@ -49,7 +50,7 @@ export default function Layout() {
   useEffect(() => { if (sedeActiva() && !sedeElegida) elegirSede('') }, [])
   const jefe = esJefe(user)
 
-  const conPendientes = jefe || esTI(user)
+  const conPendientes = jefe || esTI(user) || !sinVacaciones(user)
   useEffect(() => {
     if (!conPendientes) return
     const cargar = () => api('/pendientes').then(setPendientes).catch(() => {})
@@ -99,6 +100,7 @@ export default function Layout() {
         <nav>
           {!sinVacaciones(user) && link('/', Home, 'Mis vacaciones')}
           {!sinVacaciones(user) && link('/equipos', Laptop, 'Salida de equipo')}
+          {!sinVacaciones(user) && link('/cumpleanos', Cake, 'Cumpleaños', badge(pendientes.estimados))}
           {user.puede_ti && !esAdmin && (
             <>
               <div className="seccion">TI</div>

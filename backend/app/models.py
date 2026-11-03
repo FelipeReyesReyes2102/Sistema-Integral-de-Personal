@@ -276,6 +276,9 @@ class Usuario(Base):
     puede_consultas: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # Permiso de TI: revisa (sella o rechaza) las salidas de equipo de cómputo de su sede
     puede_ti: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Preferencias del calendario: ver los cumpleaños y aniversarios de las personas que lo autorizaron
+    ver_cumpleanos: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    ver_aniversarios: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     # Datos de contacto
     direccion: Mapped[str | None] = mapped_column(String(255))
@@ -739,6 +742,22 @@ class SalidaEquipo(Base):
     ti_por: Mapped[Usuario | None] = relationship(foreign_keys=[ti_por_id])
     salida_por: Mapped[Usuario | None] = relationship(foreign_keys=[salida_por_id])
     regreso_por: Mapped[Usuario | None] = relationship(foreign_keys=[regreso_por_id])
+
+
+class ContactoCalendario(Base):
+    """Autorización para ver en mi calendario el cumpleaños y el aniversario de otra persona (ella la acepta)."""
+    __tablename__ = "contactos_calendario"
+    __table_args__ = (UniqueConstraint("solicitante_id", "persona_id", name="uq_contacto_calendario"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    solicitante_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), index=True)
+    persona_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), index=True)
+    estado: Mapped[str] = mapped_column(String(12), default="pendiente", index=True)  # pendiente | aceptada | rechazada
+    creado: Mapped[datetime | None] = mapped_column(DateTime)
+    respondido: Mapped[datetime | None] = mapped_column(DateTime)
+
+    solicitante: Mapped[Usuario] = relationship(foreign_keys=[solicitante_id])
+    persona: Mapped[Usuario] = relationship(foreign_keys=[persona_id])
 
 
 class NotificacionCorreo(Base):
