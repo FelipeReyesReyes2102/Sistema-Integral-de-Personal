@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, Ban, Clock, Eye, EyeOff, Laptop, MousePointerClick, Pencil, Send, Stethoscope, Trash2, TreePalm, X,
+  ArrowLeft, Ban, Clock, Eye, EyeOff, FileText, Laptop, MousePointerClick, Pencil, Send, Stethoscope, Trash2, TreePalm, X,
 } from 'lucide-react'
 import { api } from '../api'
 import { useAuth } from '../auth'
@@ -18,6 +18,9 @@ import MiTurno from '../components/MiTurno'
 import Avatar from '../components/Avatar'
 import IconoCategoria from '../components/IconoCategoria'
 import DetalleConsulta from '../components/DetalleConsulta'
+import SalidaEquipoModal from '../components/SalidaEquipoModal'
+import FormatoEquipo from '../components/FormatoEquipo'
+import { claseSituacion } from '../components/TablaSalidas'
 
 // Color de cada periodo vacacional: el calendario pinta sus días con un tono claro de este color
 const COLORES_PERIODO = ['#f9a825', '#7e57c2', '#00897b', '#d81b60', '#0288d1', '#ef6c00']
@@ -39,6 +42,7 @@ export default function MisVacaciones({ usuarioId }) {
   const [vacaciones, setVacaciones] = useState([])
   const [permisos, setPermisos] = useState([])
   const [consultas, setConsultas] = useState([])
+  const [equipos, setEquipos] = useState([]) // mis salidas de equipo de cómputo (solo en mi propio calendario)
   const [anio, setAnio] = useState(new Date().getFullYear())
   const [calendario, setCalendario] = useState(null)
   const [tab, setTab] = useState('resumen')
@@ -74,14 +78,16 @@ export default function MisVacaciones({ usuarioId }) {
 
   const cargar = useCallback(async () => {
     try {
-      const [ps, vs, pm, cs] = await Promise.all([
+      const [ps, vs, pm, cs, eq] = await Promise.all([
         api('/periodos', { query: q }), api('/vacaciones', { query: q }), api('/permisos', { query: q }),
         api('/consultas', { query: q }).catch(() => []),
+        usuarioId ? [] : api('/equipos').catch(() => []),
       ])
       setPeriodos(ps)
       setVacaciones(vs)
       setPermisos(pm)
       setConsultas(cs)
+      setEquipos(eq)
       setPeriodoSel((sel) => (sel === 'general' || (sel && ps.some((p) => p.id === sel)) ? sel : (ps.find((p) => p.vigente) || ps[0])?.id ?? null))
     } catch (e) {
       setError(e.message)
@@ -227,9 +233,10 @@ export default function MisVacaciones({ usuarioId }) {
       }
     }
     r.festivo.dias = (calendario?.festivos || []).length
+    r.equipo.dias = equipos.filter((s) => s.estado !== 'cancelado' && s.fecha_inicio.slice(0, 4) <= String(anio) && s.fecha_fin.slice(0, 4) >= String(anio)).length
     r.cumpleanos.dias = (calendario?.cumpleanos || []).length
     return r
-  }, [eventos, permisos, calendario, anio])
+  }, [eventos, permisos, equipos, calendario, anio])
 
   const base = periodo ? Math.max(periodo.horas_otorgadas, periodo.horas_total) : 0
   const pct = (h) => (base > 0 ? `${Math.max(0, (h / base) * 100)}%` : '0%')
@@ -382,7 +389,8 @@ export default function MisVacaciones({ usuarioId }) {
             onPermiso={() => setModal({ tipo: 'perm', fechaInicial: seleccion.inicio, fechaFinInicial: seleccion.fin || seleccion.inicio })}
             onHomeOffice={() => setModal({ tipo: 'perm', tipoPermiso: 'home_office', fechaInicial: seleccion.inicio, fechaFinInicial: seleccion.fin || seleccion.inicio })}
             onNuevaVacacion={periodosConSaldo.length > 0 ? () => setModal({ tipo: 'vac' }) : null}
-            onNuevoPermiso={() => setModal({ tipo: 'perm' })} />
+            onNuevoPermiso={() => setModal({ tipo: 'perm' })}
+            onEquipo={usuarioId ? null : () => setModal({ tipo: 'equipo', inicial: seleccion ? { fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin || seleccion.inicio } : null })} />
         )}
         <YearCalendar anio={anio} onAnio={setAnio} datos={calendario} seleccion={seleccion} compacto
           onSeleccion={soloLectura ? undefined : setSeleccion}
@@ -392,11 +400,12 @@ export default function MisVacaciones({ usuarioId }) {
       </div>
 
       {lista && (
-        <ListaSolicitudes categoria={lista} anio={anio} vacaciones={vacaciones} permisos={permisos} consultas={consultas}
+        <ListaSolicitudes categoria={lista} anio={anio} vacaciones={vacaciones} permisos={permisos} consultas={consultas} equipos={equipos}
           festivos={calendario?.festivos || []} cumpleanos={calendario?.cumpleanos || []} esAdmin={esAdmin} soloLectura={soloLectura} accion={accion}
           onVer={(i) => setModal({ tipo: 'ver', item: i })}
           onEditar={(i) => setModal({ tipo: i.cat === 'vacaciones' ? 'vac' : 'perm', item: i })}
           onConsulta={(i) => setModal({ tipo: 'consulta', item: i })}
+          onEquipo={(i, que) => setModal({ tipo: que, salida: i })}
           onClose={() => setLista(null)} />
       )}
       {modal?.tipo === 'vac' && (
@@ -411,6 +420,10 @@ export default function MisVacaciones({ usuarioId }) {
           onClose={() => setModal(null)} onSaved={refrescar} />
       )}
       {modal?.tipo === 'ver' && <Detalle item={modal.item} onClose={() => setModal(null)} />}
+      {modal?.tipo === 'equipo' && (
+        <SalidaEquipoModal salida={modal.salida} inicial={modal.inicial} onClose={() => setModal(null)} onSaved={refrescar} />
+      )}
+      {modal?.tipo === 'formato' && <FormatoEquipo salida={modal.salida} onClose={() => setModal(null)} />}
       {modal?.tipo === 'dia' && (
         <EventosDia fecha={modal.fecha} eventos={eventos[modal.fecha] || []}
           festivo={(calendario?.festivos || []).find((x) => x.fecha === modal.fecha)?.nombre}
@@ -439,6 +452,7 @@ function PanelRegistros({ anio, registros, franjas, foco, onFoco, onAbrir, ocult
     if (k === 'consulta') return `${r.dias} consulta(s)`
     if (k === 'festivo') return `${r.dias} día(s)`
     if (k === 'cumpleanos') return `${r.dias} fecha(s)`
+    if (k === 'equipo') return `${r.dias} solicitud(es)`
     return `${r.dias} · ${num(r.horas)} h`
   }
   return (
@@ -453,7 +467,7 @@ function PanelRegistros({ anio, registros, franjas, foco, onFoco, onAbrir, ocult
         <div key={k} className="registro-fila">
           <button type="button" className={`registro ${foco === k ? 'activo' : ''}`} aria-pressed={foco === k}
             style={foco === k ? { borderColor: c.color, background: `${c.color}14` } : undefined}
-            onClick={() => onFoco(k)} onDoubleClick={() => onAbrir(k)}>
+            onClick={() => (k === 'equipo' ? onAbrir(k) : onFoco(k))} onDoubleClick={() => onAbrir(k)}>
             <span className="reg-icono" style={{ background: c.color }}><IconoCategoria cat={k} size={12} /></span>
             <span>{c.label}</span>
             <b>{texto(k, registros[k])}</b>
@@ -498,8 +512,8 @@ function PanelRegistros({ anio, registros, franjas, foco, onFoco, onAbrir, ocult
 }
 
 /** Ventana con las solicitudes de una categoría de Registros (o todas), con filtros y acciones. */
-function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, festivos, cumpleanos, esAdmin, soloLectura, accion,
-  onVer, onEditar, onConsulta, onClose }) {
+function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, equipos = [], festivos, cumpleanos, esAdmin, soloLectura, accion,
+  onVer, onEditar, onConsulta, onEquipo, onClose }) {
   const [estado, setEstado] = useState('')
   const [cat, setCat] = useState(categoria === 'todas' ? '' : categoria)
   const [soloAnio, setSoloAnio] = useState(true)
@@ -508,13 +522,14 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
     const vs = vacaciones.map((v) => ({ ...v, cat: 'vacaciones', orden: v.fecha_inicio, fin: v.fecha_fin }))
     const ps = permisos.map((p) => ({ ...p, cat: CATEGORIAS[p.tipo] ? p.tipo : 'otro_permiso', orden: p.fecha, fin: p.fecha_fin || p.fecha }))
     const cs = consultas.map((c) => ({ ...c, cat: 'consulta', orden: `${c.fecha}T${c.hora_inicio}`, fin: c.fecha }))
-    return [...vs, ...ps, ...cs]
+    const es = equipos.map((s) => ({ ...s, cat: 'equipo', orden: s.fecha_inicio, fin: s.fecha_fin }))
+    return [...vs, ...ps, ...cs, ...es]
       .filter((i) => !estado || i.estado === estado)
-      .filter((i) => !cat || (cat === 'permisos' ? !['vacaciones', 'consulta'].includes(i.cat)
+      .filter((i) => !cat || (cat === 'permisos' ? !['vacaciones', 'consulta', 'equipo'].includes(i.cat)
         : cat === 'incapacidad' ? i.cat === 'consulta' && i.incapacidad : i.cat === cat))
       .filter((i) => !soloAnio || (i.orden.slice(0, 4) <= String(anio) && i.fin.slice(0, 4) >= String(anio)))
       .sort((a, b) => b.orden.localeCompare(a.orden))
-  }, [vacaciones, permisos, consultas, estado, cat, soloAnio, anio])
+  }, [vacaciones, permisos, consultas, equipos, estado, cat, soloAnio, anio])
 
   if (cat === 'cumpleanos') {
     const hoy = hoyISO()
@@ -563,6 +578,7 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
           <option value="otro_permiso">Otros permisos</option>
           <option value="consulta">Consultas médicas</option>
           <option value="incapacidad">Incapacidades</option>
+          {equipos.length > 0 && <option value="equipo">Salida de equipo</option>}
         </select>
         <select value={estado} onChange={(e) => setEstado(e.target.value)}>
           <option value="">Cualquier estado</option>
@@ -573,17 +589,19 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
       <div className="lista-sol">
         {items.length === 0 && <div className="muted" style={{ padding: 20, textAlign: 'center' }}>No hay solicitudes.</div>}
         {items.map((i) => (
-          <div className="item-sol" key={`${i.cat === 'vacaciones' ? 'v' : i.cat === 'consulta' ? 'c' : 'p'}${i.id}`}>
+          <div className="item-sol" key={`${i.cat === 'vacaciones' ? 'v' : i.cat === 'consulta' ? 'c' : i.cat === 'equipo' ? 'e' : 'p'}${i.id}`}>
             <div className="info">
               <div className="titulo">
                 <span className="reg-icono" style={{ background: CATEGORIAS[i.cat]?.color, marginRight: 6 }}><IconoCategoria cat={i.cat} size={12} /></span>
-                {i.cat === 'vacaciones' ? 'Vacaciones' : i.cat === 'consulta'
+                {i.cat === 'vacaciones' ? 'Vacaciones' : i.cat === 'equipo' ? `Salida de equipo · ${i.marca} ${i.modelo}` : i.cat === 'consulta'
                   ? <span className="fila" style={{ gap: 6 }}><Stethoscope size={16} color="#00796b" /> Consulta médica</span>
                   : nombreTipo(i)}
               </div>
               <div className="detalle">
                 {i.cat === 'vacaciones'
                   ? `${fmtFecha(i.fecha_inicio)} - ${fmtFecha(i.fecha_fin)} (${i.dias_habiles} d) · ${i.periodo_nombre}`
+                  : i.cat === 'equipo'
+                    ? `${fmtFecha(i.fecha_inicio)} - ${fmtFecha(i.fecha_fin)} · SN ${i.serie}`
                   : i.cat === 'consulta'
                     ? `${fmtFecha(i.fecha)} ${hhmm(i.hora_inicio)}${i.hora_fin ? ` - ${hhmm(i.hora_fin)}` : ''} · Atendió: ${i.medico_nombre || 'Servicio médico'}`
                     : i.por_dias || i.tipo === 'home_office'
@@ -600,7 +618,23 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
               )}
             </div>
             <div className="acciones">
-              {i.cat === 'consulta' ? (
+              {i.cat === 'equipo' ? (
+                <>
+                  <span className={`pill ${claseSituacion(i)}`}>{i.situacion}</span>
+                  <button className="icon-btn" title="Ver formato F-630-03" onClick={() => onEquipo(i, 'formato')}><FileText size={16} /></button>
+                  {i.estado === 'borrador' && (
+                    <>
+                      <button className="icon-btn" title="Editar" onClick={() => onEquipo(i, 'equipo')}><Pencil size={16} /></button>
+                      <button className="icon-btn verde" title="Firmar y enviar" onClick={() => onEquipo(i, 'equipo')}><Send size={16} /></button>
+                      <button className="icon-btn rojo" title="Eliminar" onClick={() => accion(`/equipos/${i.id}`, 'DELETE', '¿Eliminar este borrador?')}><Trash2 size={16} /></button>
+                    </>
+                  )}
+                  {['solicitado', 'validado'].includes(i.estado) && !i.salida_registrada && (
+                    <button className="icon-btn rojo" title="Cancelar solicitud"
+                      onClick={() => accion(`/equipos/${i.id}/cancelar`, 'POST', '¿Cancelar esta solicitud de salida de equipo?')}><Ban size={16} /></button>
+                  )}
+                </>
+              ) : i.cat === 'consulta' ? (
                 <>
                   {i.incapacidad
                     ? <span className={`pill ${i.incapacidad.estado}`}>Incapacidad · {ESTADOS_INCAPACIDAD[i.incapacidad.estado]}</span>
@@ -624,7 +658,7 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, fe
 
 function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, hayGeneral, diasGeneral, maxDias, fechaMax, onLimpiar,
   homeOffice = true, permisos = true, permisoPorDias = false,
-  onVacaciones, onPermiso, onHomeOffice, onNuevaVacacion, onNuevoPermiso }) {
+  onVacaciones, onPermiso, onHomeOffice, onNuevaVacacion, onNuevoPermiso, onEquipo }) {
   // Periodo del que se tomarán los días (General: primero el más antiguo)
   const selectorPeriodo = periodos.length > 0 && (
     <div className="sel-periodos" role="radiogroup" aria-label="Periodo vacacional">
@@ -654,6 +688,7 @@ function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, hayGe
         <span className="acciones-rapidas">
           {onNuevaVacacion && <button className="btn btn-sm btn-primary" onClick={onNuevaVacacion}><TreePalm size={14} /> Pedir vacaciones</button>}
           {permisos && <button className="btn btn-sm" onClick={onNuevoPermiso}><Clock size={14} /> Pedir permiso</button>}
+          {onEquipo && <button className="btn btn-sm" onClick={onEquipo}><Laptop size={14} /> Salida de equipo</button>}
         </span>
       </div>
     )
@@ -687,6 +722,8 @@ function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, hayGe
       </button>
       {homeOffice && <button className="btn btn-sm" onClick={onHomeOffice} disabled={!seleccion.fin}><Laptop size={14} /> Home office</button>}
       {permisos && (unDia || permisoPorDias) && <button className="btn btn-sm" onClick={onPermiso}><Clock size={14} /> Solicitar permiso</button>}
+      {onEquipo && <button className="btn btn-sm" onClick={onEquipo} disabled={!seleccion.fin}
+        title="Sacar un equipo de cómputo de la empresa en estas fechas"><Laptop size={14} /> Salida de equipo</button>}
       <button className="icon-btn plain" title="Cancelar selección (Esc)" onClick={onLimpiar}><X size={16} /></button>
       <kbd className="tecla" title="Presiona Esc para cancelar la selección">Esc</kbd>
     </div>

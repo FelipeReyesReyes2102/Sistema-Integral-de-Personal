@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  Cake, CalendarDays, ClipboardCheck, Clock, DoorOpen, Home, Laptop, MonitorCheck, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
+  Cake, CalendarDays, ClipboardCheck, Clock, DoorOpen, Home, MonitorCheck, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
   History, PartyPopper, Settings, ShieldCheck, Users, UsersRound, X,
 } from 'lucide-react'
 import { api, elegirSede, sedeActiva } from '../api'
@@ -107,7 +107,6 @@ export default function Layout() {
             <>
               <div className="seccion">Mi espacio</div>
               {link('/', Home, 'Mis vacaciones')}
-              {link('/equipos', Laptop, 'Salida de equipo')}
               {link('/cumpleanos', Cake, 'Cumpleaños', badge(pendientes.estimados))}
             </>
           )}

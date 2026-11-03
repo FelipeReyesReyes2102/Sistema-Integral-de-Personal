@@ -63,6 +63,7 @@ export const CATEGORIAS = {
   consulta: { label: 'Consulta médica', color: '#00897b' },
   consulta_medica: { label: 'Consulta médica (permiso)', color: '#00897b' },
   incapacidad: { label: 'Incapacidad', color: '#b23c17' },
+  equipo: { label: 'Salida de equipo', color: '#455a64' },
   festivo: { label: 'Festivo', color: '#e53935' },
   cumpleanos: { label: 'Cumpleaños y aniversarios', color: '#ec407a' },
   aniversario: { label: 'Aniversario', color: '#c99a06' },

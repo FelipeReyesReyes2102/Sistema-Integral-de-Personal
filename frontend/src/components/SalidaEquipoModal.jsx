@@ -6,13 +6,13 @@ import FormularioOtek, { Campo } from './FormularioOtek'
 import SelectorJefe from './SelectorJefe'
 
 /** Solicitud de salida de equipo de cómputo (formato F-630-03): datos del equipo, plazo, jefe y firma. */
-export default function SalidaEquipoModal({ salida, usuario, onClose, onSaved }) {
+export default function SalidaEquipoModal({ salida, usuario, inicial, onClose, onSaved }) {
   const { user } = useAuth()
   const empleado = usuario || user
   const [form, setForm] = useState({
     tipo_equipo: salida?.tipo_equipo || 'laptop', marca: salida?.marca || '', modelo: salida?.modelo || '', serie: salida?.serie || '',
     accesorios: salida?.accesorios || '', justificacion: salida?.justificacion || '',
-    fecha_inicio: salida?.fecha_inicio || hoyISO(), fecha_fin: salida?.fecha_fin || hoyISO(), detalles: salida?.detalles || '',
+    fecha_inicio: salida?.fecha_inicio || inicial?.fecha_inicio || hoyISO(), fecha_fin: salida?.fecha_fin || inicial?.fecha_fin || inicial?.fecha_inicio || hoyISO(), detalles: salida?.detalles || '',
     aprobador_id: salida?.aprobador_id || null,
   })
   const [firma, setFirma] = useState(null)

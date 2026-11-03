@@ -266,7 +266,7 @@ export default function YearCalendar({ anio, onAnio, datos, seleccion, onSelecci
       })()}
 
       {!compacto && <div className="cal-leyenda">
-        {Object.entries(CATEGORIAS).filter(([k]) => k !== 'consulta_medica').map(([k, c]) => (
+        {Object.entries(CATEGORIAS).filter(([k]) => k !== 'consulta_medica' && k !== 'equipo').map(([k, c]) => (
           <button key={k} type="button" className={`ley-chip ${foco === k ? 'activo' : ''} ${foco && foco !== k ? 'apagado' : ''}`}
             onClick={() => onFoco?.(foco === k ? null : k)} disabled={!onFoco}>
             <i style={{ background: c.color }} /> {c.label}
