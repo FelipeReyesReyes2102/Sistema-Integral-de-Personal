@@ -396,7 +396,7 @@ export default function MisVacaciones({ usuarioId }) {
           onSeleccion={soloLectura ? undefined : setSeleccion}
           onDia={(f) => setModal({ tipo: 'dia', fecha: f })}
           franjas={franjasVisibles} aniversario={aniversario}
-          maxDias={maxDias || null} fechaMax={fechaMax} foco={foco} />
+          foco={foco} />
       </div>
 
       {lista && (
@@ -700,24 +700,29 @@ function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, hayGe
   const fin = seleccion.fin || seleccion.inicio
   const naturales = Math.round((parseISO(fin) - parseISO(seleccion.inicio)) / 864e5) + 1
   const unDia = naturales === 1
+  // Tope solo para vacaciones: días disponibles del periodo y fecha de vencimiento
+  const excede = seleccion.fin && calc && maxDias !== null && calc.dias_habiles > Math.floor(maxDias + 1e-6)
+    ? `Para vacaciones tienes máximo ${Math.floor(maxDias + 1e-6)} días laborales`
+    : seleccion.fin && fechaMax && fin > fechaMax ? `Para vacaciones, a más tardar el ${fmtFecha(fechaMax, false)}` : null
+  const errorVac = excede || calc?.errores[0]
   return (
     <div className="barra-sel con-seleccion">
       <b>{fmtFecha(seleccion.inicio)}{!unDia && ` → ${fmtFecha(fin)}`}</b>
       <span className="muted">
         {!seleccion.fin
-          ? `Elige el último día…${maxDias ? ` (máximo ${Math.floor(maxDias + 1e-6)} días laborales${general ? ' entre tus periodos' : ` del ${periodoSel?.nombre}`}${fechaMax ? `, a más tardar el ${fmtFecha(fechaMax, false)}` : ''})` : ''}`
+          ? `Elige el último día…${maxDias ? ` (vacaciones: máximo ${Math.floor(maxDias + 1e-6)} días laborales${general ? ' entre tus periodos' : ` del ${periodoSel?.nombre}`}${fechaMax ? `, a más tardar el ${fmtFecha(fechaMax, false)}` : ''})` : ''}`
           : `${naturales} día(s) naturales`}
         {calc && seleccion.fin && ` · ${calc.dias_habiles} laborales`}
         {reparto.length > 1 && ` (${reparto.map((t) => `${t.dias} del ${t.periodo_nombre}`).join(' + ')})`}
       </span>
-      {calc && seleccion.fin && calc.errores.length > 0 && (
-        <span style={{ color: 'var(--danger)', fontSize: 12 }}>{calc.errores[0]}</span>
+      {seleccion.fin && errorVac && (
+        <span style={{ color: 'var(--danger)', fontSize: 12 }}>{errorVac}</span>
       )}
       <div className="espacio" />
       {selectorPeriodo}
       <button className="btn btn-sm btn-primary" onClick={onVacaciones}
-        disabled={!seleccion.fin || !calc || calc.errores.length > 0 || sinSaldo}
-        title={sinSaldo ? 'No tienes días de vacaciones disponibles' : calc?.errores[0]}>
+        disabled={!seleccion.fin || !calc || !!errorVac || sinSaldo}
+        title={sinSaldo ? 'No tienes días de vacaciones disponibles' : errorVac}>
         <TreePalm size={14} /> Solicitar vacaciones
       </button>
       {homeOffice && <button className="btn btn-sm" onClick={onHomeOffice} disabled={!seleccion.fin}><Laptop size={14} /> Home office</button>}
