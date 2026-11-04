@@ -228,10 +228,13 @@ def requiere_gh(registro) -> bool:
     return bool(sede.aprobacion_gh_permisos if isinstance(registro, Permiso) else sede.aprobacion_gh_vacaciones)
 
 
-def aprobar(registro, actor: Usuario) -> bool:
+def aprobar(registro, actor: Usuario, canal: str = "sip", comentario: str | None = None) -> bool:
     """Aprueba una solicitud de vacaciones o un permiso. Con dos niveles, la aprobación del jefe deja la solicitud
-    pendiente de GH. Devuelve True si quedó validada (False si solo la aprobó el jefe)."""
+    pendiente de GH; con una cadena de aprobación, avanza al siguiente paso. Devuelve True si quedó validada."""
     from datetime import datetime as _dt
+    if isinstance(registro, Permiso) and registro.pasos:
+        from . import flujos
+        return flujos.aprobar(registro, actor, canal, comentario)
     if requiere_gh(registro) and not es_admin(actor):
         if registro.aprobado_jefe_id:
             raise HTTPException(400, "Ya la aprobaste; falta la validación de GH.")
@@ -290,7 +293,11 @@ def empleado_visible(db: Session, actor: Usuario, usuario_id: int | None) -> Usu
 
 
 def puede_revisar(actor: Usuario, solicitud) -> bool:
-    """El administrador o el jefe asignado como aprobador (nunca su propia solicitud)."""
+    """El administrador o el jefe asignado como aprobador (nunca su propia solicitud). Con cadena de aprobación:
+    quien aprueba el paso actual."""
+    if isinstance(solicitud, Permiso) and solicitud.pasos:
+        from . import flujos
+        return flujos.gh_puede(actor, solicitud) or flujos.puede_decidir(actor, solicitud)
     if es_admin(actor):
         return admin_permite(actor, solicitud.usuario.sede_id if solicitud.usuario else None)
     return solicitud.aprobador_id == actor.id and solicitud.usuario_id != actor.id

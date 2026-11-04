@@ -414,6 +414,8 @@ class TipoPermisoSede(Base):
     base: Mapped[bool] = mapped_column(Boolean, default=False)          # los 4 tipos originales: no se borran
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     orden: Mapped[int] = mapped_column(Integer, default=100)
+    # Cadena de aprobación del tipo; vacío = como la sede (jefe, o jefe y después GH)
+    flujo_id: Mapped[int | None] = mapped_column(ForeignKey("flujos_aprobacion.id", ondelete="SET NULL"))
 
 
 class Permiso(Base):
@@ -452,6 +454,9 @@ class Permiso(Base):
     aprobador: Mapped[Usuario | None] = relationship(foreign_keys=[aprobador_id])
     revisado_por: Mapped[Usuario | None] = relationship(foreign_keys=[revisado_por_id])
     aprobado_jefe: Mapped[Usuario | None] = relationship(foreign_keys=[aprobado_jefe_id])
+    # Pasos de la cadena de aprobación copiados al enviarse (vacío = flujo de la sede)
+    pasos: Mapped[list["PasoSolicitud"]] = relationship(order_by="PasoSolicitud.orden", cascade="all, delete-orphan",
+                                                        back_populates="permiso")
 
 
 class Sesion(Base):
@@ -798,3 +803,54 @@ class RotacionTurnos(Base):
     actualizado: Mapped[datetime | None] = mapped_column(DateTime)
 
     turno_unico: Mapped[Turno | None] = relationship()
+
+
+class FlujoAprobacion(Base):
+    """Cadena de aprobación con nombre que GH arma por sede y asigna a tipos de permiso."""
+    __tablename__ = "flujos_aprobacion"
+    __table_args__ = (UniqueConstraint("sede_id", "nombre", name="uq_flujos_aprobacion_sede_nombre"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sede_id: Mapped[int] = mapped_column(ForeignKey("sedes.id", ondelete="CASCADE"), index=True)
+    nombre: Mapped[str] = mapped_column(String(80))
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    actualizado: Mapped[datetime | None] = mapped_column(DateTime)
+
+    pasos: Mapped[list["FlujoPaso"]] = relationship(order_by="FlujoPaso.orden", cascade="all, delete-orphan")
+
+
+class FlujoPaso(Base):
+    """Paso de una cadena: quién aprueba, si va a Teams y qué hacer si no hay a quién pedírselo."""
+    __tablename__ = "flujo_pasos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    flujo_id: Mapped[int] = mapped_column(ForeignKey("flujos_aprobacion.id", ondelete="CASCADE"), index=True)
+    orden: Mapped[int] = mapped_column(Integer)
+    aprobador: Mapped[str] = mapped_column(String(20))  # jefe | jefe_del_jefe | gh | ti | usuario
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    teams: Mapped[bool] = mapped_column(Boolean, default=True)
+    si_falta: Mapped[str] = mapped_column(String(10), default="omitir")  # omitir | bloquear
+
+    usuario: Mapped[Usuario | None] = relationship()
+
+
+class PasoSolicitud(Base):
+    """Paso de la cadena copiado a un permiso al enviarse: cambiar la configuración no afecta lo que ya está en curso."""
+    __tablename__ = "solicitud_pasos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    permiso_id: Mapped[int] = mapped_column(ForeignKey("permisos.id", ondelete="CASCADE"), index=True)
+    orden: Mapped[int] = mapped_column(Integer)
+    aprobador: Mapped[str] = mapped_column(String(20))
+    etiqueta: Mapped[str] = mapped_column(String(120))
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"), index=True)
+    teams: Mapped[bool] = mapped_column(Boolean, default=True)
+    estado: Mapped[str] = mapped_column(String(12), default="en_espera", index=True)  # en_espera|pendiente|aprobado|rechazado|omitido
+    decidido_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"), index=True)
+    fecha: Mapped[datetime | None] = mapped_column(DateTime)
+    comentario: Mapped[str | None] = mapped_column(Text)
+    canal: Mapped[str | None] = mapped_column(String(10))  # sip | teams
+
+    permiso: Mapped[Permiso] = relationship(back_populates="pasos")
+    usuario: Mapped[Usuario | None] = relationship(foreign_keys=[usuario_id])
+    decidido_por: Mapped[Usuario | None] = relationship(foreign_keys=[decidido_por_id])

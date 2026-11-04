@@ -5,14 +5,14 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, object_session
 
-from .. import correo, horarios, reglas, tipos_permiso
+from .. import correo, flujos, horarios, reglas, tipos_permiso
 from ..database import get_db
 from ..models import (
     BORRADOR, CANCELADO, ESTADOS_ACTIVOS, PERMISO_CONSULTA_MEDICA, PERMISO_HOME_OFFICE, RECHAZADO, ROL_ADMIN,
     SOLICITADO, VALIDADO, Permiso, SolicitudVacaciones, Usuario,
 )
 from ..models import ROLES_ADMIN, es_admin, solicita_vacaciones  # noqa: F401
-from ..schemas import MotivoRechazoIn, PermisoIn, PermisoOut, RechazoIn, ValidarPermisoIn
+from ..schemas import MotivoRechazoIn, PasoOut, PermisoIn, PermisoOut, RechazoIn, ValidarPermisoIn
 from ..security import get_current_user
 from ..sedes import Alcance, admin_permite, alcance, hoy_de
 from ..services import (
@@ -39,6 +39,11 @@ def _out(p: Permiso) -> PermisoOut:
         o.dias = len(reglas.dias_laborales(p.fecha, fin, ciclo_de(p.usuario), festivos_de(db, p.usuario, p.fecha, fin)))
     o.aprobado_jefe_nombre = p.aprobado_jefe.nombre if p.aprobado_jefe else None
     o.falta_gh = p.estado == SOLICITADO and p.aprobado_jefe_id is not None
+    o.pasos = [PasoOut(orden=x.orden, etiqueta=x.etiqueta, estado=x.estado, comentario=x.comentario, canal=x.canal,
+                       fecha=x.fecha, decidido_por_nombre=x.decidido_por.nombre if x.decidido_por else None,
+                       aprobador_nombre=x.usuario.nombre if x.usuario else None) for x in p.pasos]
+    paso = flujos.actual(p) if p.estado == SOLICITADO else None
+    o.paso_actual = paso.etiqueta if paso else None
     return o
 
 
@@ -124,9 +129,8 @@ def listar(estado: str | None = None, tipo: str | None = None, usuario_id: int |
     if todos and es_admin(user):
         q = q.where(Permiso.usuario_id.in_(select(Usuario.id).where(alc.filtro(Usuario.sede_id))))
     elif por_aprobar:
-        q = q.where(Permiso.aprobador_id == user.id, Permiso.usuario_id != user.id)
-        if estado == SOLICITADO:  # las que ya aprobé y esperan a GH no son mías
-            q = q.where(Permiso.aprobado_jefe_id.is_(None))
+        # Las que me tocan como jefe o en el paso actual de su cadena (con estado "solicitado", solo las pendientes)
+        q = q.where(Permiso.usuario_id != user.id, flujos.asignados(user, solo_pendientes=estado == SOLICITADO))
     else:
         q = q.where(Permiso.usuario_id == empleado_visible(db, user, usuario_id).id)
     if estado:
@@ -160,6 +164,9 @@ def crear(data: PermisoIn, db: Session = Depends(get_db), user: Usuario = Depend
                 departamento=data.departamento or empleado.departamento, tipo_nomina=data.tipo_nomina,
                 firma=data.firma, estado=SOLICITADO if data.enviar else BORRADOR)
     db.add(p)
+    if p.estado == SOLICITADO:
+        db.flush()
+        flujos.iniciar(db, p)
     db.commit()
     return _out(p)
 
@@ -167,7 +174,7 @@ def crear(data: PermisoIn, db: Session = Depends(get_db), user: Usuario = Depend
 def _obtener(db: Session, pid: int, user: Usuario) -> Permiso:
     p = db.get(Permiso, pid)
     visible = p and (p.usuario_id == user.id or (es_admin(user) and admin_permite(user, p.usuario.sede_id))
-                     or p.aprobador_id == user.id or p.usuario.jefe_id == user.id)
+                     or p.aprobador_id == user.id or p.usuario.jefe_id == user.id or flujos.participa(user, p))
     if not visible:
         _404()
     return p
@@ -195,6 +202,7 @@ def editar(pid: int, data: PermisoIn, db: Session = Depends(get_db), user: Usuar
     if data.enviar:
         _validar_envio(p.motivo, p.tipo_nomina, p.firma, v["cfg"].pide_nomina)
         p.estado = SOLICITADO
+        flujos.iniciar(db, p)
     db.commit()
     return _out(p)
 
@@ -209,6 +217,7 @@ def enviar(pid: int, db: Session = Depends(get_db), user: Usuario = Depends(get_
     _validar_envio(p.motivo, p.tipo_nomina, p.firma, cfg.pide_nomina if cfg else True)
     p.aprobador_id = resolver_aprobador(db, p.usuario, p.aprobador_id)
     p.estado = SOLICITADO
+    flujos.iniciar(db, p)
     db.commit()
     return _out(p)
 
@@ -293,7 +302,7 @@ def eliminar(pid: int, db: Session = Depends(get_db), user: Usuario = Depends(ge
 def _revisable(db: Session, pid: int, user: Usuario) -> Permiso:
     p = _obtener(db, pid, user)
     if not puede_revisar(user, p):
-        raise HTTPException(403, "Solo el jefe asignado o el administrador puede aprobar este permiso")
+        raise HTTPException(403, "Este permiso no te toca aprobarlo (o ya lo aprobaste y sigue en otro paso).")
     if p.estado != SOLICITADO:
         raise HTTPException(400, "Solo se pueden revisar permisos pendientes")
     return p
@@ -327,6 +336,7 @@ def _motivo(p: Permiso, motivo: str | None) -> str | None:
 @router.post("/{pid}/rechazar", response_model=PermisoOut)
 def rechazar(pid: int, data: RechazoIn, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
     p = _revisable(db, pid, user)
+    flujos.rechazar(p, user, "sip", data.motivo)
     p.estado, p.motivo_rechazo, p.motivo_rechazo_pendiente = RECHAZADO, _motivo(p, data.motivo), False
     p.revisado_por_id, p.fecha_revision = user.id, datetime.now()
     db.commit()

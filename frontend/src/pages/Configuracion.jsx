@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { CalendarDays, Clock3, ListChecks, Mail, Plus, Scale, ShieldCheck, Trash2 } from 'lucide-react'
+import { CalendarDays, Clock3, GitBranch, ListChecks, Mail, Plus, Scale, ShieldCheck, Trash2 } from 'lucide-react'
 import { api } from '../api'
 import { num } from '../utils'
 import ConfigCorreo from '../components/ConfigCorreo'
+import ConfigFlujos from '../components/ConfigFlujos'
 import ConfigPolitica from '../components/ConfigPolitica'
 import ConfigTiposPermiso from '../components/ConfigTiposPermiso'
 import { useAuth } from '../auth'
@@ -15,6 +16,7 @@ const SECCIONES = [
   ['politica', 'Política', Scale],
   ['jornadas', 'Tipos de jornada', Clock3],
   ['permisos', 'Tipos de permiso', ShieldCheck],
+  ['flujos', 'Flujos de aprobación', GitBranch],
   ['correo', 'Correo y caseta', Mail],
   ['reglas', 'Reglas vigentes', ListChecks],
 ]
@@ -109,6 +111,7 @@ export default function Configuracion() {
     )}
     {['politica', 'jornadas', 'reglas'].includes(seccion) && <ConfigPolitica seccion={seccion} />}
     {seccion === 'permisos' && <ConfigTiposPermiso />}
+    {seccion === 'flujos' && <ConfigFlujos />}
     {seccion === 'correo' && <ConfigCorreo />}
     </div>
     </>

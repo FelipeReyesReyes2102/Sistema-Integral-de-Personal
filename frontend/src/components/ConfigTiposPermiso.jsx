@@ -5,7 +5,7 @@ import { textoLimite } from '../utils'
 
 const NUEVO = {
   nombre: '', modalidad: 'horas', pide_nomina: true, limite_cantidad: '', limite_unidad: 'dias', limite_periodo: '',
-  max_dias_solicitud: '', color: '#6d4c41', activo: true,
+  max_dias_solicitud: '', color: '#6d4c41', activo: true, flujo_id: '',
 }
 const PERIODOS = { '': 'Sin límite de periodo (en total)', mes: 'Por mes', anio: 'Por año' }
 
@@ -14,9 +14,10 @@ export default function ConfigTiposPermiso() {
   const [tipos, setTipos] = useState(null)
   const [edicion, setEdicion] = useState(null)
   const [msg, setMsg] = useState(null)
+  const [flujos, setFlujos] = useState([])
 
   const cargar = () => api('/tipos-permiso').then(setTipos).catch((e) => setMsg({ ok: false, t: e.message }))
-  useEffect(() => { cargar() }, [])
+  useEffect(() => { cargar(); api('/flujos').then(setFlujos).catch(() => {}) }, [])
   if (!tipos) return <div className="card" style={{ marginTop: 24 }}>{msg ? <div className="alerta error">{msg.t}</div> : 'Cargando…'}</div>
 
   const setE = (k) => (e) => setEdicion({ ...edicion, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
@@ -38,6 +39,7 @@ export default function ConfigTiposPermiso() {
       limite_unidad: e.modalidad === 'dias' ? 'dias' : e.limite_unidad,
       limite_periodo: e.limite_periodo || null,
       max_dias_solicitud: e.modalidad === 'dias' && e.max_dias_solicitud ? Number(e.max_dias_solicitud) : null,
+      flujo_id: e.flujo_id ? Number(e.flujo_id) : null,
     }
     try {
       if (e.id) await api(`/tipos-permiso/${e.id}`, { method: 'PUT', body })
@@ -62,6 +64,7 @@ export default function ConfigTiposPermiso() {
 
   const editar = (t) => setEdicion({
     ...t, limite_cantidad: t.limite_cantidad ?? '', limite_periodo: t.limite_periodo || '', max_dias_solicitud: t.max_dias_solicitud ?? '',
+    flujo_id: t.flujo_id ?? '',
   })
 
   return (
@@ -74,7 +77,7 @@ export default function ConfigTiposPermiso() {
       </p>
       <div className="tabla-wrap">
         <table className="tabla">
-          <thead><tr><th>Permiso</th><th>Se pide por</th><th>Tiempo en nómina</th><th>Límite</th><th>Máx. por solicitud</th><th>Estado</th><th /></tr></thead>
+          <thead><tr><th>Permiso</th><th>Se pide por</th><th>Tiempo en nómina</th><th>Límite</th><th>Máx. por solicitud</th><th>Aprobación</th><th>Estado</th><th /></tr></thead>
           <tbody>
             {tipos.map((t) => (edicion?.id === t.id ? null : (
               <tr key={t.id} style={{ opacity: t.activo ? 1 : 0.5 }}>
@@ -87,6 +90,7 @@ export default function ConfigTiposPermiso() {
                 <td>{t.modalidad === 'horas' && t.pide_nomina ? 'Lo indica el empleado' : <span className="muted">No aplica</span>}</td>
                 <td>{textoLimite(t)}</td>
                 <td>{t.modalidad === 'dias' ? `${t.max_dias_solicitud || 31} día(s)` : <span className="muted">—</span>}</td>
+                <td>{t.flujo_nombre || <span className="muted">Como la sede</span>}</td>
                 <td>{t.activo ? 'Activo' : 'Inactivo'}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   <button className="icon-btn" title="Editar" onClick={() => editar(t)}><Pencil size={14} /></button>{' '}
@@ -132,6 +136,12 @@ export default function ConfigTiposPermiso() {
                   {edicion.modalidad === 'dias'
                     ? <input type="number" min={1} max={365} style={{ width: 70 }} value={edicion.max_dias_solicitud} onChange={setE('max_dias_solicitud')} placeholder="31" />
                     : <span className="muted">—</span>}
+                </td>
+                <td>
+                  <select value={edicion.flujo_id} onChange={setE('flujo_id')} title="Cadena de aprobación del permiso">
+                    <option value="">Como la sede</option>
+                    {flujos.map((f) => <option key={f.id} value={f.id}>{f.nombre}{f.activo ? '' : ' (inactivo)'}</option>)}
+                  </select>
                 </td>
                 <td><label className="checkbox"><input type="checkbox" checked={edicion.activo} onChange={setE('activo')} /> Activo</label></td>
                 <td style={{ whiteSpace: 'nowrap' }}>

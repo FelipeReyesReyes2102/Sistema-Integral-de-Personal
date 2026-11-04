@@ -412,6 +412,7 @@ class TipoPermisoIn(BaseModel):
     max_dias_solicitud: int | None = Field(None, ge=1, le=365)
     color: str = Field("#6d4c41", pattern=r"^#[0-9a-fA-F]{6}$")
     activo: bool = True
+    flujo_id: int | None = None   # cadena de aprobación; vacío = como la sede
 
 
 class TipoPermisoOut(TipoPermisoIn, ORM):
@@ -419,6 +420,34 @@ class TipoPermisoOut(TipoPermisoIn, ORM):
     clave: str
     base: bool
     en_uso: int = 0
+    flujo_nombre: str | None = None
+
+
+# ---------- Cadenas de aprobación ----------
+class FlujoPasoIn(BaseModel):
+    aprobador: Literal["jefe", "jefe_del_jefe", "gh", "ti", "usuario"]
+    usuario_id: int | None = None
+    teams: bool = True
+    si_falta: Literal["omitir", "bloquear"] = "omitir"
+
+
+class FlujoIn(BaseModel):
+    nombre: str = Field(min_length=2, max_length=80)
+    activo: bool = True
+    pasos: list[FlujoPasoIn] = Field(min_length=1, max_length=8)
+
+
+class FlujoPasoOut(FlujoPasoIn):
+    etiqueta: str
+
+
+class FlujoOut(BaseModel):
+    id: int
+    nombre: str
+    activo: bool
+    pasos: list[FlujoPasoOut]
+    tipos: list[str] = []       # tipos de permiso que lo usan
+    resumen: str = ""
 
 
 class RechazoIn(BaseModel):
@@ -443,6 +472,17 @@ class PermisoIn(BaseModel):
     enviar: bool = False
     aprobador_id: int | None = None
     usuario_id: int | None = None
+
+
+class PasoOut(ORM):
+    orden: int
+    etiqueta: str
+    estado: str
+    aprobador_nombre: str | None = None
+    decidido_por_nombre: str | None = None
+    fecha: datetime | None = None
+    comentario: str | None = None
+    canal: str | None = None
 
 
 class PermisoOut(ORM):
@@ -475,6 +515,8 @@ class PermisoOut(ORM):
     aprobado_jefe_nombre: str | None = None
     fecha_aprobado_jefe: datetime | None = None
     falta_gh: bool = False
+    pasos: list[PasoOut] = []           # cadena de aprobación (vacía = flujo de la sede)
+    paso_actual: str | None = None
 
 
 class ValidarPermisoIn(BaseModel):

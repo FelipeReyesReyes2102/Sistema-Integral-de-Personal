@@ -271,6 +271,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
                     ? <div style={{ fontSize: 11, color: 'var(--danger)' }}>Falta el motivo</div>
                     : s.motivo_rechazo && <div className="muted" style={{ fontSize: 11 }}>{s.motivo_rechazo}</div>)}
                   {s.falta_gh && <div className="muted" style={{ fontSize: 11 }}>{s.aprobado_jefe_nombre} · falta GH</div>}
+                  {s.paso_actual && <div className="muted" style={{ fontSize: 11 }}>Paso actual: {s.paso_actual}</div>}
                 </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   {s.tiene_firma && (

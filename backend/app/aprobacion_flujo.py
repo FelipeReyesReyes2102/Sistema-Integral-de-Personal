@@ -78,6 +78,9 @@ def contenido(tipo: str, reg) -> dict:
     from .config import settings
     if settings.microsoft_frontend_url:
         base["enlace"] = settings.microsoft_frontend_url.rstrip("/") + "/aprobaciones"
+    if tipo == "permisos" and reg.pasos:  # cadena de aprobación: la tarjeta va a quien aprueba el paso actual
+        from . import flujos
+        base["correoJefe"] = flujos.correos_actuales(reg) or base["correoJefe"]
     if tipo == "vacaciones":
         from .services import saldo_periodo
         from sqlalchemy.orm import object_session
@@ -184,6 +187,10 @@ def _enviar(db: Session, s: SolicitudAprobacion) -> int:
     if reg is None or reg.estado != SOLICITADO:
         s.estado = "cerrada"  # se resolvió o canceló antes de enviarse
         return 0
+    from . import flujos
+    if s.tipo == "permisos" and not flujos.acepta_teams(reg):
+        s.estado = "cerrada"  # ese paso de la cadena se aprueba en SIP-O
+        return 0
     if not canal or not canal.activo or not canal.flujo_url:
         s.estado, s.error = "error", "La aprobación en Teams no está configurada para la sede."
         s.intentos += 1
@@ -281,6 +288,9 @@ def aplicar(db: Session, s: SolicitudAprobacion, canal: CanalAprobacion, reg, it
     if not autorizado:
         return nota(f"Decisión ignorada: {correo_resp or 'quien respondió'} no puede aprobar esta solicitud en SIP-O.")
     comentario = _valor_campo(f.get("Comentario"))
+    from . import flujos
+    if s.tipo == "permisos" and not flujos.acepta_teams(reg):
+        return nota("Decisión ignorada: este paso de la cadena de aprobación se resuelve en SIP-O.")
     asignar_actor(db, revisor, "Teams (Power Automate)")
     if s.tipo == "equipos":
         # Solo la autorización del jefe; la revisión de TI y el registro en caseta siguen en SIP-O.
@@ -296,10 +306,12 @@ def aplicar(db: Session, s: SolicitudAprobacion, canal: CanalAprobacion, reg, it
     from .services import aplicar_rechazo_teams, aprobar
     final, pide_motivo = True, False
     if nuevo == RECHAZADO:
+        if s.tipo == "permisos":
+            flujos.rechazar(reg, revisor, "teams", comentario)
         reg.estado, reg.revisado_por_id, reg.fecha_revision = nuevo, revisor.id, datetime.now()
         pide_motivo = aplicar_rechazo_teams(reg, comentario)
     else:
-        final = aprobar(reg, revisor)
+        final = aprobar(reg, revisor, "teams", comentario)
         if comentario and s.tipo == "permisos":
             reg.observaciones = comentario
     s.estado, s.decision_nota, s.resuelto, s.actualizado = "resuelta", None, ahora(), ahora()

@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, object_session
 
 from .models import (
     PERMISO_CONSULTA_MEDICA, Permiso, AdminSede, Bitacora, ConfiguracionApp, Festivo, Grupo, HorarioEspecial, PeriodoVacaciones, ReglaAntiguedad,
-    CanalAprobacion, ListaSharePoint, RotacionTurnos, Sede, SolicitudVacaciones, TipoJornada, TipoPermisoSede, Incapacidad, SalidaEquipo, Turno, TurnoDia, Usuario,
+    CanalAprobacion, FlujoAprobacion, ListaSharePoint, RotacionTurnos, Sede, SolicitudVacaciones, TipoJornada, TipoPermisoSede, Incapacidad, SalidaEquipo, Turno, TurnoDia, Usuario,
 )
 
 CONFIG, VACACIONES = "configuracion", "vacaciones"
@@ -35,13 +35,14 @@ PROPIAS = {
     Festivo: (CONFIG, "Festivo"), RotacionTurnos: (CONFIG, "Rotación de turnos"),
     SolicitudVacaciones: (VACACIONES, "Solicitud de vacaciones"), Permiso: (VACACIONES, "Permiso"), ListaSharePoint: (CONFIG, "Lista de SharePoint"),
     CanalAprobacion: (CONFIG, "Aprobación en Teams"), TipoPermisoSede: (CONFIG, "Tipo de permiso"),
+    FlujoAprobacion: (CONFIG, "Flujo de aprobación"),
     Incapacidad: (VACACIONES, "Incapacidad"), SalidaEquipo: (VACACIONES, "Salida de equipo"),
 }
 OMITIR = {"id", "columnas", "sitio_id", "lista_id", "creado", "actualizado", "ultimo_aviso", "ultima_sincronizacion", "fecha_revision", "actualizado_por_id",
           "cifrado"}
 CAMPOS = {
     "nombre": "Nombre", "ubicacion_microsoft": "Ubicación en Microsoft", "zona_horaria": "Zona horaria", "activa": "Activa",
-    "activo": "Activo", "caseta_activo": "Avisos a caseta", "caseta_destinatarios": "Destinatarios de caseta",
+    "activo": "Activo", "flujo_id": "Flujo de aprobación", "caseta_activo": "Avisos a caseta", "caseta_destinatarios": "Destinatarios de caseta",
     "caseta_tipos": "Permisos que avisan a caseta", "meses_vigencia": "Vigencia de los días (meses)",
     "equivalencia_horas": "Equivalencia en horas", "dias_anticipacion": "Anticipación (días)",
     "tipos_permiso": "Permisos habilitados", "home_office_max_dias": "Home office: máximo de días",

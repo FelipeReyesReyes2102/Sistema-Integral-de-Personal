@@ -298,6 +298,9 @@ def datos_registro(tipo: str, reg) -> dict:
                 "saldo_periodo": round(saldo.dias_disponible, 2) if saldo else None, "fecha_inicio": reg.fecha_inicio, "fecha_fin": reg.fecha_fin,
                 "dias": reg.dias_habiles, "horas": reg.horas, "periodo": reg.periodo.nombre if reg.periodo else None,
                 "comentario": reg.comentario}
+    if tipo == "permisos" and getattr(reg, "pasos", None):  # cadena de aprobación: aprueba quien tiene el paso actual
+        from .flujos import correos_actuales
+        comunes["correo_jefe"] = correos_actuales(reg) or comunes["correo_jefe"]
     if tipo == "equipos":
         from .equipos import situacion
         return {**comunes, "folio": f"EQ-{reg.id}", "tipo_equipo": reg.tipo_equipo, "marca": reg.marca,
@@ -565,9 +568,10 @@ def revisar_decisiones() -> int:
             filas = db.execute(select(EnvioSharePoint, M).join(M, M.id == EnvioSharePoint.registro_id).where(
                 EnvioSharePoint.lista_id == lista.id, EnvioSharePoint.item_id.is_not(None), M.estado == SOLICITADO)).all()
             pendientes += [(lista, env, reg) for env, reg in filas]
+        from . import flujos
         from .aprobacion_flujo import canal_activo
         pendientes = [p for p in pendientes if not canal_activo(db, p[0].sede_id, p[0].tipo)
-                      and getattr(p[2], "aprobado_jefe_id", None) is None]
+                      and getattr(p[2], "aprobado_jefe_id", None) is None and flujos.acepta_teams(p[2])]
         for lista, env, reg in pendientes:
             sel = ",".join(c for c in (lista.col_decision, lista.col_comentario, lista.col_respondio) if c)
             try:
@@ -604,10 +608,12 @@ def revisar_decisiones() -> int:
             asignar_actor(db, revisor, "Teams (Power Automate)")
             final, pide_motivo = True, False
             if nuevo == RECHAZADO:
+                if lista.tipo == "permisos":
+                    flujos.rechazar(reg, revisor, "teams", comentario)
                 reg.estado, reg.revisado_por_id, reg.fecha_revision = nuevo, revisor.id, datetime.now()
                 pide_motivo = aplicar_rechazo_teams(reg, comentario)
             else:
-                final = aprobar(reg, revisor)
+                final = aprobar(reg, revisor, "teams", comentario)
                 if comentario and lista.tipo == "permisos":
                     reg.observaciones = comentario
             env.decision_nota = None
