@@ -6,18 +6,25 @@
 - Aprobar cierra el paso actual y activa el siguiente; al aprobarse el último, el permiso queda validado.
   Rechazar en cualquier paso termina la solicitud. En los pasos de grupo (GH, TI) basta con que apruebe uno.
 - GH de la sede siempre puede resolver directamente (los pasos que faltaban quedan omitidos).
+- Cada paso que se activa avisa por correo a quien lo aprueba y, si el paso va a Teams, genera su propia tarjeta.
 - Sin flujo asignado (o con los permisos registrados en caseta) se sigue la regla de la sede: jefe, o jefe y después GH.
 """
+import logging
+import threading
 from datetime import datetime
 
 from fastapi import HTTPException
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, event, or_, select
 from sqlalchemy.orm import Session, object_session
 
 from .models import (
-    VALIDADO, FlujoAprobacion, PasoSolicitud, Permiso, TipoPermisoSede, Usuario, es_admin,
+    SOLICITADO, VALIDADO, FlujoAprobacion, NotificacionCorreo, PasoSolicitud, Permiso, TipoPermisoSede, Usuario, es_admin,
 )
+from .security import ahora
 from .sedes import admin_permite
+
+log = logging.getLogger("sip.flujos")
+SEGUNDO_PLANO = True  # las pruebas lo apagan para enviar los avisos en el mismo hilo
 
 APROBADORES = {"jefe": "Jefe directo", "jefe_del_jefe": "Jefe del jefe", "gh": "GH de la sede", "ti": "TI",
                "usuario": "Persona específica"}
@@ -85,6 +92,18 @@ def iniciar(db: Session, permiso: Permiso):
             estado=EN_ESPERA if lista else OMITIDO))
     if _activar_siguiente(permiso) is None:
         raise HTTPException(422, f"El flujo «{flujo.nombre}» no tiene a nadie que pueda aprobar esta solicitud.")
+    _paso_activado(db, permiso, inicial=True)
+
+
+def _paso_activado(db: Session, permiso: Permiso, inicial: bool):
+    """Aviso por correo al aprobador y, si el paso va a Teams, su tarjeta (el primer paso la genera el envío normal)."""
+    db.info.setdefault("flujos_avisar", set()).add(permiso.id)
+    paso = actual(permiso)
+    if not inicial and paso is not None and paso.teams:
+        from .aprobacion_flujo import reencolar as tarjeta_http
+        from .sharepoint import reencolar as tarjeta_lista
+        tarjeta_http(db, permiso)
+        tarjeta_lista(db, permiso)
 
 
 def actual(permiso: Permiso) -> PasoSolicitud | None:
@@ -124,6 +143,7 @@ def aprobar(permiso: Permiso, actor: Usuario, canal: str = "sip", comentario: st
         _decidir(paso, APROBADO, actor, canal, comentario)
         while (sig := _activar_siguiente(permiso)) is not None:
             if not any(u.id == actor.id for u in candidatos_paso(db, sig)):
+                _paso_activado(db, permiso, inicial=False)
                 return False
             _decidir(sig, APROBADO, actor, canal, "Aprobado junto con el paso anterior (misma persona).")
     elif gh_puede(actor, permiso):
@@ -146,13 +166,11 @@ def rechazar(permiso: Permiso, actor: Usuario, canal: str = "sip", comentario: s
 
 
 def acepta_teams(permiso) -> bool:
-    """En esta fase Teams solo resuelve el primer paso de la cadena (y solo si ese paso va a Teams)."""
-    pasos = getattr(permiso, "pasos", None)
-    if not pasos:
+    """¿El paso actual de la cadena se puede resolver desde Teams?"""
+    if not getattr(permiso, "pasos", None):
         return True
     paso = actual(permiso)
-    primero = next((p for p in pasos if p.estado != OMITIDO), None)
-    return paso is not None and paso is primero and paso.teams
+    return paso is not None and paso.teams
 
 
 def correos_actuales(permiso) -> str | None:
@@ -186,3 +204,70 @@ def participa(user: Usuario, permiso: Permiso) -> bool:
         return False
     return puede_decidir(user, permiso) or any(
         p.usuario_id == user.id or p.decidido_por_id == user.id for p in permiso.pasos)
+
+
+# ---------------- Aviso por correo al aprobador del paso ----------------
+def mensaje_paso(p: Permiso, paso: PasoSolicitud) -> tuple[str, str, str]:
+    from . import correo, tipos_permiso
+    db = object_session(p)
+    u = p.usuario
+    tipo = tipos_permiso.nombre(db, u.sede_id, p.tipo)
+    if tipos_permiso.por_dias(db, u.sede_id, p.tipo):
+        cuando = f"{p.fecha:%d/%m/%Y} al {(p.fecha_fin or p.fecha):%d/%m/%Y}"
+    else:
+        cuando = f"{p.fecha:%d/%m/%Y} de {p.hora_inicio:%H:%M} a {p.hora_fin:%H:%M} ({p.horas:g} h)"
+    activos = [x for x in p.pasos if x.estado != OMITIDO]
+    n = next((i for i, x in enumerate(activos, 1) if x is paso), 1)
+    previos = [f"{x.etiqueta}: {x.decidido_por.nombre if x.decidido_por else '—'}" for x in p.pasos if x.estado == APROBADO]
+    titulo = f"PERMISO POR APROBAR · PASO {n} DE {len(activos)}"
+    asunto = f"[SIP-O] Permiso por aprobar ({paso.etiqueta}) · {tipo} · {u.nombre}"
+    filas = [("Empleado", u.nombre), ("No. de nómina", u.numero_empleado), ("Tipo de permiso", tipo), ("Fecha", cuando),
+             ("Motivo", p.motivo or ""), ("Te toca como", paso.etiqueta), ("Ya aprobaron", ", ".join(previos))]
+    nota = ("Entra a SIP-O → Por aprobar → Permisos para aprobarlo o rechazarlo"
+            + (", o respóndelo desde Teams." if paso.teams else "."))
+    html_ = correo._plantilla(titulo, "#a35d00", filas, nota, encabezado="SIP-O · APROBACIÓN DE PERMISO")
+    texto = f"{titulo}\n\n" + "\n".join(f"{k}: {v}" for k, v in filas if v) + f"\n\n{nota}\n"
+    return asunto, html_, texto
+
+
+def avisar(ids: set[int]):
+    """Correo a quienes aprueban el paso actual de cada permiso (nunca impide la aprobación)."""
+    from . import correo
+    from .database import SessionLocal
+    with SessionLocal() as db:
+        for pid in ids:
+            p = db.get(Permiso, pid)
+            paso = actual(p) if p is not None and p.estado == SOLICITADO else None
+            if paso is None:
+                continue
+            destinatarios = sorted({c for u in candidatos_paso(db, paso) if (c := u.email or u.email_personal)})
+            sede = p.usuario.sede
+            cfg = correo.config_sede(db, sede)
+            if not destinatarios or not cfg.get("CORREO_REMITENTE", "").strip():
+                continue
+            asunto, html_, texto = mensaje_paso(p, paso)
+            notif = NotificacionCorreo(fecha=ahora(), evento="permiso_por_aprobar", permiso_id=p.id,
+                                       sede_id=sede.id if sede else None, destinatarios=", ".join(destinatarios),
+                                       asunto=asunto[:255])
+            db.add(notif)
+            db.commit()
+            correo._registrar_y_enviar(db, notif, cfg, html_, texto)
+
+
+def _tras_commit(session: Session):
+    ids = session.info.pop("flujos_avisar", None)
+    if not ids:
+        return
+    if SEGUNDO_PLANO:
+        threading.Thread(target=avisar, args=(set(ids),), name="sip-flujos", daemon=True).start()
+    else:
+        avisar(set(ids))
+
+
+def _tras_rollback(session: Session):
+    session.info.pop("flujos_avisar", None)
+
+
+def activar():
+    event.listen(Session, "after_commit", _tras_commit)
+    event.listen(Session, "after_rollback", _tras_rollback)

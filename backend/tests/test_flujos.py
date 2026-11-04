@@ -1,21 +1,24 @@
 """Cadenas de aprobación personalizadas por tipo de permiso (jefe, jefe del jefe, GH, TI o una persona específica)."""
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 
+from app import correo, flujos
 from app.database import SessionLocal
 from app.models import FlujoAprobacion, Permiso, TipoPermisoSede
 from app.seed import main as seed
 from tests.test_api import FIRMA, login
 from tests.test_equipos import _ti
 from tests.test_sharepoint import graph  # noqa: F401 (fixture)
+from tests.test_aprobacion_flujo import entorno  # noqa: F401 (fixture del flujo HTTP)
 
 seed()
 
 
 @pytest.fixture
-def entorno():
+def cadena(monkeypatch):
     """Tipo de permiso de prueba por días (sin nómina) y limpieza de lo creado."""
+    monkeypatch.setattr(flujos, "SEGUNDO_PLANO", False)  # avisos por correo en el mismo hilo
     adm = login("admin@empresa.com", "Admin123")
     r = adm.post("/api/tipos-permiso", json={"nombre": "Trámite con cadena", "modalidad": "dias", "pide_nomina": False})
     assert r.status_code == 201, r.text
@@ -56,11 +59,11 @@ def _mios(cliente, pid, estado="solicitado"):
     return any(p["id"] == pid for p in lista)
 
 
-def test_cadena_jefe_ti_gh(entorno):
-    adm, maria, laura, ti = entorno["adm"], login("maria@empresa.com", "Cambiar123"), \
+def test_cadena_jefe_ti_gh(cadena):
+    adm, maria, laura, ti = cadena["adm"], login("maria@empresa.com", "Cambiar123"), \
         login("laura@empresa.com", "Cambiar123"), _ti()
-    _flujo(entorno, "Jefe → TI → GH", [{"aprobador": "jefe"}, {"aprobador": "ti"}, {"aprobador": "gh"}])
-    p = _pedir(maria, entorno, date(2031, 3, 3))
+    _flujo(cadena, "Jefe → TI → GH", [{"aprobador": "jefe"}, {"aprobador": "ti"}, {"aprobador": "gh"}])
+    p = _pedir(maria, cadena, date(2031, 3, 3))
     assert [x["estado"] for x in p["pasos"]] == ["pendiente", "en_espera", "en_espera"]
     assert p["paso_actual"] == "Jefe directo" and p["pasos"][0]["aprobador_nombre"] == "Laura Martínez"
 
@@ -85,13 +88,13 @@ def test_cadena_jefe_ti_gh(entorno):
     assert maria.get(f"/api/permisos/{p['id']}").json()["pasos"][1]["canal"] == "sip"
 
 
-def test_rechazo_en_paso_intermedio_termina_la_solicitud(entorno):
+def test_rechazo_en_paso_intermedio_termina_la_solicitud(cadena):
     maria, laura, ana = login("maria@empresa.com", "Cambiar123"), login("laura@empresa.com", "Cambiar123"), \
         login("ana@empresa.com", "Cambiar123")
     ana_id = ana.get("/api/auth/me").json()["id"]
-    _flujo(entorno, "Jefe → Ana → GH", [{"aprobador": "jefe"}, {"aprobador": "usuario", "usuario_id": ana_id},
+    _flujo(cadena, "Jefe → Ana → GH", [{"aprobador": "jefe"}, {"aprobador": "usuario", "usuario_id": ana_id},
                                         {"aprobador": "gh"}])
-    p = _pedir(maria, entorno, date(2031, 3, 17))
+    p = _pedir(maria, cadena, date(2031, 3, 17))
     assert p["pasos"][1]["etiqueta"] == "Ana López", p["pasos"]
     laura.post(f"/api/permisos/{p['id']}/validar")
     assert _mios(ana, p["id"])
@@ -101,41 +104,41 @@ def test_rechazo_en_paso_intermedio_termina_la_solicitud(entorno):
     assert r["pasos"][1]["comentario"] == "No aplica este mes"
 
 
-def test_gh_resuelve_directamente_y_la_misma_persona_aprueba_pasos_seguidos(entorno):
-    adm, maria, ana = entorno["adm"], login("maria@empresa.com", "Cambiar123"), login("ana@empresa.com", "Cambiar123")
-    _flujo(entorno, "Jefe → TI", [{"aprobador": "jefe"}, {"aprobador": "ti"}])
-    p = _pedir(maria, entorno, date(2031, 3, 31))
+def test_gh_resuelve_directamente_y_la_misma_persona_aprueba_pasos_seguidos(cadena):
+    adm, maria, ana = cadena["adm"], login("maria@empresa.com", "Cambiar123"), login("ana@empresa.com", "Cambiar123")
+    _flujo(cadena, "Jefe → TI", [{"aprobador": "jefe"}, {"aprobador": "ti"}])
+    p = _pedir(maria, cadena, date(2031, 3, 31))
     r = adm.post(f"/api/permisos/{p['id']}/validar").json()  # GH no es la jefa, pero puede validar directamente
     assert r["estado"] == "validado" and [x["estado"] for x in r["pasos"]] == ["aprobado", "omitido"]
     assert r["pasos"][0]["comentario"] == "Validado directamente por GH."
 
     # El jefe de Ana es el administrador, que también es GH: aprueba los dos pasos de una vez
-    _flujo(entorno, "Jefe → GH", [{"aprobador": "jefe"}, {"aprobador": "gh"}])
-    p = _pedir(ana, entorno, date(2031, 4, 14))
+    _flujo(cadena, "Jefe → GH", [{"aprobador": "jefe"}, {"aprobador": "gh"}])
+    p = _pedir(ana, cadena, date(2031, 4, 14))
     r = adm.post(f"/api/permisos/{p['id']}/validar").json()
     assert r["estado"] == "validado" and [x["estado"] for x in r["pasos"]] == ["aprobado", "aprobado"]
     assert "misma persona" in r["pasos"][1]["comentario"]
 
 
-def test_paso_sin_aprobador_se_omite_o_bloquea(entorno):
-    adm, ana = entorno["adm"], login("ana@empresa.com", "Cambiar123")
+def test_paso_sin_aprobador_se_omite_o_bloquea(cadena):
+    adm, ana = cadena["adm"], login("ana@empresa.com", "Cambiar123")
     # El jefe de Ana (administrador) no tiene jefe: el paso "jefe del jefe" no tiene a quién pedírselo
-    _flujo(entorno, "Jefe del jefe estricto", [{"aprobador": "jefe_del_jefe", "si_falta": "bloquear"}])
-    r = ana.post("/api/permisos", json={"tipo": entorno["tipo"]["clave"], "fecha": "2031-05-12", "fecha_fin": "2031-05-18",
+    _flujo(cadena, "Jefe del jefe estricto", [{"aprobador": "jefe_del_jefe", "si_falta": "bloquear"}])
+    r = ana.post("/api/permisos", json={"tipo": cadena["tipo"]["clave"], "fecha": "2031-05-12", "fecha_fin": "2031-05-18",
                                         "motivo": "Trámite", "firma": FIRMA, "enviar": True})
     assert r.status_code == 422 and "Jefe del jefe" in r.json()["detail"]
-    _flujo(entorno, "Jefe del jefe o GH", [{"aprobador": "jefe_del_jefe"}, {"aprobador": "gh"}])
-    p = _pedir(ana, entorno, date(2031, 4, 28))
+    _flujo(cadena, "Jefe del jefe o GH", [{"aprobador": "jefe_del_jefe"}, {"aprobador": "gh"}])
+    p = _pedir(ana, cadena, date(2031, 4, 28))
     assert [x["estado"] for x in p["pasos"]] == ["omitido", "pendiente"] and p["paso_actual"] == "GH de la sede"
     assert adm.post(f"/api/permisos/{p['id']}/validar").json()["estado"] == "validado"
 
 
-def test_solo_gh_configura_flujos_y_no_se_borra_uno_en_uso(entorno):
-    adm, maria = entorno["adm"], login("maria@empresa.com", "Cambiar123")
+def test_solo_gh_configura_flujos_y_no_se_borra_uno_en_uso(cadena):
+    adm, maria = cadena["adm"], login("maria@empresa.com", "Cambiar123")
     assert maria.post("/api/flujos", json={"nombre": "Mío", "pasos": [{"aprobador": "jefe"}]}).status_code == 403
     assert adm.post("/api/flujos", json={"nombre": "Vacío", "pasos": []}).status_code == 422
     assert adm.post("/api/flujos", json={"nombre": "Sin persona", "pasos": [{"aprobador": "usuario"}]}).status_code == 422
-    t = _flujo(entorno, "En uso", [{"aprobador": "jefe"}])
+    t = _flujo(cadena, "En uso", [{"aprobador": "jefe"}])
     r = adm.delete(f"/api/flujos/{t['flujo_id']}")
     assert r.status_code == 400 and "Trámite con cadena" in r.json()["detail"]
     lista = adm.get("/api/flujos").json()
@@ -144,28 +147,87 @@ def test_solo_gh_configura_flujos_y_no_se_borra_uno_en_uso(entorno):
     assert any("En uso" in (x.get("resumen") or "") or x.get("entidad") == "Flujo de aprobación" for x in b)
 
 
-def test_teams_resuelve_solo_el_primer_paso(entorno, graph):  # noqa: F811
+def test_cada_paso_se_aprueba_en_teams_por_lista_y_avisa_por_correo(cadena, graph, monkeypatch):  # noqa: F811
     from app import sharepoint
+    from app.models import ConfiguracionApp
     from tests.test_equipos_teams import TEAMS
     from tests.test_sharepoint import URL, super_login
-    adm, maria, laura = entorno["adm"], login("maria@empresa.com", "Cambiar123"), login("laura@empresa.com", "Cambiar123")
+    enviados = []
+    monkeypatch.setattr(correo, "enviar", lambda cfg, dest, asunto, h, t: enviados.append((dest, asunto)))
+    with SessionLocal() as db:  # remitente para que se envíen los avisos
+        db.merge(ConfiguracionApp(clave="CORREO_REMITENTE", valor="sip@o-tek.com", cifrado=False, actualizado=datetime.now()))
+        db.commit()
+    adm, maria, laura = cadena["adm"], login("maria@empresa.com", "Cambiar123"), login("laura@empresa.com", "Cambiar123")
     sup = super_login()
     cfg = sup.put("/api/sharepoint/permisos/conectar", json={"url": URL}).json()
     assert sup.put("/api/sharepoint/permisos", json={"activo": True, "mapeo": cfg["mapeo"], "valores": cfg["valores"],
                                                       **TEAMS}).status_code == 200
     try:
-        _flujo(entorno, "Jefe → GH (Teams)", [{"aprobador": "jefe"}, {"aprobador": "gh"}])
-        p = _pedir(maria, entorno, date(2031, 6, 2))
+        _flujo(cadena, "Jefe → GH (Teams)", [{"aprobador": "jefe"}, {"aprobador": "gh"}])
+        p = _pedir(maria, cadena, date(2031, 6, 2))
+        jefa = laura.get("/api/auth/me").json()["email"]
+        gh = adm.get("/api/auth/me").json()["email"]
+        assert any(jefa in d and "Permiso por aprobar (Jefe directo)" in a for d, a in enviados)
         sharepoint.procesar_pendientes()
         item = next(k for k, v in graph["items"].items() if v["Title"] == f"PER-{p['id']}")
-        jefa = laura.get("/api/auth/me").json()["email"]
         assert graph["items"][item]["CorreoJefe"] == jefa  # la tarjeta va a quien aprueba el paso actual
+
+        # Paso 1 en Teams: avanza a GH, se vacía la decisión y la tarjeta ahora es para GH
         graph["items"][item].update({"Decision": "Approve", "Respondio": jefa})
         assert sharepoint.revisar_decisiones() == 1
         r = adm.get(f"/api/permisos/{p['id']}").json()
         assert r["estado"] == "solicitado" and r["paso_actual"] == "GH de la sede" and r["pasos"][0]["canal"] == "teams"
-        # La misma decisión no se vuelve a aplicar al paso de GH: ese se resuelve en SIP-O
-        assert sharepoint.revisar_decisiones() == 0
-        assert adm.get(f"/api/permisos/{p['id']}").json()["estado"] == "solicitado"
+        assert any(gh in d and "(GH de la sede)" in a for d, a in enviados)
+        assert sharepoint.revisar_decisiones() == 0  # la decisión vieja no se aplica al paso de GH
+        sharepoint.procesar_pendientes()
+        assert graph["items"][item]["Decision"] is None and gh in graph["items"][item]["CorreoJefe"]
+
+        # Paso 2 en Teams: GH aprueba y el permiso queda validado
+        graph["items"][item].update({"Decision": "Approve", "Respondio": gh})
+        assert sharepoint.revisar_decisiones() == 1
+        r = adm.get(f"/api/permisos/{p['id']}").json()
+        assert r["estado"] == "validado" and [x["canal"] for x in r["pasos"]] == ["teams", "teams"]
     finally:
         sup.delete("/api/sharepoint/permisos")
+        with SessionLocal() as db:
+            db.query(ConfiguracionApp).filter(ConfiguracionApp.clave == "CORREO_REMITENTE").delete()
+            db.commit()
+
+
+def test_cada_paso_se_aprueba_en_teams_por_flujo_http(cadena, entorno):  # noqa: F811
+    from app import aprobacion_flujo as af
+    from tests.test_aprobacion_flujo import FLUJO, LISTA
+    from tests.test_sharepoint import super_login
+    adm, maria, laura = cadena["adm"], login("maria@empresa.com", "Cambiar123"), login("laura@empresa.com", "Cambiar123")
+    sup = super_login()
+    assert sup.put("/api/aprobacion-flujo", json={"activo": True, "tipos": ["permisos"], "flujo_url": FLUJO,
+                                                  "lista_url": LISTA, "cuenta_flujo": "Flujos@o-tek.com"}).status_code == 200
+    try:
+        _flujo(cadena, "Jefe → TI → GH (HTTP)", [{"aprobador": "jefe"}, {"aprobador": "ti", "teams": False},
+                                                {"aprobador": "gh"}])
+        ti = _ti()
+        p = _pedir(maria, cadena, date(2031, 6, 16))
+        af.enviar_pendientes()
+        jefa = laura.get("/api/auth/me").json()["email"]
+        t1 = entorno["enviados"][-1]
+        assert t1["folio"] == f"PER-{p['id']}" and t1["correoJefe"] == jefa
+        entorno["decisiones"].append({"Token": t1["token"], "Decision": "Approve", "Respondio": jefa})
+        assert af.revisar_decisiones() == 1
+        assert adm.get(f"/api/permisos/{p['id']}").json()["paso_actual"] == "TI"
+        # El paso de TI no va a Teams: no se manda tarjeta y la decisión vieja no sirve
+        antes = len(entorno["enviados"])
+        af.enviar_pendientes()
+        assert len(entorno["enviados"]) == antes and af.revisar_decisiones() == 0
+        ti.post(f"/api/permisos/{p['id']}/validar")
+        # El paso de GH sí: nueva tarjeta con otro token
+        af.enviar_pendientes()
+        t3 = entorno["enviados"][-1]
+        gh = adm.get("/api/auth/me").json()["email"]
+        assert t3["token"] != t1["token"] and gh in t3["correoJefe"]
+        entorno["decisiones"].append({"Token": t1["token"], "Decision": "Approve", "Respondio": gh})  # token viejo
+        assert af.revisar_decisiones() == 0
+        entorno["decisiones"].append({"Token": t3["token"], "Decision": "Approve", "Respondio": gh})
+        assert af.revisar_decisiones() == 1
+        assert adm.get(f"/api/permisos/{p['id']}").json()["estado"] == "validado"
+    finally:
+        sup.put("/api/aprobacion-flujo", json={"activo": False})

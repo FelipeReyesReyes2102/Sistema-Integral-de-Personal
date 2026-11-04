@@ -139,7 +139,8 @@ export default function ConfigFlujos() {
             </table>
           </div>
           <p className="muted" style={{ fontSize: 11, margin: '6px 0' }}>
-            Por ahora Teams resuelve solo el primer paso de la cadena; los siguientes se aprueban en SIP-O (<i>Por aprobar</i>).
+            Cada paso marcado con Teams genera su propia tarjeta al activarse (en GH o TI, para todos sus integrantes; responde el
+            primero). Con aprobación por lista de SharePoint, el flujo debe dispararse también al modificarse el elemento.
           </p>
           <div className="fila" style={{ gap: 8, marginTop: 8 }}>
             {edicion.pasos.length < 8 && <button className="btn btn-sm" onClick={() => setEdicion({ ...edicion, pasos: [...edicion.pasos, { ...PASO_NUEVO, aprobador: 'gh' }] })}><Plus size={14} /> Agregar paso</button>}

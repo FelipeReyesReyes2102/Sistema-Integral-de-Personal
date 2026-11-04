@@ -568,6 +568,8 @@ class EnvioSharePoint(Base):
     actualizado: Mapped[datetime | None] = mapped_column(DateTime)
     enviado: Mapped[datetime | None] = mapped_column(DateTime)
     decision_nota: Mapped[str | None] = mapped_column(Text)  # p. ej. por qué se ignoró una decisión de Teams
+    # Cadena de aprobación: al pasar a otro paso que va a Teams se vacían las columnas de decisión del elemento
+    limpiar_decision: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
     lista: Mapped[ListaSharePoint] = relationship()
 
@@ -610,6 +612,7 @@ class SolicitudAprobacion(Base):
     enviado: Mapped[datetime | None] = mapped_column(DateTime)
     resuelto: Mapped[datetime | None] = mapped_column(DateTime)
     actualizado: Mapped[datetime | None] = mapped_column(DateTime)
+    paso: Mapped[int | None] = mapped_column(Integer)  # cadena de aprobación: paso al que corresponde la tarjeta
 
 
 class ConfiguracionApp(Base):

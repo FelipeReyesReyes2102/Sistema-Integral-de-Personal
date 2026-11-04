@@ -222,6 +222,13 @@ function AprobacionTeams({ datos, teams, setTeams, mapeo, valores }) {
                 {teams.col_comentario && <>; <b>{titulo(teams.col_comentario)}</b> = <i>Respuestas Comentarios</i></>}
                 {teams.col_respondio && <>; <b>{titulo(teams.col_respondio)}</b> = <i>Respuestas Correo electrónico del aprobador</i></>}.
                 Si pide Título, usa el Título del disparador. Power Automate puede envolverlo en «Aplicar a cada uno»: es normal.</li>
+              {datos.tipo === 'permisos' && (
+                <li><b>Si la sede usa cadenas de aprobación</b> (Configuración → Flujos de aprobación): usa el disparador
+                  <b> «Cuando se crea o modifica un elemento»</b> y agrega a la condición que <b>{teams.col_decision ? titulo(teams.col_decision) : 'Decisión'}</b>
+                  {' '}esté vacía. Al pasar a otro paso que va a Teams, SIP-O vacía esa columna y pone en
+                  {' '}<b>{colDe('correo_jefe') ? titulo(colDe('correo_jefe')) : 'Correo del jefe'}</b> los correos de quienes aprueban el paso
+                  (separados por «;»), así que el flujo vuelve a pedir la aprobación a ellos.</li>
+              )}
               <li>Guarda y prueba con una solicitud real. La cuenta de la conexión de SharePoint del flujo es la <b>cuenta del flujo</b> de arriba.
                 El resultado llega en inglés (<i>Approve</i>/<i>Reject</i>); si lo traduces, cambia aquí los valores.</li>
             </ol>

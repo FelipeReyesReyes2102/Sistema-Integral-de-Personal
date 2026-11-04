@@ -9,6 +9,7 @@ import Modal from '../components/Modal'
 import PermisoModal from '../components/PermisoModal'
 import VacacionesModal from '../components/VacacionesModal'
 import YearCalendar from '../components/YearCalendar'
+import PasosCadena from '../components/PasosCadena'
 import {
   CATEGORIAS, esAdmin as esAdminFn, ESTADOS, ROLES, TIPOS_NOMINA, TIPOS_PERMISO_SOLICITABLES, ESTADOS_INCAPACIDAD, diaMes, nombreTipo, eventosPorFecha, estiloEvento, fmtFecha, hhmm, hoyISO, num,
   parseISO, toISO,
@@ -781,6 +782,9 @@ function Detalle({ item, onClose }) {
       <table className="tabla">
         <tbody>
           {filas.map(([k, v]) => <tr key={k}><td className="muted" style={{ width: 160 }}>{k}</td><td>{v || '—'}</td></tr>)}
+          {item.pasos?.length > 0 && (
+            <tr><td className="muted">Aprobación</td><td><PasosCadena pasos={item.pasos} /></td></tr>
+          )}
           <tr>
             <td className="muted">Firma</td>
             <td>{firma ? <img className="firma-img" src={firma} alt="Firma del solicitante" /> : <span className="muted">Sin firma</span>}</td>

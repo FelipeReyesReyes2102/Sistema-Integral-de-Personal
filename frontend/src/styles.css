@@ -927,3 +927,8 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 
 /* ---------- Configuración: una sección a la vez ---------- */
 .config-seccion > .card { margin-top: 0 !important; }
+
+/* ---------- Cadena de aprobación de un permiso ---------- */
+.pasos-cadena { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pasos-cadena li { display: flex; gap: 6px; align-items: flex-start; font-size: 13px; }
+.pasos-cadena li.paso-en_espera, .pasos-cadena li.paso-omitido { opacity: .65; }

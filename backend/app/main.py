@@ -10,6 +10,7 @@ from sqlalchemy import text
 from starlette.concurrency import run_in_threadpool
 
 from . import aprobacion_flujo, bitacora, config_dinamica, rotacion, sharepoint
+from . import flujos as flujos_aprobacion
 from .config import settings
 from .database import SessionLocal, engine
 from .migraciones import actualizar_esquema
@@ -79,6 +80,7 @@ app.add_middleware(
 bitacora.activar()
 sharepoint.activar()
 aprobacion_flujo.activar()
+flujos_aprobacion.activar()
 
 for r in (auth, sedes, politica, usuarios, catalogos, vacaciones, permisos, calendario, equipo, configuracion, consultas, correo,
           rotacion_router, bitacora_router, sharepoint_router, aprobacion_router, tipos_permiso_router, flujos_router,

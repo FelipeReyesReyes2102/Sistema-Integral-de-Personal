@@ -470,6 +470,8 @@ def _enviar(db: Session, env: EnvioSharePoint) -> int:
                 db.delete(env)  # volvió a borrador antes de enviarse
                 return 0
             campos = campos_lista(lista, reg)
+            if env.limpiar_decision and lista.aprobacion_teams:  # nuevo paso de la cadena: el flujo vuelve a preguntar
+                campos.update({c: None for c in (lista.col_decision, lista.col_comentario, lista.col_respondio) if c})
             r = None
             if env.item_id:
                 r = _graph("PATCH", f"{base}/{env.item_id}/fields", campos)
@@ -479,7 +481,7 @@ def _enviar(db: Session, env: EnvioSharePoint) -> int:
                     env.item_id = str(r.json().get("id"))
             if r.status_code not in (200, 201):
                 raise ErrorSharePoint(f"HTTP {r.status_code}." + _detalle(r))
-        env.estado, env.error, env.intentos = "enviado", None, 0
+        env.estado, env.error, env.intentos, env.limpiar_decision = "enviado", None, 0, False
         env.enviado = env.actualizado = _ahora()
         return 1
     except ErrorSharePoint as e:
@@ -488,6 +490,20 @@ def _enviar(db: Session, env: EnvioSharePoint) -> int:
         env.actualizado = _ahora()
         log.warning("SharePoint: no se pudo enviar %s %s: %s", lista.tipo, env.registro_id, e.mensaje[:200])
         return 0
+
+
+def reencolar(db: Session, permiso: Permiso):
+    """Cadena de aprobación: el paso nuevo va a Teams. Se vacían las columnas de decisión y se actualiza el correo
+    de quien aprueba; un flujo que se dispara también al modificarse el elemento vuelve a pedir la aprobación."""
+    sede = permiso.usuario.sede_id if permiso.usuario else None
+    lista = db.scalar(select(ListaSharePoint).where(ListaSharePoint.sede_id == sede, ListaSharePoint.tipo == "permisos",
+                                                    ListaSharePoint.activo, ListaSharePoint.aprobacion_teams))
+    env = db.scalar(select(EnvioSharePoint).where(EnvioSharePoint.lista_id == lista.id,
+                                                  EnvioSharePoint.registro_id == permiso.id)) if lista else None
+    if env is None:
+        return
+    env.estado, env.intentos, env.error, env.limpiar_decision, env.actualizado = "pendiente", 0, None, True, _ahora()
+    db.info["sharepoint_cola"] = True
 
 
 def encolar_existentes(db: Session, lista: ListaSharePoint, desde: date) -> int:
@@ -566,7 +582,8 @@ def revisar_decisiones() -> int:
         for lista in listas:
             M = _modelo(lista.tipo)
             filas = db.execute(select(EnvioSharePoint, M).join(M, M.id == EnvioSharePoint.registro_id).where(
-                EnvioSharePoint.lista_id == lista.id, EnvioSharePoint.item_id.is_not(None), M.estado == SOLICITADO)).all()
+                EnvioSharePoint.lista_id == lista.id, EnvioSharePoint.item_id.is_not(None), M.estado == SOLICITADO,
+                EnvioSharePoint.limpiar_decision.is_(False))).all()
             pendientes += [(lista, env, reg) for env, reg in filas]
         from . import flujos
         from .aprobacion_flujo import canal_activo

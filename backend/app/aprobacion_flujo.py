@@ -150,6 +150,23 @@ def _encolar(session: Session, _ctx):
         session.info["aprobacion_cola"] = True
 
 
+def reencolar(db: Session, permiso: Permiso):
+    """Cadena de aprobación: el paso nuevo va a Teams con otra tarjeta y otro token (la decisión anterior ya no sirve)."""
+    from . import flujos
+    sede = permiso.usuario.sede_id if permiso.usuario else None
+    paso = flujos.actual(permiso)
+    if paso is None or not canal_activo(db, sede, "permisos"):
+        return
+    s = db.scalar(select(SolicitudAprobacion).where(SolicitudAprobacion.tipo == "permisos",
+                                                    SolicitudAprobacion.registro_id == permiso.id))
+    if s is None:
+        s = SolicitudAprobacion(sede_id=sede, tipo="permisos", registro_id=permiso.id, creado=ahora())
+        db.add(s)
+    s.token, s.estado, s.intentos, s.paso = secrets.token_urlsafe(24), "pendiente", 0, paso.orden
+    s.error = s.decision_nota = s.enviado = s.resuelto = None
+    db.info["aprobacion_cola"] = True
+
+
 def _tras_commit(session: Session):
     if session.info.pop("aprobacion_cola", False) and SEGUNDO_PLANO:
         threading.Thread(target=enviar_pendientes, name="sip-aprobacion", daemon=True).start()
@@ -292,6 +309,7 @@ def aplicar(db: Session, s: SolicitudAprobacion, canal: CanalAprobacion, reg, it
     if s.tipo == "permisos" and not flujos.acepta_teams(reg):
         return nota("Decisión ignorada: este paso de la cadena de aprobación se resuelve en SIP-O.")
     asignar_actor(db, revisor, "Teams (Power Automate)")
+    token = s.token
     if s.tipo == "equipos":
         # Solo la autorización del jefe; la revisión de TI y el registro en caseta siguen en SIP-O.
         if nuevo == VALIDADO:
@@ -314,7 +332,9 @@ def aplicar(db: Session, s: SolicitudAprobacion, canal: CanalAprobacion, reg, it
         final = aprobar(reg, revisor, "teams", comentario)
         if comentario and s.tipo == "permisos":
             reg.observaciones = comentario
-    s.estado, s.decision_nota, s.resuelto, s.actualizado = "resuelta", None, ahora(), ahora()
+    if s.token == token:
+        s.estado, s.decision_nota, s.resuelto, s.actualizado = "resuelta", None, ahora(), ahora()
+    # (si cambió el token, la cadena pasó a otro paso que también va a Teams: queda en cola su tarjeta)
     db.commit()
     db.info.pop("bitacora_actor", None)
     if s.tipo == "permisos" and nuevo == VALIDADO and final:

@@ -6,6 +6,7 @@ import Modal from './Modal'
 import Avatar from './Avatar'
 import IconoCategoria from './IconoCategoria'
 import IncapacidadInfo from './IncapacidadInfo'
+import PasosCadena from './PasosCadena'
 
 function Fila({ k, v }) {
   if (v === undefined || v === null || v === '') return null
@@ -60,6 +61,7 @@ function Evento({ e }) {
           <Fila k="Departamento" v={d.departamento} />
           <Fila k="Tiempo en nómina" v={TIPOS_NOMINA[d.tipo_nomina]} />
           <Fila k="Jefe que aprueba" v={d.aprobador_nombre || 'Administración'} />
+          {d.pasos?.length > 0 && <Fila k="Aprobación" v={<PasosCadena pasos={d.pasos} />} />}
           <Fila k="Revisó" v={d.revisado_por_nombre && `${d.revisado_por_nombre} · ${d.fecha_revision?.slice(0, 16).replace('T', ' ')}`} />
           <Fila k="Observaciones" v={d.observaciones} />
           <Fila k="Motivo de rechazo" v={d.motivo_rechazo} />
