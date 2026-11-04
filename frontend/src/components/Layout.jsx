@@ -117,7 +117,7 @@ export default function Layout() {
               {link('/mi-equipo', UsersRound, 'Mi equipo')}
             </>
           )}
-          {user.puede_ti && !esAdmin && (
+          {esTI(user) && (
             <>
               <div className="seccion">TI</div>
               {link('/ti', MonitorCheck, 'Salidas de equipo', badge(pendientes.ti_equipos))}
@@ -142,7 +142,6 @@ export default function Layout() {
               {link('/equipo', CalendarDays, 'Calendario general')}
               {link('/empleados', Users, 'Empleados')}
               {link('/caseta', DoorOpen, 'Caseta')}
-              {link('/ti', MonitorCheck, 'Salidas de equipo (TI)', badge(pendientes.ti_equipos))}
               <div className="seccion">Ajustes</div>
               {link('/grupos', UsersRound, 'Grupos')}
               {link('/turnos', Clock, 'Turnos')}
@@ -202,7 +201,7 @@ export default function Layout() {
         {jefe && <NavLink to="/mi-equipo"><UsersRound size={22} />Mi equipo</NavLink>}
         {esMedico(user) && <NavLink to="/consultas"><Stethoscope size={22} />Consultas</NavLink>}
         {user.rol === 'caseta' && <NavLink to="/caseta"><DoorOpen size={22} />Caseta</NavLink>}
-        {user.puede_ti && !esAdmin && <NavLink to="/ti"><MonitorCheck size={22} />TI{badge(pendientes.ti_equipos)}</NavLink>}
+        {esTI(user) && !esAdmin && <NavLink to="/ti"><MonitorCheck size={22} />TI{badge(pendientes.ti_equipos)}</NavLink>}
         <button className={menu ? 'active' : ''} onClick={() => setMenu(!menu)}>
           {menu ? <X size={22} /> : <Menu size={22} />}Menú
         </button>

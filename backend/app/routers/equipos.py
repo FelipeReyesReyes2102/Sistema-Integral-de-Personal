@@ -59,9 +59,11 @@ def _enviar(s: SalidaEquipo):
 def listar(estado: str | None = None, por_aprobar: bool = False, todos: bool = False, q: str | None = None,
            desde: date | None = None, hasta: date | None = None,
            db: Session = Depends(get_db), user: Usuario = Depends(get_current_user), alc: Alcance = Depends(alcance)):
-    """- `todos` (TI y GH): las de su sede. - `por_aprobar`: las que me toca autorizar como jefe. - Sin parámetros: las mías."""
+    """- `todos` (solo TI): las de su sede. - `por_aprobar`: las que me toca autorizar como jefe. - Sin parámetros: las mías."""
     stmt = select(SalidaEquipo).order_by(SalidaEquipo.fecha_inicio.desc(), SalidaEquipo.id.desc())
-    if todos and es_ti(user):
+    if todos and not es_ti(user):
+        raise HTTPException(403, "Solo TI puede ver todas las salidas de equipo; como jefe ves las de tu equipo.")
+    if todos:
         sedes = {s.id for s in sedes_visibles(db, user)} if es_admin(user) else {user.sede_id}
         if es_admin(user):
             sedes = {x for x in sedes if alc.permite(x)}
@@ -283,12 +285,11 @@ def pendientes(db: Session, user: Usuario) -> dict:
     """Para el círculo rojo: por autorizar como jefe y, para TI, autorizadas por el jefe sin revisar."""
     res = {"equipos": db.scalar(select(func.count(SalidaEquipo.id)).where(
         SalidaEquipo.aprobador_id == user.id, SalidaEquipo.usuario_id != user.id, SalidaEquipo.estado == SOLICITADO)) or 0}
-    if es_admin(user):
-        sedes_gh = {s.id for s in sedes_visibles(db, user)}
+    if es_ti(user):  # solo TI ve (y cuenta) todas las de su sede
+        sedes_ti = {s.id for s in sedes_visibles(db, user)} if es_admin(user) else {user.sede_id}
         res["todas_equipos"] = db.scalar(select(func.count(SalidaEquipo.id)).where(
-            SalidaEquipo.usuario_id.in_(select(Usuario.id).where(Usuario.sede_id.in_(sedes_gh or {-1}))),
+            SalidaEquipo.usuario_id.in_(select(Usuario.id).where(Usuario.sede_id.in_(sedes_ti or {-1}))),
             SalidaEquipo.estado == SOLICITADO)) or 0
-    if es_ti(user):
         sedes = {s.id for s in sedes_visibles(db, user)} if es_admin(user) else {user.sede_id}
         res["ti_equipos"] = db.scalar(select(func.count(SalidaEquipo.id)).where(
             SalidaEquipo.usuario_id.in_(select(Usuario.id).where(Usuario.sede_id.in_(sedes or {-1}))),

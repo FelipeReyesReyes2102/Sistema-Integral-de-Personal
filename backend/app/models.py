@@ -46,8 +46,9 @@ def solicita_vacaciones(usuario) -> bool:
 
 
 def es_ti(usuario) -> bool:
-    """Usuario con permiso de TI (y GH / super administrador, que también pueden revisar las salidas de equipo)."""
-    return usuario is not None and (bool(getattr(usuario, "puede_ti", False)) or usuario.rol in ROLES_ADMIN)
+    """Usuario con permiso de TI (o super administrador): ve y revisa todas las salidas de equipo de su sede.
+    GH sin la casilla de TI solo las ve como jefe, igual que cualquier jefe."""
+    return usuario is not None and (bool(getattr(usuario, "puede_ti", False)) or usuario.rol == ROL_SUPERADMIN)
 
 
 def es_medico(usuario) -> bool:

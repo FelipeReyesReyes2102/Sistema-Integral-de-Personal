@@ -33,7 +33,7 @@ export const esMedico = (u) => ['medico', 'superadmin'].includes(u?.rol) || !!u?
 /** Personal de caseta (y GH): permisos validados del día y registro de retardos. */
 export const esCaseta = (u) => u?.rol === 'caseta' || esAdmin(u)
 /** TI (y GH / super administrador): revisión de las salidas de equipo de cómputo. */
-export const esTI = (u) => !!u?.puede_ti || esAdmin(u)
+export const esTI = (u) => !!u?.puede_ti || u?.rol === 'superadmin'  // GH sin la casilla de TI no ve todas las salidas
 /** El médico de planta y caseta no piden vacaciones ni permisos: solo usan su apartado. */
 /** Texto de un cumpleaños o aniversario del calendario. */
 export const textoCumple = (c) => (c.tipo === 'aniversario'

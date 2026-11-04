@@ -121,3 +121,23 @@ def test_ti_es_una_casilla_del_empleado():
     assert a.post("/api/vacaciones/calcular", json={"fecha_inicio": "2030-03-04", "fecha_fin": "2030-03-04"}).status_code == 200
     assert _guardar(adm, _usuario(adm, "ana@empresa.com"), puede_ti=False).json()["puede_ti"] is False
     assert "equipos:revisar" not in a.get("/api/auth/me").json()["permissions"]
+
+
+def test_solo_ti_ve_todas_las_salidas_y_el_jefe_las_de_su_equipo(monkeypatch):
+    monkeypatch.setattr(correo, "enviar", lambda cfg, dest, asunto, h, t: None)
+    carlos, laura, ti, adm = entrar("carlos@empresa.com"), entrar("laura@empresa.com"), _ti(), entrar("admin@empresa.com", "Admin123")
+    s = carlos.post("/api/equipos", json=_datos(enviar=True, firma=FIRMA)).json()
+    try:
+        # GH sin la casilla de TI: no ve todas ni las cuenta en "Todas las solicitudes"
+        r = adm.get("/api/equipos", params={"todos": True})
+        assert r.status_code == 403 and "Solo TI" in r.json()["detail"]
+        p = adm.get("/api/pendientes").json()
+        assert "todas_equipos" not in p and "ti_equipos" not in p
+        assert "equipos:revisar" not in adm.get("/api/auth/me").json()["permissions"]
+        # TI ve todas las de su sede (y su aviso); la jefa, las de su equipo como "por aprobar"
+        assert any(x["id"] == s["id"] for x in ti.get("/api/equipos", params={"todos": True}).json())
+        assert ti.get("/api/pendientes").json()["todas_equipos"] >= 1
+        assert any(x["id"] == s["id"] for x in laura.get("/api/equipos", params={"por_aprobar": True}).json())
+        assert laura.get("/api/equipos", params={"todos": True}).status_code == 403
+    finally:
+        _limpiar(s["id"])

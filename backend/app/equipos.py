@@ -86,7 +86,7 @@ def puede_revisar_ti(user: Usuario, s: SalidaEquipo) -> bool:
     if s.usuario_id == user.id:
         return False
     sede = s.usuario.sede_id if s.usuario else None
-    return (user.puede_ti and user.sede_id == sede) or (es_admin(user) and admin_permite(user, sede))
+    return (user.puede_ti and (user.sede_id == sede or admin_permite(user, sede))) or user.rol == "superadmin"
 
 
 def exigir(condicion: bool, mensaje: str, codigo: int = 400):

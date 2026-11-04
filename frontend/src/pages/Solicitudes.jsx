@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check, Eye, PenLine, X } from 'lucide-react'
 import { api } from '../api'
+import { useAuth } from '../auth'
 import DetalleConsulta from '../components/DetalleConsulta'
 import FormatoEquipo from '../components/FormatoEquipo'
 import TablaSalidas from '../components/TablaSalidas'
 import Modal from '../components/Modal'
 import {
   ESTADOS, ESTADOS_INCAPACIDAD, RESULTADOS_CONSULTA, ROLES, TIPOS_INCAPACIDAD, TIPOS_NOMINA, TIPOS_PERMISO_SOLICITABLES, fmtFecha,
-  nombreTipo, hhmm, num,
+  esTI, nombreTipo, hhmm, num,
 } from '../utils'
 
 /**
@@ -40,6 +41,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
   }
   const [error, setError] = useState('')
   const admin = modo === 'admin'
+  const { user } = useAuth()  // en "Todas", las salidas de equipo solo las ve TI
   const navigate = useNavigate()
 
   const cargar = () => {
@@ -112,7 +114,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
   return (
     <div className="card">
       <div className="pestanas" role="tablist">
-        {PESTANAS.filter(([k]) => admin || k !== 'consultas').map(([k, t]) => (
+        {PESTANAS.filter(([k]) => (admin || k !== 'consultas') && (!admin || k !== 'equipos' || esTI(user))).map(([k, t]) => (
           <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'activo' : ''} onClick={() => setTab(k)}>{t}{marca(k)}</button>
         ))}
       </div>
