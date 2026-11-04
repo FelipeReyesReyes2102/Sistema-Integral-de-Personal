@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { CalendarDays, Clock3, ListChecks, Mail, Plus, Scale, ShieldCheck, Trash2 } from 'lucide-react'
 import { api } from '../api'
 import { num } from '../utils'
 import ConfigCorreo from '../components/ConfigCorreo'
@@ -9,7 +9,18 @@ import { useAuth } from '../auth'
 import { esAdmin } from '../utils'
 import SedeActual from '../components/SedeActual'
 
+// Menú superior: sólo se muestra la sección elegida
+const SECCIONES = [
+  ['antiguedad', 'Días por antigüedad', CalendarDays],
+  ['politica', 'Política', Scale],
+  ['jornadas', 'Tipos de jornada', Clock3],
+  ['permisos', 'Tipos de permiso', ShieldCheck],
+  ['correo', 'Correo y caseta', Mail],
+  ['reglas', 'Reglas vigentes', ListChecks],
+]
+
 export default function Configuracion() {
+  const [seccion, setSeccion] = useState('antiguedad')
   const [reglas, setReglas] = useState([])
   const [tabla, setTabla] = useState(null) // {sede_nombre, propia, principal}
   const [msg, setMsg] = useState(null)
@@ -49,8 +60,16 @@ export default function Configuracion() {
 
   return (
     <>
-    <div className="vac-layout">
-      <div className="card">
+    <div className="pestanas" role="tablist">
+      {SECCIONES.map(([k, t, Icono]) => (
+        <button key={k} role="tab" aria-selected={seccion === k} className={seccion === k ? 'activo' : ''} onClick={() => setSeccion(k)}>
+          <Icono size={16} /> {t}
+        </button>
+      ))}
+    </div>
+    <div className="config-seccion" role="tabpanel">
+    {seccion === 'antiguedad' && (
+      <div className="card" style={{ maxWidth: 720 }}>
         <h3 style={{ marginBottom: 6 }}>Días de vacaciones por antigüedad{tabla?.sede_nombre ? ` · ${tabla.sede_nombre}` : ''}</h3>
         <p className="muted" style={{ marginTop: 0 }}>Días de 8 horas que corresponden a cada año de servicio en esta sede.</p>
         <SedeActual que="Los cambios de la tabla" />
@@ -87,10 +106,11 @@ export default function Configuracion() {
         </div>
         {msg && <div className={`alerta ${msg.ok ? 'ok' : 'error'}`}>{msg.t}</div>}
       </div>
-      <ConfigPolitica />
+    )}
+    {['politica', 'jornadas', 'reglas'].includes(seccion) && <ConfigPolitica seccion={seccion} />}
+    {seccion === 'permisos' && <ConfigTiposPermiso />}
+    {seccion === 'correo' && <ConfigCorreo />}
     </div>
-    <ConfigTiposPermiso />
-    <ConfigCorreo />
     </>
   )
 }

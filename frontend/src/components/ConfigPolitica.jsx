@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Clock3, Pencil, Plus, Save, Scale, Trash2, X } from 'lucide-react'
+import { Clock3, ListChecks, Pencil, Plus, Save, Scale, Trash2, X } from 'lucide-react'
 import { api } from '../api'
 import { num, textoLimite } from '../utils'
 
@@ -11,8 +11,11 @@ const GENERACION = {
 }
 const DESCUENTO = { '': 'Como la sede', horas: 'Horas', dias: 'Días' }
 
-/** Política de vacaciones y permisos de la sede activa, sus tipos de jornada y las reglas vigentes que resultan. */
-export default function ConfigPolitica() {
+/**
+ * Política de vacaciones y permisos de la sede activa, sus tipos de jornada y las reglas vigentes que resultan.
+ * `seccion` elige la parte que se muestra: 'politica', 'jornadas' o 'reglas'.
+ */
+export default function ConfigPolitica({ seccion = 'politica' }) {
   const [pol, setPol] = useState(null)
   const [form, setForm] = useState(null)
   const [jornada, setJornada] = useState(null) // en edición
@@ -74,6 +77,7 @@ export default function ConfigPolitica() {
 
   return (
     <div className="card">
+      {seccion === 'politica' && <>
       <h3 className="fila" style={{ gap: 8, marginBottom: 6 }}><Scale size={18} /> Política de vacaciones y permisos · {pol.sede_nombre}</h3>
       <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
         Las vacaciones se cuentan en <b>días hábiles</b>: no cuentan fines de semana, descansos del ciclo ni festivos de la sede.
@@ -115,8 +119,11 @@ export default function ConfigPolitica() {
         <div className="espacio" />
         <button className="btn btn-primary" onClick={guardar}><Save size={15} /> Guardar política</button>
       </div>
+      </>}
 
-      <h4 className="fila" style={{ gap: 6, margin: '18px 0 8px', fontSize: 14 }}><Clock3 size={16} /> Tipos de jornada</h4>
+      {seccion === 'jornadas' && <>
+      <h3 className="fila" style={{ gap: 8, marginBottom: 6 }}><Clock3 size={18} /> Tipos de jornada · {pol.sede_nombre}</h3>
+      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>Horas por día, bloque obligatorio y días hábiles de cada jornada.</p>
       <div className="tabla-wrap">
         <table className="tabla">
           <thead><tr><th>Jornada</th><th>Horas por día</th><th>Bloque mínimo</th><th>Días hábiles</th><th>Saldo en</th><th>Por horas</th><th>Empleados</th><th /></tr></thead>
@@ -167,9 +174,12 @@ export default function ConfigPolitica() {
         </table>
       </div>
       {!jornada && <button className="btn btn-sm" style={{ marginTop: 8 }} onClick={() => setJornada({ ...JORNADA_NUEVA })}><Plus size={14} /> Agregar jornada</button>}
+      </>}
       {msg && <div className={`alerta ${msg.ok ? 'ok' : 'error'}`}>{msg.t}</div>}
 
-      <h4 style={{ margin: '18px 0 8px', fontSize: 14 }}>Reglas vigentes</h4>
+      {seccion === 'reglas' && <>
+      <h3 className="fila" style={{ gap: 8, marginBottom: 6 }}><ListChecks size={18} /> Reglas vigentes · {pol.sede_nombre}</h3>
+      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>Resumen de cómo se aplican la tabla, la política y las jornadas.</p>
       <ul className="reglas-vigentes">
         {pol.jornadas.filter((j) => j.activo).map((j) => (
           <li key={j.id}>
@@ -188,6 +198,7 @@ export default function ConfigPolitica() {
         <li>Estados: Borrador → Solicitado → {pol.aprobacion_gh_vacaciones ? 'Aprobado por el jefe → ' : ''}Validado / Rechazado. Borrador y Solicitado ya apartan saldo.</li>
         {pol.jornadas.some((j) => j.por_horas) && <li>Vacaciones por horas: {pol.jornadas.filter((j) => j.por_horas).map((j) => `${j.nombre} (mín. ${j.minimo_horas} h)`).join(', ')}.</li>}
       </ul>
+      </>}
     </div>
   )
 }

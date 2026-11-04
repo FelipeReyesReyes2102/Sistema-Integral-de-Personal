@@ -924,3 +924,6 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .barra-sel .acciones-rapidas { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .vacio-ok { text-align: center; padding: 28px 12px; color: var(--muted); }
 .vacio-ok b { display: block; color: var(--navy); font-size: 15px; margin-bottom: 2px; }
+
+/* ---------- Configuración: una sección a la vez ---------- */
+.config-seccion > .card { margin-top: 0 !important; }
