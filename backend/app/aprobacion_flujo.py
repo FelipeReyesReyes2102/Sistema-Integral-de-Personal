@@ -1,4 +1,5 @@
-"""Aprobación en Teams con un flujo de Power Automate llamado por HTTP (un solo flujo para vacaciones y permisos).
+"""Aprobación en Teams con un flujo de Power Automate llamado por HTTP (un solo flujo para vacaciones, permisos y
+salidas de equipo; en estas últimas solo la autorización del jefe: TI y caseta siguen en SIP-O).
 
 1. Cuando una solicitud queda "Solicitado", SIP-O hace POST a la URL del flujo (disparador "Cuando se recibe una
    solicitud HTTP") con el folio, el correo del jefe, un título, los detalles y un token aleatorio de un solo uso.
@@ -22,8 +23,8 @@ from sqlalchemy.orm import Session
 from . import microsoft
 from .config_dinamica import cifrar, descifrar
 from .models import (
-    BORRADOR, PERMISO_CONSULTA_MEDICA, RECHAZADO, SOLICITADO, VALIDADO, CanalAprobacion, Permiso, SolicitudAprobacion,
-    SolicitudVacaciones, Usuario,
+    BORRADOR, PERMISO_CONSULTA_MEDICA, RECHAZADO, SOLICITADO, VALIDADO, CanalAprobacion, Permiso, SalidaEquipo,
+    SolicitudAprobacion, SolicitudVacaciones, Usuario,
 )
 from .security import ahora
 from .sharepoint import ErrorSharePoint, _graph, _valor_campo, normalizar
@@ -31,7 +32,9 @@ from .sharepoint import ErrorSharePoint, _graph, _valor_campo, normalizar
 log = logging.getLogger("sip.aprobacion")
 SEGUNDO_PLANO = True  # las pruebas lo apagan
 MAX_INTENTOS = 8
-TIPOS = ("vacaciones", "permisos")
+TIPOS = ("vacaciones", "permisos", "equipos")
+MODELOS = {"vacaciones": SolicitudVacaciones, "permisos": Permiso, "equipos": SalidaEquipo}
+PREFIJOS = {"vacaciones": "VAC", "permisos": "PER", "equipos": "EQ"}
 COLUMNAS = ("Token", "Decision", "Comentario", "Respondio", "Tipo", "RegistroId")
 PERMISOS = {"llegada_tarde": "Llegada tarde", "salida_temprana": "Salida temprana",
             "salida_intermedia": "Salida durante la jornada", "home_office": "Home office"}
@@ -39,11 +42,15 @@ NOMINA = {"con_goce": "Con goce de sueldo", "sin_goce": "Sin goce de sueldo", "r
 
 
 def _modelo(tipo):
-    return SolicitudVacaciones if tipo == "vacaciones" else Permiso
+    return MODELOS[tipo]
+
+
+def _tipo_de(obj) -> str | None:
+    return next((t for t, m in MODELOS.items() if isinstance(obj, m)), None)
 
 
 def folio(tipo: str, rid: int) -> str:
-    return f"{'VAC' if tipo == 'vacaciones' else 'PER'}-{rid}"
+    return f"{PREFIJOS[tipo]}-{rid}"
 
 
 def tipos_de(canal: CanalAprobacion) -> set[str]:
@@ -84,6 +91,16 @@ def contenido(tipo: str, reg) -> dict:
         if reg.comentario:
             lineas.append(f"**Comentario:** {reg.comentario}")
         titulo = f"Vacaciones de {u.nombre} ({base['folio']})"
+    elif tipo == "equipos":
+        from .equipos import TIPOS as TIPOS_EQUIPO
+        equipo = TIPOS_EQUIPO.get(reg.tipo_equipo, reg.tipo_equipo)
+        lineas = [f"**Empleado:** {u.nombre}", f"**Equipo:** {equipo} {reg.marca} {reg.modelo}",
+                  f"**Serie / Service Tag:** {reg.serie}", f"**Del** {_f(reg.fecha_inicio)} **al** {_f(reg.fecha_fin)}"]
+        if reg.accesorios:
+            lineas.append(f"**Accesorios:** {reg.accesorios}")
+        lineas.append(f"**Justificación:** {reg.justificacion}")
+        lineas.append("Después de tu autorización la revisa TI y la caseta registra la salida.")
+        titulo = f"Salida de equipo de {u.nombre} ({base['folio']}): {equipo} {reg.marca}"
     else:
         from sqlalchemy.orm import object_session
         from . import tipos_permiso as _tp
@@ -106,7 +123,8 @@ def contenido(tipo: str, reg) -> dict:
 # ---------------- Cola de envío ----------------
 def _encolar(session: Session, _ctx):
     objs = [o for o in (*session.new, *session.dirty)
-            if isinstance(o, SolicitudVacaciones) or (isinstance(o, Permiso) and o.tipo != PERMISO_CONSULTA_MEDICA)]
+            if isinstance(o, (SolicitudVacaciones, SalidaEquipo))
+            or (isinstance(o, Permiso) and o.tipo != PERMISO_CONSULTA_MEDICA)]
     if not objs:
         return
     con = session.connection()
@@ -116,7 +134,7 @@ def _encolar(session: Session, _ctx):
         return
     S, U = SolicitudAprobacion.__table__, Usuario.__table__
     for o in objs:
-        tipo = "vacaciones" if isinstance(o, SolicitudVacaciones) else "permisos"
+        tipo = _tipo_de(o)
         if o.estado != SOLICITADO:
             continue
         sede = con.execute(select(U.c.sede_id).where(U.c.id == o.usuario_id)).scalar()
@@ -255,11 +273,27 @@ def aplicar(db: Session, s: SolicitudAprobacion, canal: CanalAprobacion, reg, it
     revisor = reg.aprobador
     if correo_resp:
         revisor = db.scalar(select(Usuario).where((Usuario.email == correo_resp) | (Usuario.email_personal == correo_resp)))
-    if not revisor or not revisor.activo or not puede_revisar(revisor, reg):
+    if s.tipo == "equipos":
+        from . import equipos as eq
+        autorizado = revisor is not None and revisor.activo and eq.puede_revisar_jefe(revisor, reg)
+    else:
+        autorizado = revisor is not None and revisor.activo and puede_revisar(revisor, reg)
+    if not autorizado:
         return nota(f"Decisión ignorada: {correo_resp or 'quien respondió'} no puede aprobar esta solicitud en SIP-O.")
     comentario = _valor_campo(f.get("Comentario"))
-    from .services import aplicar_rechazo_teams, aprobar
     asignar_actor(db, revisor, "Teams (Power Automate)")
+    if s.tipo == "equipos":
+        # Solo la autorización del jefe; la revisión de TI y el registro en caseta siguen en SIP-O.
+        if nuevo == VALIDADO:
+            eq.autorizar_jefe(reg, revisor)
+        else:
+            eq.rechazar_jefe(reg, revisor, (comentario or "").strip() or "Rechazada en Teams sin comentario.")
+        s.estado, s.decision_nota, s.resuelto, s.actualizado = "resuelta", None, ahora(), ahora()
+        db.commit()
+        db.info.pop("bitacora_actor", None)
+        eq.notificar(reg.id, "equipo_autorizado" if nuevo == VALIDADO else "equipo_rechazado")
+        return True
+    from .services import aplicar_rechazo_teams, aprobar
     final, pide_motivo = True, False
     if nuevo == RECHAZADO:
         reg.estado, reg.revisado_por_id, reg.fecha_revision = nuevo, revisor.id, datetime.now()

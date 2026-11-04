@@ -1,11 +1,13 @@
 """Salida de equipos de cómputo (formato F-630-03 "Entrada y salida de equipos de cómputo").
 
 1. El empleado la solicita con los datos del equipo y su firma.
-2. Su jefe directo la autoriza o la rechaza (en SIP-O).
+2. Su jefe directo la autoriza o la rechaza (en SIP-O o en Teams, si la sede lo activó).
 3. TI la revisa: puede sellarla (autorizar) o rechazarla en cualquier momento antes de que el equipo salga.
    Si la rechaza se avisa por correo al empleado y a su jefe.
 4. Caseta hace la revisión de seguridad: ve las salidas autorizadas del día y registra la salida y el regreso.
 """
+from datetime import datetime
+
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
@@ -68,6 +70,16 @@ def puede_revisar_jefe(user: Usuario, s: SalidaEquipo) -> bool:
     if s.usuario_id == user.id:
         return False
     return s.aprobador_id == user.id or admin_permite(user, s.usuario.sede_id if s.usuario else None)
+
+
+def autorizar_jefe(s: SalidaEquipo, actor: Usuario):
+    """Autorización del jefe (desde SIP-O o Teams); después sigue la revisión de TI y la caseta."""
+    s.estado, s.revisado_por_id, s.fecha_revision = VALIDADO, actor.id, datetime.now()
+
+
+def rechazar_jefe(s: SalidaEquipo, actor: Usuario, motivo: str):
+    s.estado, s.motivo_rechazo = RECHAZADO, motivo
+    s.revisado_por_id, s.fecha_revision = actor.id, datetime.now()
 
 
 def puede_revisar_ti(user: Usuario, s: SalidaEquipo) -> bool:

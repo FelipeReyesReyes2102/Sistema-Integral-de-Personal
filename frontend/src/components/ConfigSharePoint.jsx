@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { CalendarCheck, Clock, ExternalLink, Link2, MessageSquareMore, RefreshCw, Save, Send, Share2, Unlink } from 'lucide-react'
+import { CalendarCheck, Laptop, Clock, ExternalLink, Link2, MessageSquareMore, RefreshCw, Save, Send, Share2, Unlink } from 'lucide-react'
 import { api } from '../api'
 import { fmtFecha } from '../utils'
 
-const TITULOS = { vacaciones: { t: 'Vacaciones', i: CalendarCheck }, permisos: { t: 'Permisos y home office', i: Clock } }
+const TITULOS = { vacaciones: { t: 'Vacaciones', i: CalendarCheck }, permisos: { t: 'Permisos y home office', i: Clock }, equipos: { t: 'Salida de equipos', i: Laptop } }
 const TIPOS_COL = { text: 'Texto', number: 'Número', currency: 'Moneda', dateTime: 'Fecha', choice: 'Opción', boolean: 'Sí/No',
   personOrGroup: 'Persona', lookup: 'Búsqueda', calculated: 'Calculada', hyperlinkOrPicture: 'Hipervínculo', term: 'Metadatos' }
 
@@ -170,7 +170,7 @@ function AprobacionTeams({ datos, teams, setTeams, mapeo, valores }) {
       {libres.map((c) => <option key={c.nombre} value={c.nombre}>{c.titulo}</option>)}
     </select>
   )
-  const nombre = datos.tipo === 'vacaciones' ? 'Vacaciones' : 'Permiso'
+  const nombre = { vacaciones: 'Vacaciones', permisos: 'Permiso', equipos: 'Salida de equipo' }[datos.tipo]
   return (
     <div className="sp-teams">
       <label className="checkbox"><input type="checkbox" checked={!!teams.activo} onChange={set('activo')} />

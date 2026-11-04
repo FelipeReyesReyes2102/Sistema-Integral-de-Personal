@@ -70,12 +70,12 @@ def _estado(db: Session, sede: Sede, tipo: str) -> dict:
         "valores": json.loads(l.valores or "{}"), "activo": l.activo, "actualizado": l.actualizado,
         "cuentas": {"enviado": cuentas.get("enviado", 0), "pendiente": cuentas.get("pendiente", 0),
                     "error": cuentas.get("error", 0)},
-        "errores": [{"folio": f"{'VAC' if tipo == 'vacaciones' else 'PER'}-{e.registro_id}", "error": e.error,
+        "errores": [{"folio": f"{sharepoint.PREFIJOS[tipo]}-{e.registro_id}", "error": e.error,
                      "intentos": e.intentos, "fecha": e.actualizado} for e in errores],
         "teams": {"activo": l.aprobacion_teams, "col_decision": l.col_decision,
                   "val_aprobado": l.val_aprobado or sharepoint.APROBADO_DEF, "val_rechazado": l.val_rechazado or sharepoint.RECHAZADO_DEF,
                   "col_comentario": l.col_comentario, "col_respondio": l.col_respondio, "cuenta_flujo": l.cuenta_flujo},
-        "notas_teams": [{"folio": f"{'VAC' if tipo == 'vacaciones' else 'PER'}-{e.registro_id}", "nota": e.decision_nota}
+        "notas_teams": [{"folio": f"{sharepoint.PREFIJOS[tipo]}-{e.registro_id}", "nota": e.decision_nota}
                         for e in db.scalars(select(EnvioSharePoint).where(EnvioSharePoint.lista_id == l.id,
                                                                           EnvioSharePoint.decision_nota.is_not(None))
                                             .order_by(EnvioSharePoint.id.desc()).limit(10))],

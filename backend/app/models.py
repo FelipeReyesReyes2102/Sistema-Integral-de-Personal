@@ -522,7 +522,7 @@ class ListaSharePoint(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     sede_id: Mapped[int] = mapped_column(ForeignKey("sedes.id", ondelete="CASCADE"), index=True)
-    tipo: Mapped[str] = mapped_column(String(20))  # vacaciones | permisos
+    tipo: Mapped[str] = mapped_column(String(20))  # vacaciones | permisos | equipos
     url: Mapped[str] = mapped_column(Text)
     sitio_id: Mapped[str] = mapped_column(String(300))
     sitio_nombre: Mapped[str | None] = mapped_column(String(200))
@@ -594,7 +594,7 @@ class SolicitudAprobacion(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     sede_id: Mapped[int | None] = mapped_column(Integer, index=True)
-    tipo: Mapped[str] = mapped_column(String(20))  # vacaciones | permisos
+    tipo: Mapped[str] = mapped_column(String(20))  # vacaciones | permisos | equipos
     registro_id: Mapped[int] = mapped_column(Integer)
     token: Mapped[str] = mapped_column(String(64), unique=True)
     estado: Mapped[str] = mapped_column(String(12), default="pendiente", index=True)  # pendiente|enviada|resuelta|cerrada|error

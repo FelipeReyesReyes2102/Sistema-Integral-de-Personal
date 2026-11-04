@@ -63,6 +63,8 @@ export default function ConfigAprobacionFlujo({ sedeId }) {
           <span>Qué se aprueba en Teams</span>
           <label className="checkbox"><input type="checkbox" checked={form.tipos.includes('vacaciones')} onChange={() => toggleTipo('vacaciones')} /> Vacaciones</label>
           <label className="checkbox"><input type="checkbox" checked={form.tipos.includes('permisos')} onChange={() => toggleTipo('permisos')} /> Permisos y home office</label>
+          <label className="checkbox"><input type="checkbox" checked={form.tipos.includes('equipos')} onChange={() => toggleTipo('equipos')} /> Salida de equipos (autorización del jefe)</label>
+          <span className="muted" style={{ fontSize: 11 }}>En salidas de equipo, TI y la caseta siguen revisando en SIP-O.</span>
         </div>
       </div>
       <div className="fila" style={{ marginTop: 10, gap: 8, flexWrap: 'wrap' }}>

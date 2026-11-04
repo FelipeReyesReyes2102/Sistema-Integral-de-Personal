@@ -1,6 +1,6 @@
-"""Envío de las solicitudes de vacaciones y permisos a listas de SharePoint (Microsoft Graph).
+"""Envío de las solicitudes de vacaciones, permisos y salidas de equipo a listas de SharePoint (Microsoft Graph).
 
-- Cada sede puede conectar una lista para vacaciones y otra para permisos pegando su URL.
+- Cada sede puede conectar una lista para vacaciones, otra para permisos y otra para salidas de equipo pegando su URL.
 - El administrador elige qué dato de SIP-O va en cada columna de la lista (mapeo) y, en columnas de opción,
   qué opción corresponde a cada estado o tipo.
 - Una solicitud se envía cuando deja de ser borrador; después, cada cambio (validación, rechazo, cancelación,
@@ -26,11 +26,14 @@ from . import microsoft
 from .config import settings
 from .security import ahora as _ahora
 from .models import (
-    BORRADOR, PERMISO_CONSULTA_MEDICA, EnvioSharePoint, ListaSharePoint, Permiso, Sede, SolicitudVacaciones, Usuario,
+    BORRADOR, PERMISO_CONSULTA_MEDICA, EnvioSharePoint, ListaSharePoint, Permiso, SalidaEquipo, Sede,
+    SolicitudVacaciones, Usuario,
 )
 
 log = logging.getLogger("sip.sharepoint")
-TIPOS = ("vacaciones", "permisos")
+TIPOS = ("vacaciones", "permisos", "equipos")
+MODELOS = {"vacaciones": SolicitudVacaciones, "permisos": Permiso, "equipos": SalidaEquipo}
+PREFIJOS = {"vacaciones": "VAC", "permisos": "PER", "equipos": "EQ"}
 SEGUNDO_PLANO = True  # las pruebas lo apagan y llaman a procesar_pendientes() directamente
 MAX_INTENTOS = 8
 
@@ -39,6 +42,8 @@ ESTADOS = {"borrador": "Borrador", "solicitado": "Solicitado", "validado": "Vali
 PERMISOS = {"llegada_tarde": "Llegada tarde", "salida_temprana": "Salida temprana",
             "salida_intermedia": "Salida durante la jornada", "home_office": "Home office"}
 NOMINA = {"con_goce": "Con goce de sueldo", "sin_goce": "Sin goce de sueldo", "reposicion": "Reposición de tiempo"}
+EQUIPOS = {"laptop": "Laptop", "escritorio": "De escritorio"}
+REVISION_TI = {"autorizado": "Autorizada por TI", "rechazado": "Rechazada por TI"}
 
 # Datos de SIP-O que se pueden enviar: clave -> (etiqueta, tipo, valores posibles para columnas de opción)
 _COMUNES_INI = {
@@ -73,6 +78,18 @@ CAMPOS = {
         "tipo_nomina": ("Tipo en nómina", "texto", NOMINA), "observaciones": ("Observaciones", "texto", None),
         **_COMUNES_FIN,
     },
+    "equipos": {
+        "folio": ("Folio (EQ-123)", "texto", None), **_COMUNES_INI,
+        "tipo_equipo": ("Tipo de equipo", "texto", EQUIPOS), "marca": ("Marca", "texto", None),
+        "modelo": ("Modelo", "texto", None), "serie": ("Serie / Service Tag", "texto", None),
+        "accesorios": ("Accesorios", "texto", None), "justificacion": ("Justificación", "texto", None),
+        "fecha_inicio": ("Fecha de salida", "fecha", None), "fecha_fin": ("Fecha de regreso", "fecha", None),
+        "detalles": ("Detalles", "texto", None), "situacion": ("Situación", "texto", None),
+        "revision_ti": ("Revisión de TI", "texto", REVISION_TI),
+        "salida_registrada": ("Salida registrada en caseta", "fechahora", None),
+        "regreso_registrado": ("Regreso registrado en caseta", "fechahora", None),
+        **_COMUNES_FIN,
+    },
 }
 # Sugerencias para el mapeo automático (nombre de columna normalizado -> campo)
 SINONIMOS = {
@@ -101,6 +118,10 @@ SINONIMOS = {
     "numerodenomina": "numero_empleado", "fechadelpermiso": "fecha", "seleccionalaopcionquecorresponda": "tipo",
     "seleccionacomoseraconsideradoeltiempoennomina": "tipo_nomina", "fechayhoradesolicitud": "fecha_hora_inicio",
     "fechayhoradesalida": "fecha_hora_inicio", "fechayhoraderegreso": "fecha_hora_fin",
+    "tipodeequipo": "tipo_equipo", "equipo": "tipo_equipo", "marca": "marca", "modelo": "modelo", "serie": "serie",
+    "numerodeserie": "serie", "servicetag": "serie", "sn": "serie", "accesorios": "accesorios",
+    "justificacion": "justificacion", "fechadesalida": "fecha_inicio", "fechaderegreso": "fecha_fin",
+    "detalles": "detalles", "situacion": "situacion", "revisionti": "revision_ti", "revisiondeti": "revision_ti",
 }
 TIPOS_COLUMNA = ("text", "number", "currency", "dateTime", "choice", "boolean")
 
@@ -277,6 +298,13 @@ def datos_registro(tipo: str, reg) -> dict:
                 "saldo_periodo": round(saldo.dias_disponible, 2) if saldo else None, "fecha_inicio": reg.fecha_inicio, "fecha_fin": reg.fecha_fin,
                 "dias": reg.dias_habiles, "horas": reg.horas, "periodo": reg.periodo.nombre if reg.periodo else None,
                 "comentario": reg.comentario}
+    if tipo == "equipos":
+        from .equipos import situacion
+        return {**comunes, "folio": f"EQ-{reg.id}", "tipo_equipo": reg.tipo_equipo, "marca": reg.marca,
+                "modelo": reg.modelo, "serie": reg.serie, "accesorios": reg.accesorios,
+                "justificacion": reg.justificacion, "fecha_inicio": reg.fecha_inicio, "fecha_fin": reg.fecha_fin,
+                "detalles": reg.detalles, "situacion": situacion(reg), "revision_ti": reg.ti_estado,
+                "salida_registrada": reg.salida_registrada, "regreso_registrado": reg.regreso_registrado}
     tz = ZoneInfo(u.sede.zona_horaria) if u.sede and u.sede.zona_horaria else timezone.utc
     from . import tipos_permiso as _tp
     ho = _tp.por_dias(_sesion(reg), getattr(u, "sede_id", None), reg.tipo)
@@ -340,7 +368,7 @@ def campos_lista(lista: ListaSharePoint, reg, eliminado: bool = False) -> dict:
 
 # ---------------- Cola ----------------
 def _modelo(tipo: str):
-    return SolicitudVacaciones if tipo == "vacaciones" else Permiso
+    return MODELOS[tipo]
 
 
 def _encolar(session: Session, _ctx):
@@ -352,6 +380,8 @@ def _encolar(session: Session, _ctx):
                 objs.append((o, "vacaciones", eliminado))
             elif isinstance(o, Permiso) and o.tipo != PERMISO_CONSULTA_MEDICA:
                 objs.append((o, "permisos", eliminado))
+            elif isinstance(o, SalidaEquipo):
+                objs.append((o, "equipos", eliminado))
     if not objs:
         return
     con = session.connection()
@@ -460,7 +490,7 @@ def _enviar(db: Session, env: EnvioSharePoint) -> int:
 def encolar_existentes(db: Session, lista: ListaSharePoint, desde: date) -> int:
     """Pone en cola las solicitudes (no borrador) de la sede desde una fecha, para enviar el historial."""
     M = _modelo(lista.tipo)
-    fecha = M.fecha_inicio if lista.tipo == "vacaciones" else M.fecha
+    fecha = M.fecha if lista.tipo == "permisos" else M.fecha_inicio
     q = select(M.id).join(Usuario, M.usuario_id == Usuario.id).where(
         Usuario.sede_id == lista.sede_id, M.estado != BORRADOR, fecha >= desde)
     if lista.tipo == "permisos":
@@ -537,7 +567,7 @@ def revisar_decisiones() -> int:
             pendientes += [(lista, env, reg) for env, reg in filas]
         from .aprobacion_flujo import canal_activo
         pendientes = [p for p in pendientes if not canal_activo(db, p[0].sede_id, p[0].tipo)
-                      and p[2].aprobado_jefe_id is None]
+                      and getattr(p[2], "aprobado_jefe_id", None) is None]
         for lista, env, reg in pendientes:
             sel = ",".join(c for c in (lista.col_decision, lista.col_comentario, lista.col_respondio) if c)
             try:
@@ -555,6 +585,20 @@ def revisar_decisiones() -> int:
                     db.commit()
                 continue
             if not nuevo:
+                continue
+            if lista.tipo == "equipos":
+                # Solo la autorización del jefe; TI y la caseta siguen revisando en SIP-O.
+                from . import equipos as eq
+                asignar_actor(db, revisor, "Teams (Power Automate)")
+                if nuevo == VALIDADO:
+                    eq.autorizar_jefe(reg, revisor)
+                else:
+                    eq.rechazar_jefe(reg, revisor, (comentario or "").strip() or "Rechazada en Teams sin comentario.")
+                env.decision_nota = None
+                db.commit()
+                db.info.pop("bitacora_actor", None)
+                aplicadas += 1
+                eq.notificar(reg.id, "equipo_autorizado" if nuevo == VALIDADO else "equipo_rechazado")
                 continue
             from .services import aplicar_rechazo_teams, aprobar
             asignar_actor(db, revisor, "Teams (Power Automate)")
