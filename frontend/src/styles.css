@@ -790,7 +790,7 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 
 .tab-badge { margin-left: 6px; vertical-align: 1px; }
 
-.sa-sede { border-left: 4px solid var(--primary); }
+.sa-sede { border-left: 4px solid var(--primary); margin-bottom: 16px; }
 
 /* ---------- Planeación de vacaciones ---------- */
 
