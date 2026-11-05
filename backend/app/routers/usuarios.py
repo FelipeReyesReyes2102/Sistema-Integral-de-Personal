@@ -418,8 +418,7 @@ def _limpiar(data: UsuarioIn) -> dict:
     personal = (valores.get("email_personal") or "").strip().lower() or None
     if not tiene_correo_corporativo(data.rol):
         corporativo = None  # planta no tiene correo corporativo
-    elif not corporativo:
-        raise HTTPException(422, "El correo corporativo es obligatorio para el personal de oficinas.")
+    # Oficinas sin correo (p. ej. importados de Excel): entran con su nómina y contraseña hasta que se capture
     for etiqueta, valor in (("corporativo", corporativo), ("personal", personal)):
         if valor and not EMAIL.match(valor):
             raise HTTPException(422, f"El correo {etiqueta} no es válido.")

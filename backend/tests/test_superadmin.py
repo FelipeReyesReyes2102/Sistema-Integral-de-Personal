@@ -89,9 +89,9 @@ def test_siempre_queda_un_super_admin():
 
 def test_correo_corporativo_y_personal():
     admin = entrar("admin@empresa.com", "Admin123")
-    # Oficinas: el correo corporativo es obligatorio
-    r = admin.post("/api/usuarios", json={**nuevo("oficina", "C-1", None), "email_personal": "c1@gmail.com"})
-    assert r.status_code == 422 and "corporativo es obligatorio" in r.text
+    # Oficinas: se puede registrar sin correo corporativo (entra con su nómina) y capturarlo después
+    r = admin.post("/api/usuarios", json={**nuevo("oficina", "C-0", None)})
+    assert r.status_code == 201 and r.json()["email"] is None
     r = admin.post("/api/usuarios", json={**nuevo("oficina", "C-1", "C1@O-tek.com"), "email_personal": "c1@gmail.com"})
     assert r.status_code == 201 and r.json()["email"] == "c1@o-tek.com" and r.json()["email_personal"] == "c1@gmail.com"
     # Planta: no tiene correo corporativo aunque se envíe; solo personal

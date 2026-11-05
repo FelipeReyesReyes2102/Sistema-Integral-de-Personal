@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Briefcase, CalendarDays, Cloud, Copy, KeyRound, Pencil, Plus, Scale, Search, ShieldCheck, UserPlus, UserRound, UserX } from 'lucide-react'
+import { Briefcase, CalendarDays, Cloud, Copy, FileSpreadsheet, KeyRound, Pencil, Plus, Scale, Search, ShieldCheck, UserPlus, UserRound, UserX } from 'lucide-react'
 import { api, sedeActiva } from '../api'
 import Avatar from '../components/Avatar'
 import Modal from '../components/Modal'
+import ImportarEmpleados from '../components/ImportarEmpleados'
 import { ROLES, esSuperAdmin, fmtFecha, num } from '../utils'
 import { useAuth } from '../auth'
 
@@ -25,6 +26,7 @@ export default function Empleados() {
   const [editar, setEditar] = useState(null)
   const [saldos, setSaldos] = useState(null)
   const [temporal, setTemporal] = useState(null) // usuario con contraseña temporal recién generada
+  const [importar, setImportar] = useState(false)
 
   async function restablecer(u) {
     if (!window.confirm(`¿Generar una nueva contraseña temporal para ${u.nombre}? La actual dejará de funcionar y se cerrarán sus sesiones.`)) return
@@ -70,6 +72,7 @@ export default function Empleados() {
           {grupos.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
         </select>
         <div className="espacio" />
+        <button className="btn" onClick={() => setImportar(true)}><FileSpreadsheet size={16} /> Importar desde Excel</button>
         <button className="btn btn-primary" onClick={() => setEditar({ ...VACIO, sede_id: Number(sedeActiva()) || user.sede_id || '' })}>
           <Plus size={16} /> Nuevo empleado
         </button>
@@ -139,6 +142,7 @@ export default function Empleados() {
         onClose={() => setEditar(null)}
         onSaved={(creado) => { setEditar(null); cargar(); if (creado?.password_temporal) setTemporal(creado) }} />}
       {temporal && <PasswordTemporal usuario={temporal} onClose={() => setTemporal(null)} />}
+      {importar && <ImportarEmpleados onClose={() => setImportar(false)} onImportado={cargar} />}
       {saldos && <Saldos usuario={saldos} onClose={() => setSaldos(null)} />}
     </div>
   )
@@ -320,7 +324,7 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
           </div>
         ) : (
         <div className="campo full">
-          <span>Correo corporativo *</span>
+          <span>Correo corporativo</span>
           <div className="ms-buscar">
             <input type="email" value={form.email} onChange={set('email')} placeholder="nombre@o-tek.com"
               onKeyDown={(e) => { if (e.key === 'Enter' && graph) { e.preventDefault(); buscarMicrosoft() } }} />

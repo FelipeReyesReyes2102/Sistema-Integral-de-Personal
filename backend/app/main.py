@@ -17,7 +17,7 @@ from .migraciones import actualizar_esquema
 from .routers import (
     auth, calendario, catalogos, configuracion, consultas, correo, equipo, permisos,
     politica, rotacion as rotacion_router, sedes, usuarios, vacaciones, bitacora as bitacora_router, sharepoint as sharepoint_router,
-    aprobacion_flujo as aprobacion_router, tipos_permiso as tipos_permiso_router, flujos as flujos_router, incapacidades as incapacidades_router, caseta as caseta_router, equipos as equipos_router, estimados as estimados_router,
+    aprobacion_flujo as aprobacion_router, tipos_permiso as tipos_permiso_router, flujos as flujos_router, incapacidades as incapacidades_router, caseta as caseta_router, equipos as equipos_router, estimados as estimados_router, importar as importar_router,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -82,7 +82,7 @@ sharepoint.activar()
 aprobacion_flujo.activar()
 flujos_aprobacion.activar()
 
-for r in (auth, sedes, politica, usuarios, catalogos, vacaciones, permisos, calendario, equipo, configuracion, consultas, correo,
+for r in (auth, sedes, politica, importar_router, usuarios, catalogos, vacaciones, permisos, calendario, equipo, configuracion, consultas, correo,
           rotacion_router, bitacora_router, sharepoint_router, aprobacion_router, tipos_permiso_router, flujos_router,
           incapacidades_router, caseta_router, equipos_router, estimados_router):
     app.include_router(r.router)

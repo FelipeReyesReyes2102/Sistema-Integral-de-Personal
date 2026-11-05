@@ -34,13 +34,14 @@ export async function api(path, { method = 'GET', body, query, sede: sedeElegida
     const qs = new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined && v !== null && v !== ''))
     if ([...qs].length) url += `?${qs}`
   }
-  const headers = { 'Content-Type': 'application/json' }
+  const archivo = body instanceof FormData // archivos: el navegador pone el Content-Type con su separador
+  const headers = archivo ? {} : { 'Content-Type': 'application/json' }
   if (method !== 'GET') headers['X-CSRF-Token'] = leerCookie('sip_csrf')
   const sede = sedeElegida || sedeActiva()
   if (sede) headers['X-Sede-Id'] = sede
   const res = await fetch(url, {
     method, headers, credentials: 'same-origin',
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: archivo ? body : body !== undefined ? JSON.stringify(body) : undefined,
   })
   if (res.status === 401 && !SIN_REDIRECCION.includes(path)) {
     window.location.href = '/login?error=sesion_expirada'
