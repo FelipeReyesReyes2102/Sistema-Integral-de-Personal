@@ -192,3 +192,25 @@ def test_sedes_solo_las_administra_el_super_administrador(mundo):
     # No se desactiva una sede con empleados activos
     assert su.put(f"/api/sedes/{mundo['med']}", json={"nombre": "O-Tek Colombia - Medellín",
                                                        "zona_horaria": "America/Bogota", "activa": False}).status_code == 400
+
+
+def test_eliminar_sede_sin_empleados(mundo):
+    su = entrar("super.sedes@o-tek.com", "Clave12345")
+    r = su.post("/api/sedes", json={"nombre": "Sede por error", "zona_horaria": "America/Mexico_City"})
+    assert r.status_code == 201, r.text
+    nueva = r.json()["id"]
+    with SessionLocal() as db:  # configuración que se borra con la sede
+        db.add(Festivo(sede_id=nueva, fecha=date(HOY.year, 12, 25), nombre="Navidad"))
+        db.add(Turno(sede_id=nueva, nombre="Turno x", hora_entrada=time(8), hora_salida=time(17), horas_jornada=8))
+        db.commit()
+    # Solo el super administrador; no la principal ni una con empleados
+    assert entrar("admin@empresa.com", "Admin123").delete(f"/api/sedes/{nueva}").status_code == 403
+    assert su.delete(f"/api/sedes/{mundo['mx']}").status_code == 400
+    r = su.delete(f"/api/sedes/{mundo['med']}")
+    assert r.status_code == 400 and "empleado" in r.text
+    assert su.delete(f"/api/sedes/{nueva}").status_code == 204
+    with SessionLocal() as db:
+        assert db.get(Sede, nueva) is None
+        assert not db.query(Festivo).filter(Festivo.sede_id == nueva).count()
+        assert not db.query(Turno).filter(Turno.sede_id == nueva).count()
+    assert su.delete(f"/api/sedes/{nueva}").status_code == 404

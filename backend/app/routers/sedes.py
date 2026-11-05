@@ -1,16 +1,19 @@
 """Sedes: consulta (todos ven las suyas) y administración (solo super administrador)."""
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import microsoft
 from ..config import settings
 from ..database import get_db
-from ..models import Sede, Usuario
+from ..models import (
+    AdminSede, CanalAprobacion, Festivo, FlujoAprobacion, Grupo, ListaSharePoint, NotificacionCorreo, ReglaAntiguedad,
+    RotacionTurnos, Sede, TipoJornada, TipoPermisoSede, Turno, Usuario,
+)
 from ..schemas import SedeIn, SedeOut
 from ..security import auditar, get_current_user, require_superadmin
-from ..sedes import crear_jornadas_base, sede_por_ubicacion, sedes_visibles, zona
+from ..sedes import crear_jornadas_base, sede_principal, sede_por_ubicacion, sedes_visibles, zona
 
 router = APIRouter(prefix="/api/sedes", tags=["sedes"])
 
@@ -93,3 +96,31 @@ def importar_microsoft(request: Request, db: Session = Depends(get_db), su: Usua
         auditar(db, "sedes_importadas", actor_id=su.id, detalle=", ".join(creadas)[:500], request=request)
         db.commit()
     return {"ubicaciones": ubicaciones, "creadas": creadas}
+
+
+@router.delete("/{sede_id}", status_code=204)
+def eliminar(sede_id: int, request: Request, db: Session = Depends(get_db), su: Usuario = Depends(require_superadmin)):
+    """Elimina una sede sin empleados (p. ej. creada por error) junto con su configuración: jornadas, turnos, grupos,
+    festivos, tabla de antigüedad, tipos de permiso y rotación. No se elimina si tiene empleados (activos o no) ni
+    integraciones configuradas (SharePoint, Teams o cadenas de aprobación)."""
+    s = db.get(Sede, sede_id)
+    if not s:
+        raise HTTPException(404, "Sede no encontrada")
+    if s.id == sede_principal(db).id:
+        raise HTTPException(400, "La sede principal no se puede eliminar.")
+    empleados = db.scalar(select(func.count(Usuario.id)).where(Usuario.sede_id == s.id)) or 0
+    if empleados:
+        raise HTTPException(400, f"La sede tiene {empleados} empleado(s), incluidos los inactivos; cámbialos de sede antes "
+                                 "de eliminarla o desactívala.")
+    for modelo, que in ((ListaSharePoint, "listas de SharePoint"), (CanalAprobacion, "aprobación en Teams"),
+                        (FlujoAprobacion, "cadenas de aprobación")):
+        if db.scalar(select(func.count()).select_from(modelo).where(modelo.sede_id == s.id)):
+            raise HTTPException(400, f"La sede tiene {que} configuradas; quítalas antes de eliminarla o desactívala.")
+    db.execute(update(NotificacionCorreo).where(NotificacionCorreo.sede_id == s.id).values(sede_id=None))  # se conserva el historial
+    for modelo in (RotacionTurnos, AdminSede, Festivo, ReglaAntiguedad, TipoPermisoSede, Grupo, Turno, TipoJornada):
+        db.execute(delete(modelo).where(modelo.sede_id == s.id))
+    nombre = s.nombre
+    db.delete(s)
+    _commit(db)
+    auditar(db, "sede_eliminada", actor_id=su.id, detalle=nombre, request=request)
+    db.commit()

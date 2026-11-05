@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Building2, CloudDownload, Pencil, Plus, Save, X } from 'lucide-react'
+import { Building2, CloudDownload, Pencil, Plus, Save, Trash2, X } from 'lucide-react'
 import { api } from '../api'
 
 const ZONAS = [
@@ -26,6 +26,18 @@ export default function ConfigSedes() {
       else await api('/sedes', { method: 'POST', body })
       setEdit(null)
       setMsg({ ok: true, t: 'Sede guardada. Recarga la página para verla en el selector de sedes.' })
+      cargar()
+    } catch (e) {
+      setMsg({ ok: false, t: e.message })
+    }
+  }
+
+  async function eliminar(s) {
+    if (!window.confirm(`¿Eliminar la sede ${s.nombre}? Se borran también sus jornadas, turnos, grupos, festivos y tipos de permiso. No se puede deshacer.`)) return
+    setMsg(null)
+    try {
+      await api(`/sedes/${s.id}`, { method: 'DELETE' })
+      setMsg({ ok: true, t: `Se eliminó la sede ${s.nombre}. Recarga la página para quitarla del selector de sedes.` })
       cargar()
     } catch (e) {
       setMsg({ ok: false, t: e.message })
@@ -78,7 +90,12 @@ export default function ConfigSedes() {
                 <td>{s.zona_horaria}</td>
                 <td>{s.empleados}</td>
                 <td>{s.activa ? 'Activa' : 'Inactiva'}</td>
-                <td><button className="icon-btn" title="Editar" onClick={() => setEdit({ ...s, ubicacion_microsoft: s.ubicacion_microsoft || '' })}><Pencil size={15} /></button></td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <button className="icon-btn" title="Editar" onClick={() => setEdit({ ...s, ubicacion_microsoft: s.ubicacion_microsoft || '' })}><Pencil size={15} /></button>{' '}
+                  {s.empleados === 0 && (
+                    <button className="icon-btn rojo" title="Eliminar sede (solo si no tiene empleados)" onClick={() => eliminar(s)}><Trash2 size={15} /></button>
+                  )}
+                </td>
               </tr>
             ))}
             {edit && (
