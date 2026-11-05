@@ -6,9 +6,10 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from .. import horarios
-from ..models import ROL_PLANTA, Festivo, Grupo, GrupoJefe, HorarioEspecial, ReglaAntiguedad, Sede, Turno, TurnoDia, Usuario
+from ..models import ROL_PLANTA, Festivo, Grupo, GrupoJefe, HorarioEspecial, Subgrupo, SubgrupoJefe, ReglaAntiguedad, Sede, Turno, TurnoDia, Usuario
 from ..schemas import (
-    AsignarJefes, AsignarMiembros, FestivoIn, FestivoOut, GrupoIn, GrupoOut, ReglaIn, ReglaOut, TurnoIn, TurnoOut,
+    AsignarJefes, AsignarMiembros, FestivoIn, FestivoOut, GrupoIn, GrupoOut, ReglaIn, ReglaOut, SubgrupoIn, SubgrupoOut,
+    TurnoIn, TurnoOut,
 )
 from ..security import auditar, get_current_user, require_admin, require_superadmin
 from ..sedes import Alcance, alcance, sede_principal
@@ -99,6 +100,9 @@ def borrar_turno(turno_id: int, db: Session = Depends(get_db), _=Depends(require
 def _grupo_out(db: Session, g: Grupo) -> GrupoOut:
     out = GrupoOut.model_validate(g)
     out.total_miembros = db.scalar(select(func.count(Usuario.id)).where(Usuario.grupo_id == g.id)) or 0
+    for sg in out.subgrupos:
+        sg.total_miembros = db.scalar(select(func.count(Usuario.id)).where(Usuario.subgrupo_id == sg.id,
+                                                                            Usuario.grupo_id == g.id)) or 0
     return out
 
 
@@ -131,6 +135,8 @@ def editar_grupo(grupo_id: int, data: GrupoIn, db: Session = Depends(get_db), _=
 def borrar_grupo(grupo_id: int, db: Session = Depends(get_db), _=Depends(require_admin),
                  alc: Alcance = Depends(alcance)):
     g = _de_sede(db.get(Grupo, grupo_id), alc, "Grupo")
+    for u in db.scalars(select(Usuario).where(Usuario.grupo_id == g.id)):
+        u.subgrupo_id = None  # sus áreas se borran con el grupo
     db.delete(g)
     db.commit()
 
@@ -151,8 +157,10 @@ def asignar_miembros(grupo_id: int, data: AsignarMiembros, db: Session = Depends
         raise HTTPException(400, f"Solo se pueden asignar empleados de planta: {', '.join(no_planta)}")
     for u in db.scalars(select(Usuario).where(Usuario.grupo_id == g.id)):
         if u.id not in data.usuario_ids:
-            u.grupo_id = None
+            u.grupo_id = u.subgrupo_id = None
     for u in nuevos:
+        if u.grupo_id != g.id:
+            u.subgrupo_id = None  # su área era de otro grupo
         u.grupo_id = g.id
         if data.turno_id is not None:
             u.turno_id = data.turno_id
@@ -165,13 +173,7 @@ def asignar_jefes(grupo_id: int, data: AsignarJefes, db: Session = Depends(get_d
                   alc: Alcance = Depends(alcance)):
     """Reemplaza los jefes del grupo: cualquiera de ellos ve a los integrantes en Mi equipo y aprueba sus solicitudes."""
     g = _de_sede(db.get(Grupo, grupo_id), alc, "Grupo")
-    ids = list(dict.fromkeys(data.usuario_ids))
-    jefes = db.scalars(select(Usuario).where(Usuario.id.in_(ids))).all() if ids else []
-    if len(jefes) != len(ids):
-        raise HTTPException(404, "Alguno de los jefes no existe")
-    malos = [j.nombre for j in jefes if not puede_aprobar_a(j, g.sede_id)]
-    if malos:
-        raise HTTPException(400, f"Solo pueden ser jefes del grupo personas activas marcadas como jefe en la sede: {', '.join(malos)}")
+    jefes = _jefes_validos(db, data.usuario_ids, g.sede_id)
     db.execute(GrupoJefe.__table__.delete().where(GrupoJefe.grupo_id == g.id))
     for j in jefes:
         db.add(GrupoJefe(grupo_id=g.id, usuario_id=j.id))
@@ -179,6 +181,106 @@ def asignar_jefes(grupo_id: int, data: AsignarJefes, db: Session = Depends(get_d
     db.commit()
     db.refresh(g)
     return _grupo_out(db, g)
+
+
+def _jefes_validos(db: Session, ids: list[int], sede_id: int | None) -> list[Usuario]:
+    ids = list(dict.fromkeys(ids))
+    jefes = db.scalars(select(Usuario).where(Usuario.id.in_(ids))).all() if ids else []
+    if len(jefes) != len(ids):
+        raise HTTPException(404, "Alguno de los jefes no existe")
+    malos = [j.nombre for j in jefes if not puede_aprobar_a(j, sede_id)]
+    if malos:
+        raise HTTPException(400, f"Solo pueden ser jefes personas activas marcadas como jefe en la sede: {', '.join(malos)}")
+    return jefes
+
+
+# ---------------- Áreas (subgrupos) de un grupo ----------------
+def _subgrupo(db: Session, subgrupo_id: int, alc: Alcance) -> Subgrupo:
+    sg = db.get(Subgrupo, subgrupo_id)
+    if sg is None:
+        raise HTTPException(404, "Área no encontrada")
+    _de_sede(sg.grupo, alc, "Área")
+    return sg
+
+
+def _commit_area(db: Session):
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Ya existe un área con ese nombre en el grupo")
+
+
+@router.post("/grupos/{grupo_id}/subgrupos", response_model=GrupoOut, status_code=201)
+def crear_subgrupo(grupo_id: int, data: SubgrupoIn, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin),
+                   alc: Alcance = Depends(alcance)):
+    g = _de_sede(db.get(Grupo, grupo_id), alc, "Grupo")
+    db.add(Subgrupo(grupo_id=g.id, nombre=data.nombre.strip()))
+    _commit_area(db)
+    auditar(db, "area_creada", actor_id=admin.id, detalle=f"{g.nombre} → {data.nombre.strip()}")
+    db.commit()
+    db.refresh(g)
+    return _grupo_out(db, g)
+
+
+@router.put("/subgrupos/{subgrupo_id}", response_model=GrupoOut)
+def renombrar_subgrupo(subgrupo_id: int, data: SubgrupoIn, db: Session = Depends(get_db), _=Depends(require_admin),
+                       alc: Alcance = Depends(alcance)):
+    sg = _subgrupo(db, subgrupo_id, alc)
+    sg.nombre = data.nombre.strip()
+    _commit_area(db)
+    db.refresh(sg.grupo)
+    return _grupo_out(db, sg.grupo)
+
+
+@router.delete("/subgrupos/{subgrupo_id}", response_model=GrupoOut)
+def borrar_subgrupo(subgrupo_id: int, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin),
+                    alc: Alcance = Depends(alcance)):
+    """Sus integrantes siguen en el grupo, sin área (los atienden los jefes del grupo)."""
+    sg = _subgrupo(db, subgrupo_id, alc)
+    g = sg.grupo
+    for u in db.scalars(select(Usuario).where(Usuario.subgrupo_id == sg.id)):
+        u.subgrupo_id = None
+    auditar(db, "area_eliminada", actor_id=admin.id, detalle=f"{g.nombre} → {sg.nombre}")
+    db.delete(sg)
+    db.commit()
+    db.refresh(g)
+    return _grupo_out(db, g)
+
+
+@router.put("/subgrupos/{subgrupo_id}/jefes", response_model=GrupoOut)
+def asignar_jefes_subgrupo(subgrupo_id: int, data: AsignarJefes, db: Session = Depends(get_db),
+                           admin: Usuario = Depends(require_admin), alc: Alcance = Depends(alcance)):
+    sg = _subgrupo(db, subgrupo_id, alc)
+    jefes = _jefes_validos(db, data.usuario_ids, sg.grupo.sede_id)
+    db.execute(SubgrupoJefe.__table__.delete().where(SubgrupoJefe.subgrupo_id == sg.id))
+    for j in jefes:
+        db.add(SubgrupoJefe(subgrupo_id=sg.id, usuario_id=j.id))
+    auditar(db, "area_jefes", actor_id=admin.id,
+            detalle=f"{sg.grupo.nombre} → {sg.nombre}: {', '.join(j.nombre for j in jefes) or 'sin jefes'}")
+    db.commit()
+    db.refresh(sg.grupo)
+    return _grupo_out(db, sg.grupo)
+
+
+@router.put("/subgrupos/{subgrupo_id}/miembros", response_model=GrupoOut)
+def asignar_miembros_subgrupo(subgrupo_id: int, data: AsignarMiembros, db: Session = Depends(get_db),
+                              admin: Usuario = Depends(require_admin), alc: Alcance = Depends(alcance)):
+    """Reemplaza los integrantes del área; solo pueden ser integrantes del grupo."""
+    sg = _subgrupo(db, subgrupo_id, alc)
+    nuevos = db.scalars(select(Usuario).where(Usuario.id.in_(data.usuario_ids))).all() if data.usuario_ids else []
+    fuera = [u.nombre for u in nuevos if u.grupo_id != sg.grupo_id]
+    if fuera:
+        raise HTTPException(400, f"Primero agrégalos al grupo {sg.grupo.nombre}: {', '.join(fuera)}")
+    for u in db.scalars(select(Usuario).where(Usuario.subgrupo_id == sg.id)):
+        if u.id not in data.usuario_ids:
+            u.subgrupo_id = None
+    for u in nuevos:
+        u.subgrupo_id = sg.id
+    auditar(db, "area_integrantes", actor_id=admin.id, detalle=f"{sg.grupo.nombre} → {sg.nombre}: {len(nuevos)} integrante(s)")
+    db.commit()
+    db.refresh(sg.grupo)
+    return _grupo_out(db, sg.grupo)
 
 
 def _validar_grupo(data: GrupoIn):

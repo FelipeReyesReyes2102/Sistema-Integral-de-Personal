@@ -85,3 +85,35 @@ def test_jefes_del_grupo():
     # Quitar los jefes del grupo deja de dar acceso
     assert admin.put(f"/api/grupos/{gid}/jefes", json={"usuario_ids": []}).json()["jefes"] == []
     assert ids["emp"] not in [m["usuario"]["id"] for m in beto.get("/api/equipo").json()]
+
+
+def test_areas_con_sus_jefes():
+    gid, ids = _mundo()
+    admin = entrar("admin@empresa.com", "Admin123")
+    admin.put(f"/api/grupos/{gid}/jefes", json={"usuario_ids": [ids["j1"]]})
+    with SessionLocal() as db:
+        for sg in db.get(Grupo, gid).subgrupos:
+            db.delete(sg)
+        db.commit()
+    r = admin.post(f"/api/grupos/{gid}/subgrupos", json={"nombre": "Calidad"})
+    assert r.status_code == 201, r.text
+    assert admin.post(f"/api/grupos/{gid}/subgrupos", json={"nombre": "Calidad"}).status_code == 409
+    area = next(a for a in r.json()["subgrupos"] if a["nombre"] == "Calidad")
+    # Solo integrantes del grupo; jefes válidos de la sede
+    assert admin.put(f"/api/subgrupos/{area['id']}/miembros", json={"usuario_ids": [ids["noj"]]}).status_code == 400
+    assert admin.put(f"/api/subgrupos/{area['id']}/jefes", json={"usuario_ids": [ids["noj"]]}).status_code == 400
+    admin.put(f"/api/subgrupos/{area['id']}/jefes", json={"usuario_ids": [ids["otro"]]})
+    r = admin.put(f"/api/subgrupos/{area['id']}/miembros", json={"usuario_ids": [ids["emp"]]})
+    a = next(x for x in r.json()["subgrupos"] if x["id"] == area["id"])
+    assert a["total_miembros"] == 1 and [j["nombre"] for j in a["jefes"]] == ["Ciro Jefe Ajeno"]
+
+    # Eva (área Calidad) queda con el jefe del área, ya no con el del grupo
+    me = entrar("gj-5@o-tek.com", PWD).get("/api/auth/me").json()
+    assert me["jefes_grupo"] == [ids["otro"]] and me["subgrupo_nombre"] == "Calidad"
+    ana, ciro = entrar("gj-1@o-tek.com", PWD), entrar("gj-3@o-tek.com", PWD)
+    assert ids["emp"] in [m["usuario"]["id"] for m in ciro.get("/api/equipo").json()]
+    assert ids["emp"] not in [m["usuario"]["id"] for m in ana.get("/api/equipo").json()]
+    # Al borrar el área vuelve con los jefes del grupo
+    admin.delete(f"/api/subgrupos/{area['id']}")
+    assert ids["emp"] in [m["usuario"]["id"] for m in ana.get("/api/equipo").json()]
+    assert ids["emp"] not in [m["usuario"]["id"] for m in ciro.get("/api/equipo").json()]

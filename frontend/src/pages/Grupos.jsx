@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Pencil, Plus, Trash2, UserCheck, Users } from 'lucide-react'
+import { Layers, Pencil, Plus, Trash2, UserCheck, Users } from 'lucide-react'
 import { api } from '../api'
 import Modal from '../components/Modal'
 import SedeActual from '../components/SedeActual'
@@ -25,7 +25,8 @@ export default function Grupos() {
   const [lista, setLista] = useState([])
   const [form, setForm] = useState(null)
   const [miembros, setMiembros] = useState(null)
-  const [jefes, setJefes] = useState(null) // grupo cuyos jefes se editan
+  const [jefes, setJefes] = useState(null) // {titulo, ruta, sede_id, actuales, nota} de los jefes que se editan
+  const [area, setArea] = useState(null) // {grupo, area} cuyos integrantes se editan
   const [error, setError] = useState('')
   const cargar = () => api('/grupos').then(setLista)
   useEffect(() => { cargar() }, [])
@@ -45,6 +46,29 @@ export default function Grupos() {
       setError(e.message)
     }
   }
+
+  async function nuevaArea(g) {
+    const nombre = window.prompt(`Nombre del área en ${g.nombre} (p. ej. Calidad, AMP, APT):`)
+    if (!nombre?.trim()) return
+    await api(`/grupos/${g.id}/subgrupos`, { method: 'POST', body: { nombre: nombre.trim() } }).then(cargar).catch((e) => alert(e.message))
+  }
+  async function renombrarArea(a) {
+    const nombre = window.prompt('Nuevo nombre del área:', a.nombre)
+    if (!nombre?.trim() || nombre.trim() === a.nombre) return
+    await api(`/subgrupos/${a.id}`, { method: 'PUT', body: { nombre: nombre.trim() } }).then(cargar).catch((e) => alert(e.message))
+  }
+  async function borrarArea(a) {
+    if (!window.confirm(`¿Eliminar el área ${a.nombre}? Sus ${a.total_miembros} integrante(s) siguen en el grupo, a cargo de los jefes del grupo.`)) return
+    await api(`/subgrupos/${a.id}`, { method: 'DELETE' }).then(cargar).catch((e) => alert(e.message))
+  }
+  const jefesDeGrupo = (g) => setJefes({
+    titulo: `Jefes de ${g.nombre}`, ruta: `/grupos/${g.id}/jefes`, sede_id: g.sede_id, actuales: g.jefes,
+    nota: g.subgrupos.length ? 'Atienden a los integrantes que no están en ninguna área.' : 'Atienden a todos los integrantes del grupo.',
+  })
+  const jefesDeArea = (g, a) => setJefes({
+    titulo: `Jefes de ${g.nombre} · ${a.nombre}`, ruta: `/subgrupos/${a.id}/jefes`, sede_id: g.sede_id, actuales: a.jefes,
+    nota: `Atienden solo a los integrantes del área ${a.nombre}.`,
+  })
 
   async function borrar(g) {
     if (!window.confirm(`¿Eliminar ${g.nombre}? Sus ${g.total_miembros} miembro(s) quedarán sin grupo.`)) return
@@ -86,8 +110,30 @@ export default function Grupos() {
             <div className="fila" style={{ marginTop: 10 }}>
               <span className="chip"><Users size={12} /> {g.total_miembros} empleado(s)</span>
               <div className="espacio" />
-              <button className="btn btn-sm" onClick={() => setJefes(g)}>Jefes</button>
+              <button className="btn btn-sm" onClick={() => jefesDeGrupo(g)}>Jefes</button>
               <button className="btn btn-sm" onClick={() => setMiembros(g)}>Asignar empleados</button>
+            </div>
+            <div className="grupo-areas">
+              <div className="fila" style={{ gap: 6 }}>
+                <Layers size={14} /> <b>Áreas</b>
+                <span className="muted" style={{ fontSize: 12 }}>cada una con sus jefes</span>
+                <div className="espacio" />
+                <button className="btn btn-sm" onClick={() => nuevaArea(g)}><Plus size={13} /> Área</button>
+              </div>
+              {g.subgrupos.map((a) => (
+                <div key={a.id} className="grupo-area">
+                  <div className="ga-datos">
+                    <b>{a.nombre}</b> <span className="muted">· {a.total_miembros} integrante(s)</span>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      Jefes: {a.jefes.length ? a.jefes.map((j) => j.nombre).join(', ') : <span style={{ color: 'var(--danger)' }}>sin asignar</span>}
+                    </div>
+                  </div>
+                  <button className="btn btn-sm" onClick={() => jefesDeArea(g, a)}>Jefes</button>
+                  <button className="btn btn-sm" onClick={() => setArea({ grupo: g, area: a })}>Integrantes</button>
+                  <button className="icon-btn" title="Renombrar" onClick={() => renombrarArea(a)}><Pencil size={14} /></button>
+                  <button className="icon-btn rojo" title="Eliminar área" onClick={() => borrarArea(a)}><Trash2 size={14} /></button>
+                </div>
+              ))}
             </div>
           </div>
         ))}
@@ -127,7 +173,8 @@ export default function Grupos() {
         </Modal>
       )}
       {miembros && <Miembros grupo={miembros} onClose={() => setMiembros(null)} onSaved={() => { setMiembros(null); cargar() }} />}
-      {jefes && <JefesGrupo grupo={jefes} onClose={() => setJefes(null)} onSaved={() => { setJefes(null); cargar() }} />}
+      {jefes && <JefesGrupo {...jefes} onClose={() => setJefes(null)} onSaved={() => { setJefes(null); cargar() }} />}
+      {area && <IntegrantesArea {...area} onClose={() => setArea(null)} onSaved={() => { setArea(null); cargar() }} />}
     </>
   )
 }
@@ -203,19 +250,19 @@ function Miembros({ grupo, onClose, onSaved }) {
   )
 }
 
-/** Jefes del grupo: cualquiera de ellos ve a los integrantes en Mi equipo y aprueba sus solicitudes. */
-function JefesGrupo({ grupo, onClose, onSaved }) {
+/** Jefes de un grupo o de un área: cualquiera de ellos ve a sus integrantes en Mi equipo y aprueba sus solicitudes. */
+function JefesGrupo({ titulo, ruta, sede_id: sedeId, actuales, nota, onClose, onSaved }) {
   const [jefes, setJefes] = useState([])
-  const [sel, setSel] = useState(() => new Set(grupo.jefes.map((j) => j.id)))
+  const [sel, setSel] = useState(() => new Set(actuales.map((j) => j.id)))
   const [buscar, setBuscar] = useState('')
   const [error, setError] = useState('')
 
-  useEffect(() => { api('/jefes', { query: { sede_id: grupo.sede_id } }).then(setJefes).catch((e) => setError(e.message)) }, [grupo.id])
+  useEffect(() => { api('/jefes', { query: { sede_id: sedeId } }).then(setJefes).catch((e) => setError(e.message)) }, [ruta])
 
   const toggle = (id) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
   async function guardar() {
     try {
-      await api(`/grupos/${grupo.id}/jefes`, { method: 'PUT', body: { usuario_ids: [...sel] } })
+      await api(ruta, { method: 'PUT', body: { usuario_ids: [...sel] } })
       onSaved()
     } catch (e) {
       setError(e.message)
@@ -224,11 +271,11 @@ function JefesGrupo({ grupo, onClose, onSaved }) {
   const visibles = jefes.filter((j) => !buscar || j.nombre.toLowerCase().includes(buscar.toLowerCase()))
 
   return (
-    <Modal titulo={`Jefes de ${grupo.nombre}`} onClose={onClose}
+    <Modal titulo={titulo} onClose={onClose}
       pie={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={guardar}>Guardar ({sel.size})</button></>}>
       <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
-        Los {grupo.total_miembros} integrante(s) del grupo quedan a cargo de los jefes que marques: cualquiera de ellos los ve en
-        <b> Mi equipo</b> y puede aprobar sus solicitudes. Solo aparecen personas marcadas como <b>jefe</b> en la sede.
+        {nota} Cualquiera de los jefes que marques los ve en <b>Mi equipo</b> y puede aprobar sus solicitudes. Solo aparecen
+        personas marcadas como <b>jefe</b> en la sede.
       </p>
       <input placeholder="Buscar jefe…" value={buscar} onChange={(e) => setBuscar(e.target.value)} style={{ marginBottom: 8 }} />
       <div className="tabla-wrap" style={{ maxHeight: 340, overflowY: 'auto' }}>
@@ -241,6 +288,61 @@ function JefesGrupo({ grupo, onClose, onSaved }) {
               </tr>
             ))}
             {visibles.length === 0 && <tr><td className="muted">No hay jefes en la sede. Marca «Es jefe» en la ficha del empleado.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {error && <div className="alerta error">{error}</div>}
+    </Modal>
+  )
+}
+
+/** Integrantes de un área: se eligen entre los integrantes del grupo. */
+function IntegrantesArea({ grupo, area, onClose, onSaved }) {
+  const [empleados, setEmpleados] = useState([])
+  const [sel, setSel] = useState(new Set())
+  const [buscar, setBuscar] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api('/usuarios', { query: { rol: 'planta', activos: true } }).then((us) => {
+      const delGrupo = us.filter((u) => u.grupo_id === grupo.id)
+      setEmpleados(delGrupo)
+      setSel(new Set(delGrupo.filter((u) => u.subgrupo_id === area.id).map((u) => u.id)))
+    }).catch((e) => setError(e.message))
+  }, [area.id])
+
+  const toggle = (id) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  async function guardar() {
+    try {
+      await api(`/subgrupos/${area.id}/miembros`, { method: 'PUT', body: { usuario_ids: [...sel] } })
+      onSaved()
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+  const visibles = empleados.filter((u) => !buscar || u.nombre.toLowerCase().includes(buscar.toLowerCase()))
+
+  return (
+    <Modal ancho titulo={`Integrantes de ${grupo.nombre} · ${area.nombre}`} onClose={onClose}
+      pie={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={guardar}>Guardar ({sel.size})</button></>}>
+      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+        Marca a quienes pertenecen al área: los atenderán los jefes del área. Si alguien estaba en otra área del grupo, se cambia a esta.
+        Para que aparezca aquí, primero agrégalo al grupo con <b>Asignar empleados</b>.
+      </p>
+      <input placeholder="Buscar…" value={buscar} onChange={(e) => setBuscar(e.target.value)} style={{ maxWidth: 260, marginBottom: 8 }} />
+      <div className="tabla-wrap" style={{ maxHeight: 380, overflowY: 'auto' }}>
+        <table className="tabla">
+          <thead><tr><th /><th>No.</th><th>Nombre</th><th>Área actual</th></tr></thead>
+          <tbody>
+            {visibles.map((u) => (
+              <tr key={u.id} onClick={() => toggle(u.id)} style={{ cursor: 'pointer' }}>
+                <td><input type="checkbox" checked={sel.has(u.id)} readOnly style={{ width: 'auto' }} /></td>
+                <td>{u.numero_empleado}</td>
+                <td>{u.nombre}</td>
+                <td className="muted">{u.subgrupo_nombre || '—'}</td>
+              </tr>
+            ))}
+            {visibles.length === 0 && <tr><td colSpan={4} className="muted">El grupo no tiene integrantes.</td></tr>}
           </tbody>
         </table>
       </div>

@@ -242,6 +242,8 @@ class Grupo(Base):
     sede: Mapped[Sede | None] = relationship()
     # Jefes del grupo: cualquiera de ellos ve a los integrantes en Mi equipo y aprueba sus solicitudes
     jefes: Mapped[list["Usuario"]] = relationship(secondary="grupos_jefes", order_by="Usuario.nombre", viewonly=True)
+    subgrupos: Mapped[list["Subgrupo"]] = relationship(back_populates="grupo", order_by="Subgrupo.nombre",
+                                                       cascade="all, delete-orphan")
 
     @property
     def sede_nombre(self) -> str | None:
@@ -252,6 +254,27 @@ class GrupoJefe(Base):
     __tablename__ = "grupos_jefes"
 
     grupo_id: Mapped[int] = mapped_column(ForeignKey("grupos.id", ondelete="CASCADE"), primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), primary_key=True, index=True)
+
+
+class Subgrupo(Base):
+    """Área dentro de un grupo de planta (p. ej. Calidad, AMP, APT): comparte el ciclo del grupo pero tiene sus jefes.
+    A los integrantes de un área los atienden los jefes del área; los jefes del grupo, a quienes no tienen área."""
+    __tablename__ = "subgrupos"
+    __table_args__ = (UniqueConstraint("grupo_id", "nombre"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    grupo_id: Mapped[int] = mapped_column(ForeignKey("grupos.id", ondelete="CASCADE"), index=True)
+    nombre: Mapped[str] = mapped_column(String(80))
+
+    grupo: Mapped[Grupo] = relationship(back_populates="subgrupos")
+    jefes: Mapped[list["Usuario"]] = relationship(secondary="subgrupos_jefes", order_by="Usuario.nombre", viewonly=True)
+
+
+class SubgrupoJefe(Base):
+    __tablename__ = "subgrupos_jefes"
+
+    subgrupo_id: Mapped[int] = mapped_column(ForeignKey("subgrupos.id", ondelete="CASCADE"), primary_key=True)
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), primary_key=True, index=True)
 
 
@@ -274,6 +297,7 @@ class Usuario(Base):
     departamento: Mapped[str | None] = mapped_column(String(120))
     turno_id: Mapped[int | None] = mapped_column(ForeignKey("turnos.id", ondelete="SET NULL"))
     grupo_id: Mapped[int | None] = mapped_column(ForeignKey("grupos.id", ondelete="SET NULL"))
+    subgrupo_id: Mapped[int | None] = mapped_column(ForeignKey("subgrupos.id", ondelete="SET NULL"), index=True)  # área
     # Jefe directo (aprobador por defecto) y si este usuario puede aprobar solicitudes de su equipo
     jefe_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
     es_jefe: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
@@ -308,6 +332,7 @@ class Usuario(Base):
 
     turno: Mapped[Turno | None] = relationship()
     grupo: Mapped[Grupo | None] = relationship(back_populates="miembros")
+    subgrupo: Mapped["Subgrupo | None"] = relationship()
     sede: Mapped[Sede | None] = relationship()
     tipo_jornada: Mapped[TipoJornada | None] = relationship()
     jefe: Mapped["Usuario | None"] = relationship(remote_side="Usuario.id", foreign_keys=[jefe_id])

@@ -5,14 +5,14 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, object_session
 
 from . import reglas
 from .config import settings
 from .models import (
     BORRADOR, ESTADOS_ACTIVOS, ROL_ADMIN, ROL_GERENCIA_GH, SOLICITADO, VALIDADO, AdminSede, Festivo, Permiso, PeriodoVacaciones,
-    GrupoJefe, ReglaAntiguedad, SolicitudVacaciones, Usuario,
+    GrupoJefe, ReglaAntiguedad, SolicitudVacaciones, SubgrupoJefe, Usuario,
 )
 from .models import ROLES_ADMIN, es_admin  # noqa: F401
 from .models import TIPO_RETARDO as TIPO_RETARDO_SERV
@@ -257,8 +257,8 @@ def usuario_out(u: Usuario) -> UsuarioOut:
     out.antiguedad_anios = reglas.anios_cumplidos(u.fecha_ingreso, date.today())
     db = object_session(u)
     if db is not None and u.grupo_id:
-        out.jefes_grupo = list(db.scalars(select(GrupoJefe.usuario_id).where(GrupoJefe.grupo_id == u.grupo_id,
-                                                                              GrupoJefe.usuario_id != u.id)))
+        out.jefes_grupo = jefes_de_grupo(db, u)
+        out.subgrupo_nombre = u.subgrupo.nombre if u.subgrupo else None
     if db is not None and u.rol == ROL_GERENCIA_GH:
         out.sedes_admin = sorted(db.scalars(select(AdminSede.sede_id).where(AdminSede.usuario_id == u.id)))
     if db is not None and (u.es_jefe or es_admin(u)):
@@ -273,20 +273,34 @@ def puede_aprobar(u: Usuario) -> bool:
 
 
 def del_grupo(jefe_id: int):
-    """Subconsulta: integrantes de los grupos de planta donde el usuario es jefe (sin él mismo)."""
-    return select(Usuario.id).where(
-        Usuario.grupo_id.in_(select(GrupoJefe.grupo_id).where(GrupoJefe.usuario_id == jefe_id)), Usuario.id != jefe_id)
+    """Subconsulta: personal a cargo por grupo de planta (sin él mismo): los integrantes de las áreas donde es jefe y,
+    de los grupos donde es jefe, quienes no tienen área."""
+    return select(Usuario.id).where(Usuario.id != jefe_id, or_(
+        Usuario.subgrupo_id.in_(select(SubgrupoJefe.subgrupo_id).where(SubgrupoJefe.usuario_id == jefe_id)),
+        and_(Usuario.subgrupo_id.is_(None),
+             Usuario.grupo_id.in_(select(GrupoJefe.grupo_id).where(GrupoJefe.usuario_id == jefe_id)))))
+
+
+def jefes_de_grupo(db: Session, empleado: Usuario) -> list[int]:
+    """Jefes por grupo de planta: los de su área si tiene; si no, los de su grupo."""
+    if empleado.subgrupo_id:
+        q = select(Usuario.id).join(SubgrupoJefe, SubgrupoJefe.usuario_id == Usuario.id).where(
+            SubgrupoJefe.subgrupo_id == empleado.subgrupo_id)
+    elif empleado.grupo_id:
+        q = select(Usuario.id).join(GrupoJefe, GrupoJefe.usuario_id == Usuario.id).where(GrupoJefe.grupo_id == empleado.grupo_id)
+    else:
+        return []
+    return [i for i in db.scalars(q.order_by(Usuario.nombre)) if i != empleado.id]
 
 
 def es_jefe_de(actor: Usuario, empleado: Usuario | None) -> bool:
-    """Jefe directo del empleado o jefe de su grupo de planta."""
+    """Jefe directo del empleado o jefe de su área / grupo de planta."""
     if empleado is None or empleado.id == actor.id:
         return False
     if empleado.jefe_id == actor.id:
         return True
     db = object_session(empleado)
-    return empleado.grupo_id is not None and db is not None and db.scalar(select(GrupoJefe.usuario_id).where(
-        GrupoJefe.grupo_id == empleado.grupo_id, GrupoJefe.usuario_id == actor.id)) is not None
+    return db is not None and actor.id in jefes_de_grupo(db, empleado)
 
 
 def puede_aprobar_a(jefe: Usuario, empleado_sede_id: int | None) -> bool:
@@ -325,8 +339,9 @@ def puede_revisar(actor: Usuario, solicitud) -> bool:
 
 def resolver_aprobador(db: Session, empleado: Usuario, aprobador_id: int | None) -> int | None:
     """Valida el jefe elegido; si no se indica se usa el jefe directo del empleado."""
-    aprobador_id = aprobador_id or empleado.jefe_id or next(
-        (j.id for j in (empleado.grupo.jefes if empleado.grupo else []) if j.id != empleado.id and j.activo), None)
+    if not aprobador_id and not empleado.jefe_id:  # sin jefe directo: el primer jefe activo de su área o grupo
+        aprobador_id = next((i for i in jefes_de_grupo(db, empleado) if (j := db.get(Usuario, i)) and j.activo), None)
+    aprobador_id = aprobador_id or empleado.jefe_id
     if not aprobador_id:
         if es_admin(empleado):
             return None  # un administrador puede quedar en la bandeja general

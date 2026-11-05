@@ -955,3 +955,7 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .tp-opcion input[type="radio"] { width: auto; flex: none; margin: 3px 0 0; }
 .grupo-jefes { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 13px; }
 .grupo-jefes svg { color: var(--primary); flex: none; }
+.grupo-areas { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); display: grid; gap: 6px; font-size: 13px; }
+.grupo-areas > .fila svg { color: var(--primary); }
+.grupo-area { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; background: var(--bg); border-radius: 8px; padding: 6px 8px; }
+.grupo-area .ga-datos { flex: 1 1 100%; min-width: 0; }
