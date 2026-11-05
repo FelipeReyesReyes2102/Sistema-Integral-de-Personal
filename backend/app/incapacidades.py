@@ -44,14 +44,16 @@ def out(i: Incapacidad) -> IncapacidadOut:
 
 def puede_ver(user: Usuario, i: Incapacidad) -> bool:
     sede = i.usuario.sede_id if i.usuario else None
-    return (i.usuario_id == user.id or i.aprobador_id == user.id or (i.usuario and i.usuario.jefe_id == user.id)
+    from .services import es_jefe_de
+    return (i.usuario_id == user.id or i.aprobador_id == user.id or es_jefe_de(user, i.usuario)
             or admin_permite(user, sede) or (es_medico(user) and user.sede_id == sede))
 
 
 def puede_validar(user: Usuario, i: Incapacidad) -> bool:
     if i.usuario_id == user.id:
         return False
-    return i.aprobador_id == user.id or admin_permite(user, i.usuario.sede_id if i.usuario else None)
+    from .services import es_jefe_de
+    return i.aprobador_id == user.id or es_jefe_de(user, i.usuario) or admin_permite(user, i.usuario.sede_id if i.usuario else None)
 
 
 def texto(i: Incapacidad) -> str:

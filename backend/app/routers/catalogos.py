@@ -6,13 +6,13 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from .. import horarios
-from ..models import ROL_PLANTA, Festivo, Grupo, HorarioEspecial, ReglaAntiguedad, Sede, Turno, TurnoDia, Usuario
+from ..models import ROL_PLANTA, Festivo, Grupo, GrupoJefe, HorarioEspecial, ReglaAntiguedad, Sede, Turno, TurnoDia, Usuario
 from ..schemas import (
-    AsignarMiembros, FestivoIn, FestivoOut, GrupoIn, GrupoOut, ReglaIn, ReglaOut, TurnoIn, TurnoOut,
+    AsignarJefes, AsignarMiembros, FestivoIn, FestivoOut, GrupoIn, GrupoOut, ReglaIn, ReglaOut, TurnoIn, TurnoOut,
 )
-from ..security import get_current_user, require_admin, require_superadmin
+from ..security import auditar, get_current_user, require_admin, require_superadmin
 from ..sedes import Alcance, alcance, sede_principal
-from ..services import reglas_de_sede
+from ..services import puede_aprobar_a, reglas_de_sede
 
 router = APIRouter(prefix="/api", tags=["catálogos"])
 
@@ -157,6 +157,27 @@ def asignar_miembros(grupo_id: int, data: AsignarMiembros, db: Session = Depends
         if data.turno_id is not None:
             u.turno_id = data.turno_id
     db.commit()
+    return _grupo_out(db, g)
+
+
+@router.put("/grupos/{grupo_id}/jefes", response_model=GrupoOut)
+def asignar_jefes(grupo_id: int, data: AsignarJefes, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin),
+                  alc: Alcance = Depends(alcance)):
+    """Reemplaza los jefes del grupo: cualquiera de ellos ve a los integrantes en Mi equipo y aprueba sus solicitudes."""
+    g = _de_sede(db.get(Grupo, grupo_id), alc, "Grupo")
+    ids = list(dict.fromkeys(data.usuario_ids))
+    jefes = db.scalars(select(Usuario).where(Usuario.id.in_(ids))).all() if ids else []
+    if len(jefes) != len(ids):
+        raise HTTPException(404, "Alguno de los jefes no existe")
+    malos = [j.nombre for j in jefes if not puede_aprobar_a(j, g.sede_id)]
+    if malos:
+        raise HTTPException(400, f"Solo pueden ser jefes del grupo personas activas marcadas como jefe en la sede: {', '.join(malos)}")
+    db.execute(GrupoJefe.__table__.delete().where(GrupoJefe.grupo_id == g.id))
+    for j in jefes:
+        db.add(GrupoJefe(grupo_id=g.id, usuario_id=j.id))
+    auditar(db, "grupo_jefes", actor_id=admin.id, detalle=f"{g.nombre}: {', '.join(j.nombre for j in jefes) or 'sin jefes'}")
+    db.commit()
+    db.refresh(g)
     return _grupo_out(db, g)
 
 

@@ -2,7 +2,7 @@ from calendar import monthrange
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .. import reglas
@@ -15,7 +15,7 @@ from ..models import (
 from ..models import ROLES_ADMIN, es_admin, es_medico  # noqa: F401
 from ..security import get_current_user, require_admin
 from ..sedes import Alcance, admin_permite, alcance
-from ..services import ciclo_de, consulta_festivos, empleado_visible, festivos_de
+from ..services import ciclo_de, consulta_festivos, del_grupo, empleado_visible, festivos_de
 
 router = APIRouter(prefix="/api", tags=["calendario y resumen"])
 
@@ -210,11 +210,13 @@ def pendientes(db: Session = Depends(get_db), user: Usuario = Depends(get_curren
         q = select(func.count(modelo.id)).where(modelo.estado == SOLICITADO, *extra)
         return db.scalar(q) or 0
 
-    mias = (SolicitudVacaciones.aprobador_id == user.id, SolicitudVacaciones.usuario_id != user.id,
+    mias = (or_(SolicitudVacaciones.aprobador_id == user.id, SolicitudVacaciones.usuario_id.in_(del_grupo(user.id))),
+            SolicitudVacaciones.usuario_id != user.id,
             SolicitudVacaciones.aprobado_jefe_id.is_(None))
     from .. import flujos
     mias_p = (Permiso.usuario_id != user.id, flujos.asignados(user, solo_pendientes=True))
-    mias_i = (Incapacidad.aprobador_id == user.id, Incapacidad.usuario_id != user.id)
+    mias_i = (or_(Incapacidad.aprobador_id == user.id, Incapacidad.usuario_id.in_(del_grupo(user.id))),
+              Incapacidad.usuario_id != user.id)
     res = {"vacaciones": contar(SolicitudVacaciones, mias), "permisos": contar(Permiso, mias_p),
            "incapacidades": contar(Incapacidad, mias_i)}
     # Accesos negados en Teams sin motivo: el jefe debe capturarlo en SIP-O

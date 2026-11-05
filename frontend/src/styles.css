@@ -953,3 +953,5 @@ button.zoom-chip.consulta:hover { background: #b2dfdb; }
 .tp-nombre { display: flex; gap: 8px; align-items: center; }
 .tp-nombre input:not([type="color"]) { flex: 1; min-width: 0; }
 .tp-opcion input[type="radio"] { width: auto; flex: none; margin: 3px 0 0; }
+.grupo-jefes { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 13px; }
+.grupo-jefes svg { color: var(--primary); flex: none; }

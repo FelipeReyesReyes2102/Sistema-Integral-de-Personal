@@ -1,6 +1,6 @@
 """Incapacidades: las ve el empleado, las valida su jefe (o GH) y GH las consulta todas."""
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from .. import incapacidades as inc
@@ -9,7 +9,7 @@ from ..models import SOLICITADO, Incapacidad, Usuario, es_admin
 from ..schemas import IncapacidadOut, RechazoIn, ValidarIncapacidadIn
 from ..security import auditar, get_current_user
 from ..sedes import Alcance, alcance
-from ..services import empleado_visible
+from ..services import del_grupo, empleado_visible
 
 router = APIRouter(prefix="/api/incapacidades", tags=["incapacidades"])
 
@@ -22,7 +22,8 @@ def listar(estado: str | None = None, por_aprobar: bool = False, todos: bool = F
     if todos and es_admin(user):
         q = q.where(Incapacidad.usuario_id.in_(select(Usuario.id).where(alc.filtro(Usuario.sede_id))))
     elif por_aprobar:
-        q = q.where(Incapacidad.aprobador_id == user.id, Incapacidad.usuario_id != user.id)
+        q = q.where(or_(Incapacidad.aprobador_id == user.id, Incapacidad.usuario_id.in_(del_grupo(user.id))),
+                    Incapacidad.usuario_id != user.id)
     else:
         q = q.where(Incapacidad.usuario_id == empleado_visible(db, user, usuario_id).id)
     if estado:

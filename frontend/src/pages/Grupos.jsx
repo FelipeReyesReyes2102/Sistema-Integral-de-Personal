@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Pencil, Plus, Trash2, Users } from 'lucide-react'
+import { Pencil, Plus, Trash2, UserCheck, Users } from 'lucide-react'
 import { api } from '../api'
 import Modal from '../components/Modal'
 import SedeActual from '../components/SedeActual'
@@ -25,6 +25,7 @@ export default function Grupos() {
   const [lista, setLista] = useState([])
   const [form, setForm] = useState(null)
   const [miembros, setMiembros] = useState(null)
+  const [jefes, setJefes] = useState(null) // grupo cuyos jefes se editan
   const [error, setError] = useState('')
   const cargar = () => api('/grupos').then(setLista)
   useEffect(() => { cargar() }, [])
@@ -79,9 +80,13 @@ export default function Grupos() {
             </div>
             <div className="muted" style={{ margin: '8px 0' }}>{g.descripcion}</div>
             <div style={{ fontSize: 13 }}>{describirCiclo(g)}</div>
-            <div className="fila" style={{ marginTop: 14 }}>
+            <div className="grupo-jefes" title="Cualquiera de ellos ve a los integrantes en Mi equipo y aprueba sus solicitudes">
+              <UserCheck size={14} /> {g.jefes.length ? g.jefes.map((j) => j.nombre).join(', ') : <span className="muted">Sin jefes asignados</span>}
+            </div>
+            <div className="fila" style={{ marginTop: 10 }}>
               <span className="chip"><Users size={12} /> {g.total_miembros} empleado(s)</span>
               <div className="espacio" />
+              <button className="btn btn-sm" onClick={() => setJefes(g)}>Jefes</button>
               <button className="btn btn-sm" onClick={() => setMiembros(g)}>Asignar empleados</button>
             </div>
           </div>
@@ -122,6 +127,7 @@ export default function Grupos() {
         </Modal>
       )}
       {miembros && <Miembros grupo={miembros} onClose={() => setMiembros(null)} onSaved={() => { setMiembros(null); cargar() }} />}
+      {jefes && <JefesGrupo grupo={jefes} onClose={() => setJefes(null)} onSaved={() => { setJefes(null); cargar() }} />}
     </>
   )
 }
@@ -189,6 +195,52 @@ function Miembros({ grupo, onClose, onSaved }) {
               </tr>
             ))}
             {visibles.length === 0 && <tr><td colSpan={5} className="muted">No hay empleados de planta activos.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {error && <div className="alerta error">{error}</div>}
+    </Modal>
+  )
+}
+
+/** Jefes del grupo: cualquiera de ellos ve a los integrantes en Mi equipo y aprueba sus solicitudes. */
+function JefesGrupo({ grupo, onClose, onSaved }) {
+  const [jefes, setJefes] = useState([])
+  const [sel, setSel] = useState(() => new Set(grupo.jefes.map((j) => j.id)))
+  const [buscar, setBuscar] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => { api('/jefes', { query: { sede_id: grupo.sede_id } }).then(setJefes).catch((e) => setError(e.message)) }, [grupo.id])
+
+  const toggle = (id) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  async function guardar() {
+    try {
+      await api(`/grupos/${grupo.id}/jefes`, { method: 'PUT', body: { usuario_ids: [...sel] } })
+      onSaved()
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+  const visibles = jefes.filter((j) => !buscar || j.nombre.toLowerCase().includes(buscar.toLowerCase()))
+
+  return (
+    <Modal titulo={`Jefes de ${grupo.nombre}`} onClose={onClose}
+      pie={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={guardar}>Guardar ({sel.size})</button></>}>
+      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+        Los {grupo.total_miembros} integrante(s) del grupo quedan a cargo de los jefes que marques: cualquiera de ellos los ve en
+        <b> Mi equipo</b> y puede aprobar sus solicitudes. Solo aparecen personas marcadas como <b>jefe</b> en la sede.
+      </p>
+      <input placeholder="Buscar jefe…" value={buscar} onChange={(e) => setBuscar(e.target.value)} style={{ marginBottom: 8 }} />
+      <div className="tabla-wrap" style={{ maxHeight: 340, overflowY: 'auto' }}>
+        <table className="tabla">
+          <tbody>
+            {visibles.map((j) => (
+              <tr key={j.id} onClick={() => toggle(j.id)} style={{ cursor: 'pointer' }}>
+                <td style={{ width: 30 }}><input type="checkbox" checked={sel.has(j.id)} readOnly style={{ width: 'auto' }} /></td>
+                <td>{j.nombre}<div className="muted" style={{ fontSize: 12 }}>{j.email}</div></td>
+              </tr>
+            ))}
+            {visibles.length === 0 && <tr><td className="muted">No hay jefes en la sede. Marca «Es jefe» en la ficha del empleado.</td></tr>}
           </tbody>
         </table>
       </div>

@@ -212,6 +212,8 @@ def registrar_retardo(data: RetardoIn, tareas: BackgroundTasks, db: Session = De
     if duplicado:
         raise HTTPException(409, f"{emp.nombre} ya tiene un permiso de llegada tarde hoy.")
     jefe = emp.jefe if emp.jefe and emp.jefe.activo and emp.jefe_id != emp.id else None
+    if jefe is None and emp.grupo:  # sin jefe directo: el primer jefe de su grupo de planta
+        jefe = next((j for j in emp.grupo.jefes if j.activo and j.id != emp.id), None)
     a_gh = data.enviar_gh or jefe is None
     aprobador = _gh_aprobador(db, emp) if a_gh else jefe
     motivo = (data.motivo or "").strip()

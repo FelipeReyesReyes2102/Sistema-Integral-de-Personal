@@ -89,11 +89,21 @@ class GrupoIn(BaseModel):
     activo: bool = True
 
 
+class JefeGrupoOut(ORM):
+    id: int
+    nombre: str
+
+
 class GrupoOut(GrupoIn, ORM):
     id: int
     sede_id: int | None = None
     sede_nombre: str | None = None
     total_miembros: int = 0
+    jefes: list[JefeGrupoOut] = []   # cualquiera aprueba a los integrantes y los ve en Mi equipo
+
+
+class AsignarJefes(BaseModel):
+    usuario_ids: list[int]
 
 
 class AsignarMiembros(BaseModel):
@@ -153,6 +163,7 @@ class UsuarioOut(UsuarioBase, ORM):
     turno_nombre: str | None = None
     grupo_nombre: str | None = None
     jefe_nombre: str | None = None
+    jefes_grupo: list[int] = []          # jefes de su grupo de planta (también aprueban sus solicitudes)
     antiguedad_anios: int = 0
     total_a_cargo: int = 0
     tiene_foto: bool = False

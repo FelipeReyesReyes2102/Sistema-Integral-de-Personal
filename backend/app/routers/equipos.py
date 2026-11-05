@@ -13,7 +13,7 @@ from ..models import (
 from ..schemas import MotivoIn, RevisionTIIn, SalidaEquipoIn, SalidaEquipoOut
 from ..security import ahora, auditar, get_current_user
 from ..sedes import Alcance, admin_permite, alcance, hoy_de, normalizar, sedes_visibles
-from ..services import resolver_aprobador
+from ..services import del_grupo, resolver_aprobador
 
 router = APIRouter(prefix="/api/equipos", tags=["salida de equipo"])
 
@@ -70,7 +70,8 @@ def listar(estado: str | None = None, por_aprobar: bool = False, todos: bool = F
         stmt = stmt.where(SalidaEquipo.usuario_id.in_(select(Usuario.id).where(Usuario.sede_id.in_(sedes or {-1}))),
                           SalidaEquipo.estado != BORRADOR)
     elif por_aprobar:
-        stmt = stmt.where(SalidaEquipo.aprobador_id == user.id, SalidaEquipo.usuario_id != user.id,
+        stmt = stmt.where(or_(SalidaEquipo.aprobador_id == user.id, SalidaEquipo.usuario_id.in_(del_grupo(user.id))),
+                          SalidaEquipo.usuario_id != user.id,
                           SalidaEquipo.estado != BORRADOR)
     else:
         stmt = stmt.where(SalidaEquipo.usuario_id == user.id)
@@ -284,7 +285,8 @@ def registrar_regreso(sid: int, request: Request, db: Session = Depends(get_db),
 def pendientes(db: Session, user: Usuario) -> dict:
     """Para el círculo rojo: por autorizar como jefe y, para TI, autorizadas por el jefe sin revisar."""
     res = {"equipos": db.scalar(select(func.count(SalidaEquipo.id)).where(
-        SalidaEquipo.aprobador_id == user.id, SalidaEquipo.usuario_id != user.id, SalidaEquipo.estado == SOLICITADO)) or 0}
+        or_(SalidaEquipo.aprobador_id == user.id, SalidaEquipo.usuario_id.in_(del_grupo(user.id))),
+        SalidaEquipo.usuario_id != user.id, SalidaEquipo.estado == SOLICITADO)) or 0}
     if es_ti(user):  # solo TI ve (y cuenta) todas las de su sede
         sedes_ti = {s.id for s in sedes_visibles(db, user)} if es_admin(user) else {user.sede_id}
         res["todas_equipos"] = db.scalar(select(func.count(SalidaEquipo.id)).where(

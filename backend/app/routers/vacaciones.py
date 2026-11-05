@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from .. import reglas
@@ -20,6 +20,7 @@ from ..schemas import (
 from ..security import get_current_user
 from ..sedes import Alcance, admin_permite, alcance, hoy_de
 from ..services import (
+    del_grupo, es_jefe_de,
     aprobar, ciclo_de, consulta_festivos, jornada_de, empleado_visible, festivos_de, hay_traslape, puede_revisar, resolver_aprobador, saldo_periodo,
     sincronizar_periodos,
 )
@@ -267,7 +268,8 @@ def listar(estado: str | None = None, usuario_id: int | None = None, todos: bool
     if todos and es_admin(user):
         q = q.where(SolicitudVacaciones.usuario_id.in_(select(Usuario.id).where(alc.filtro(Usuario.sede_id))))
     elif por_aprobar:
-        q = q.where(SolicitudVacaciones.aprobador_id == user.id, SolicitudVacaciones.usuario_id != user.id)
+        q = q.where(or_(SolicitudVacaciones.aprobador_id == user.id, SolicitudVacaciones.usuario_id.in_(del_grupo(user.id))),
+                    SolicitudVacaciones.usuario_id != user.id)
         if estado == SOLICITADO:  # las que ya aprobé y esperan a GH no son mías
             q = q.where(SolicitudVacaciones.aprobado_jefe_id.is_(None))
     else:
@@ -313,7 +315,7 @@ def crear(data: VacacionesIn, db: Session = Depends(get_db), user: Usuario = Dep
 def _obtener(db: Session, sid: int, user: Usuario) -> SolicitudVacaciones:
     s = db.get(SolicitudVacaciones, sid)
     visible = s and (s.usuario_id == user.id or (es_admin(user) and admin_permite(user, s.usuario.sede_id))
-                     or s.aprobador_id == user.id or s.usuario.jefe_id == user.id)
+                     or s.aprobador_id == user.id or es_jefe_de(user, s.usuario))
     if not visible:
         raise HTTPException(404, "Solicitud no encontrada")
     return s

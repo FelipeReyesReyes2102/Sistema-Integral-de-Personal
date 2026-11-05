@@ -11,7 +11,7 @@ from ..models import ROLES_ADMIN, es_admin  # noqa: F401
 from ..schemas import JefeOut, MiembroEquipoOut
 from ..security import get_current_user
 from ..sedes import Alcance, admin_permite, alcance
-from ..services import saldo_periodo, sincronizar_periodos, usuario_out
+from ..services import del_grupo, saldo_periodo, sincronizar_periodos, usuario_out
 
 router = APIRouter(prefix="/api", tags=["jefes y equipo"])
 
@@ -47,7 +47,9 @@ def mi_equipo(jefe_id: int | None = None, db: Session = Depends(get_db), user: U
         jefe = jefe_id
     hoy = date.today()
     res = []
-    for u in db.scalars(select(Usuario).where(Usuario.jefe_id == jefe, Usuario.activo.is_(True)).order_by(Usuario.nombre)):
+    # Su personal directo y los integrantes de los grupos de planta donde es jefe
+    a_cargo = or_(Usuario.jefe_id == jefe, Usuario.id.in_(del_grupo(jefe)))
+    for u in db.scalars(select(Usuario).where(a_cargo, Usuario.activo.is_(True)).order_by(Usuario.nombre)):
         saldos = [saldo_periodo(db, p) for p in sincronizar_periodos(db, u)]
         vigentes = [s for s in saldos if s.vigente]
         actual = vigentes[-1] if vigentes else (saldos[-1] if saldos else None)

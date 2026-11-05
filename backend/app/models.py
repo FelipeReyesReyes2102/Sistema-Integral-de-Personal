@@ -240,10 +240,19 @@ class Grupo(Base):
 
     miembros: Mapped[list["Usuario"]] = relationship(back_populates="grupo")
     sede: Mapped[Sede | None] = relationship()
+    # Jefes del grupo: cualquiera de ellos ve a los integrantes en Mi equipo y aprueba sus solicitudes
+    jefes: Mapped[list["Usuario"]] = relationship(secondary="grupos_jefes", order_by="Usuario.nombre", viewonly=True)
 
     @property
     def sede_nombre(self) -> str | None:
         return self.sede.nombre if self.sede else None
+
+
+class GrupoJefe(Base):
+    __tablename__ = "grupos_jefes"
+
+    grupo_id: Mapped[int] = mapped_column(ForeignKey("grupos.id", ondelete="CASCADE"), primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), primary_key=True, index=True)
 
 
 class Usuario(Base):

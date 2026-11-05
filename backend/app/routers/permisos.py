@@ -16,6 +16,7 @@ from ..schemas import MotivoRechazoIn, PasoOut, PermisoIn, PermisoOut, RechazoIn
 from ..security import get_current_user
 from ..sedes import Alcance, admin_permite, alcance, hoy_de
 from ..services import (
+    es_jefe_de,
     MOTIVO_MIN, aprobar, ciclo_de, empleado_visible, festivos_de, jornada_de, motivo_rechazo_obligatorio, puede_revisar,
     resolver_aprobador,
 )
@@ -174,7 +175,7 @@ def crear(data: PermisoIn, db: Session = Depends(get_db), user: Usuario = Depend
 def _obtener(db: Session, pid: int, user: Usuario) -> Permiso:
     p = db.get(Permiso, pid)
     visible = p and (p.usuario_id == user.id or (es_admin(user) and admin_permite(user, p.usuario.sede_id))
-                     or p.aprobador_id == user.id or p.usuario.jefe_id == user.id or flujos.participa(user, p))
+                     or p.aprobador_id == user.id or es_jefe_de(user, p.usuario) or flujos.participa(user, p))
     if not visible:
         _404()
     return p

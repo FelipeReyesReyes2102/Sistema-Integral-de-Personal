@@ -10,7 +10,9 @@ export default function SelectorJefe({ empleado, value, onChange }) {
       const lista = js.filter((j) => j.id !== empleado?.id)
       setJefes(lista)
       if (!value) {
-        const porDefecto = lista.find((j) => j.id === empleado?.jefe_id) || (lista.length === 1 ? lista[0] : null)
+        // Su jefe directo; si no tiene, el primer jefe de su grupo de planta
+        const porDefecto = lista.find((j) => j.id === empleado?.jefe_id)
+          || lista.find((j) => (empleado?.jefes_grupo || []).includes(j.id)) || (lista.length === 1 ? lista[0] : null)
         if (porDefecto) onChange(porDefecto.id)
       }
     }).catch(() => {})
@@ -21,7 +23,7 @@ export default function SelectorJefe({ empleado, value, onChange }) {
       <option value="">Selecciona…</option>
       {jefes.map((j) => (
         <option key={j.id} value={j.id}>
-          {j.nombre}{j.id === empleado?.jefe_id ? ' (jefe directo)' : ''} · {j.email}
+          {j.nombre}{j.id === empleado?.jefe_id ? ' (jefe directo)' : (empleado?.jefes_grupo || []).includes(j.id) ? ' (jefe del grupo)' : ''} · {j.email}
         </option>
       ))}
     </select>

@@ -185,7 +185,8 @@ def correos_actuales(permiso) -> str | None:
 def asignados(user: Usuario, solo_pendientes: bool):
     """Condición SQL de los permisos que le tocan (o le tocaron) al usuario como aprobador."""
     sin_cadena = ~Permiso.pasos.any()
-    legado = and_(Permiso.aprobador_id == user.id, sin_cadena)
+    from .services import del_grupo
+    legado = and_(or_(Permiso.aprobador_id == user.id, Permiso.usuario_id.in_(del_grupo(user.id))), sin_cadena)
     if solo_pendientes:
         legado = and_(legado, Permiso.aprobado_jefe_id.is_(None))
     mio = PasoSolicitud.usuario_id == user.id

@@ -62,14 +62,16 @@ def out(s: SalidaEquipo) -> SalidaEquipoOut:
 
 def puede_ver(user: Usuario, s: SalidaEquipo) -> bool:
     sede = s.usuario.sede_id if s.usuario else None
-    return (s.usuario_id == user.id or s.aprobador_id == user.id or (s.usuario and s.usuario.jefe_id == user.id)
+    from .services import es_jefe_de
+    return (s.usuario_id == user.id or s.aprobador_id == user.id or es_jefe_de(user, s.usuario)
             or admin_permite(user, sede) or ((user.puede_ti or user.rol == "caseta") and user.sede_id == sede))
 
 
 def puede_revisar_jefe(user: Usuario, s: SalidaEquipo) -> bool:
     if s.usuario_id == user.id:
         return False
-    return s.aprobador_id == user.id or admin_permite(user, s.usuario.sede_id if s.usuario else None)
+    from .services import es_jefe_de
+    return s.aprobador_id == user.id or es_jefe_de(user, s.usuario) or admin_permite(user, s.usuario.sede_id if s.usuario else None)
 
 
 def autorizar_jefe(s: SalidaEquipo, actor: Usuario):
