@@ -100,8 +100,36 @@ def saldo(v) -> tuple[float, float]:
     raise ValueError(f"saldo no reconocido: «{v}»")
 
 
+PARTICULAS = {"de", "del", "la", "las", "los", "y", "van", "von", "da", "di"}
+
+
 def nombre_propio(t: str) -> str:
-    return " ".join(p.capitalize() for p in str(t).split())
+    """Mayúscula inicial; las partículas (de, del, la…) en minúscula salvo al inicio."""
+    palabras = str(t).lower().split()
+    return " ".join(p if i and p in PARTICULAS else p.capitalize() for i, p in enumerate(palabras))
+
+
+def nombre_ordenado(t: str) -> str:
+    """«APELLIDO1 APELLIDO2 NOMBRES» → «Nombres Apellido1 Apellido2».
+
+    Los apellidos compuestos con partícula se respetan («SOTO DE ANDA XIMENA» → «Ximena Soto de Anda») y un doble
+    espacio indica que falta el segundo apellido («MARTINEZ  LUIS FERNANDO» → «Luis Fernando Martinez»).
+    """
+    tokens = str(t).strip().split(" ")
+    apellidos, i = [], 0
+    for _ in range(2):
+        partes = []
+        while i < len(tokens) and tokens[i].lower() in PARTICULAS:
+            partes.append(tokens[i])
+            i += 1
+        if i < len(tokens):
+            partes.append(tokens[i])  # vacío = doble espacio: no hay segundo apellido
+            i += 1
+        apellidos.append(" ".join(x for x in partes if x))
+    nombres = " ".join(x for x in tokens[i:] if x)
+    if not nombres:  # menos de tres palabras: no se puede separar con seguridad
+        return nombre_propio(t)
+    return nombre_propio(f"{nombres} {' '.join(a for a in apellidos if a)}")
 
 
 @dataclass
@@ -149,7 +177,7 @@ def interpretar(filas: list[list]) -> tuple[list[Fila], list[str]]:
             continue  # vacías o fila de totales al final del reporte
         if isinstance(nomina, float):
             nomina = str(int(nomina)) if nomina.is_integer() else str(nomina)
-        e = Fila(fila=k, nomina=str(nomina or "").strip(), nombre=nombre_propio(nombre), fecha_ingreso=_fecha(g(r, "ingreso")),
+        e = Fila(fila=k, nomina=str(nomina or "").strip(), nombre=nombre_ordenado(nombre), fecha_ingreso=_fecha(g(r, "ingreso")),
                  planta="12horas" in _norm(g(r, "comentario")))
         if not e.nomina:
             e.errores.append("Sin número de nómina")

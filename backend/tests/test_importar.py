@@ -62,10 +62,14 @@ def _enviar(c, aplicar, password=""):
 
 
 def test_saldo_y_lectura():
+    assert importacion.nombre_ordenado("SOTO DE ANDA XIMENA GERALDINE") == "Ximena Geraldine Soto de Anda"
+    assert importacion.nombre_ordenado("DE LARA SANTANA JORGE") == "Jorge de Lara Santana"
+    assert importacion.nombre_ordenado("REYES REYES FELIPE DE JESUS") == "Felipe de Jesus Reyes Reyes"
+    assert importacion.nombre_ordenado("MARTINEZ  LUIS FERNANDO") == "Luis Fernando Martinez"
     assert importacion.saldo("7+8 horas") == (7, 8) and importacion.saldo(26.0) == (26, 0) and importacion.saldo(None) == (0, 0)
     filas, periodos = importacion.interpretar(importacion.leer_xlsx(_archivo()))
     assert [f.nomina for f in filas] == ["9001", "9002", "9003", "0001", "9004"]  # sin la fila de totales
-    assert filas[1].nombre == "Garcia Ana" and filas[1].planta and not filas[0].planta
+    assert filas[1].nombre == "Ana Garcia" and filas[1].planta and not filas[0].planta
     assert periodos[0].startswith(f"Periodo {HOY.year - 1}")
 
 
@@ -89,7 +93,7 @@ def test_importar_vista_previa_y_alta():
     assert r.status_code == 200, r.text
     with SessionLocal() as db:
         juan = db.query(Usuario).filter(Usuario.numero_empleado == "9001").one()
-        assert juan.rol == "oficina" and juan.email is None and juan.debe_cambiar_password and juan.nombre == "Perez Lopez Juan"
+        assert juan.rol == "oficina" and juan.email is None and juan.debe_cambiar_password and juan.nombre == "Juan Perez Lopez"
         ana = db.query(Usuario).filter(Usuario.numero_empleado == "9002").one()
         assert ana.rol == "planta"
         assert db.query(Usuario).filter(Usuario.numero_empleado == "0001").one().nombre == nombre_antes  # no se toca
