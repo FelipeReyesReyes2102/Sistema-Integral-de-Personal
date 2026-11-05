@@ -207,7 +207,7 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
         numero_empleado: f.numero_empleado || r.numero_empleado || '',
         fecha_ingreso: r.fecha_ingreso || f.fecha_ingreso,
         jefe_id: r.jefe_id || f.jefe_id,
-        sede_id: r.sede_id && (!inicial.id || soySuper) ? r.sede_id : f.sede_id,
+        sede_id: r.sede_id && !inicial.id ? r.sede_id : f.sede_id, // al editar no se cambia la sede
         es_jefe: f.es_jefe || r.tiene_reportes,     // tiene personas a cargo en Microsoft
         turno_id: f.turno_id || (f.rol !== 'planta' ? turnoOficina() : '') || '',
         microsoft_oid: r.oid,
@@ -376,8 +376,10 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
               {r.ubicacion && (
                 <div style={{ fontSize: 12, marginTop: 4 }}>
                   Ubicación del trabajo: <b>{r.ubicacion}</b>{' '}
-                  {r.sede_id ? (r.sede_nueva ? '→ se creó la sede' : '→ sede asignada')
-                    : <span style={{ color: 'var(--danger)' }}>(no es una de tus sedes; pide a un super administrador que lo registre)</span>}
+                  {!r.sede_id
+                    ? <span className="muted">(no coincide con ninguna de tus sedes: se conserva la sede elegida)</span>
+                    : inicial.id ? (Number(r.sede_id) !== Number(form.sede_id) && <span className="muted">(se conserva su sede actual; cámbiala abajo si es necesario)</span>)
+                      : '→ sede asignada'}
                 </div>
               )}
               {!r.cuenta_habilitada && <div className="alerta warn" style={{ margin: '6px 0 0' }}>La cuenta está deshabilitada en Microsoft.</div>}

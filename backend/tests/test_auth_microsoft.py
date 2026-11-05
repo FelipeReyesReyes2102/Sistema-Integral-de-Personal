@@ -21,7 +21,7 @@ from app import microsoft
 from app.config import settings
 from app.database import SessionLocal
 from app.main import app
-from app.models import Sesion, Usuario
+from app.models import Sede, Sesion, Usuario
 from app.security import ahora, hash_password
 from app.seed import main as seed
 
@@ -318,8 +318,8 @@ def test_ubicacion_de_microsoft_define_la_sede():
     from app.sedes import normalizar
     assert normalizar("O-TEK  MEXICO") == normalizar("O-tek México")
     d = admin.get("/api/usuarios/microsoft/buscar?email=carta@empresa.com").json()
-    assert d["ubicacion"] == "O-Tek Colombia - Cartagena (prueba)" and d["sede_id"] is None and not d["sede_nueva"]
-    # El super administrador sí la crea
+    assert d["ubicacion"] == "O-Tek Colombia - Cartagena (prueba)" and d["sede_id"] is None
+    # Tampoco la crea el super administrador: las sedes se crean solo desde Super administrador → Sedes
     with SessionLocal() as db:
         if not db.query(Usuario).filter(Usuario.email == "super.ms@empresa.com").first():
             db.add(Usuario(numero_empleado="SM-1", nombre="Super MS", email="super.ms@empresa.com", rol="superadmin",
@@ -330,7 +330,9 @@ def test_ubicacion_de_microsoft_define_la_sede():
     assert su.post("/api/auth/login-json", json={"email": "super.ms@empresa.com", "password": "Super12345"}).status_code == 200
     su.headers["X-CSRF-Token"] = su.cookies["sip_csrf"]
     d = su.get("/api/usuarios/microsoft/buscar?email=carta@empresa.com").json()
-    assert d["sede_nueva"] and d["sede_nombre"] == "O-Tek Colombia - Cartagena (prueba)" and d["sede_id"]
+    assert d["sede_id"] is None and d["sede_nombre"] is None
+    with SessionLocal() as db:
+        assert not db.query(Sede).filter(Sede.nombre == "O-Tek Colombia - Cartagena (prueba)").first()
     # Importar todas las ubicaciones del directorio
     r = su.post("/api/sedes/importar-microsoft").json()
     assert r["creadas"] == ["O-Tek Colombia - Medellín (prueba)"]

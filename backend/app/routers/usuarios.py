@@ -73,15 +73,8 @@ def buscar_en_microsoft(email: str, request: Request, db: Session = Depends(get_
     except microsoft.ErrorMicrosoft as e:
         raise HTTPException(e.status, e.mensaje)
     out = EmpleadoMicrosoftOut(**datos)
+    # Solo se sugiere una sede existente: buscar no crea sedes (una ubicación distinta en Microsoft creaba sedes de más)
     sede = sede_por_ubicacion(db, datos.get("ubicacion"))
-    if sede is None and datos.get("ubicacion") and admin.rol == ROL_SUPERADMIN:
-        sede = Sede(nombre=datos["ubicacion"].strip()[:120], ubicacion_microsoft=datos["ubicacion"].strip()[:200])
-        db.add(sede)
-        db.commit()
-        crear_jornadas_base(db, sede)
-        auditar(db, "sede_creada", actor_id=admin.id, detalle=f"{sede.nombre} (desde Microsoft)", request=request)
-        db.commit()
-        out.sede_nueva = True
     if sede is not None and alc.permite(sede.id) or (sede is not None and admin_permite(admin, sede.id)):
         out.sede_id, out.sede_nombre = sede.id, sede.nombre
     elif sede is not None:

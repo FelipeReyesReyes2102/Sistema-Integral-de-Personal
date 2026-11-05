@@ -234,7 +234,6 @@ class EmpleadoMicrosoftOut(BaseModel):
     ubicacion: str | None = None        # "Ubicación del trabajo" (officeLocation) de Microsoft
     sede_id: int | None = None          # sede que corresponde a esa ubicación
     sede_nombre: str | None = None
-    sede_nueva: bool = False            # se creó la sede a partir de la ubicación
     tiene_reportes: bool = False        # tiene personas a cargo en Microsoft: se sugiere marcarlo como jefe
     foto: str | None = None             # data URL
     ya_registrado_id: int | None = None
