@@ -305,9 +305,11 @@ function IntegrantesArea({ grupo, area, onClose, onSaved }) {
 
   useEffect(() => {
     api('/usuarios', { query: { rol: 'planta', activos: true } }).then((us) => {
-      const delGrupo = us.filter((u) => u.grupo_id === grupo.id)
-      setEmpleados(delGrupo)
-      setSel(new Set(delGrupo.filter((u) => u.subgrupo_id === area.id).map((u) => u.id)))
+      // Todo el personal de planta de la sede: primero los del grupo
+      const deSede = us.filter((u) => u.sede_id === grupo.sede_id)
+        .sort((a, b) => (b.grupo_id === grupo.id) - (a.grupo_id === grupo.id) || a.nombre.localeCompare(b.nombre))
+      setEmpleados(deSede)
+      setSel(new Set(deSede.filter((u) => u.subgrupo_id === area.id).map((u) => u.id)))
     }).catch((e) => setError(e.message))
   }, [area.id])
 
@@ -326,23 +328,24 @@ function IntegrantesArea({ grupo, area, onClose, onSaved }) {
     <Modal ancho titulo={`Integrantes de ${grupo.nombre} · ${area.nombre}`} onClose={onClose}
       pie={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn btn-primary" onClick={guardar}>Guardar ({sel.size})</button></>}>
       <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
-        Marca a quienes pertenecen al área: los atenderán los jefes del área. Si alguien estaba en otra área del grupo, se cambia a esta.
-        Para que aparezca aquí, primero agrégalo al grupo con <b>Asignar empleados</b>.
+        Marca a quienes pertenecen al área: los atenderán los jefes del área. Quien no esté en {grupo.nombre} pasa a este grupo
+        (y a su ciclo de trabajo); si estaba en otra área, se cambia a esta.
       </p>
       <input placeholder="Buscar…" value={buscar} onChange={(e) => setBuscar(e.target.value)} style={{ maxWidth: 260, marginBottom: 8 }} />
       <div className="tabla-wrap" style={{ maxHeight: 380, overflowY: 'auto' }}>
         <table className="tabla">
-          <thead><tr><th /><th>No.</th><th>Nombre</th><th>Área actual</th></tr></thead>
+          <thead><tr><th /><th>No.</th><th>Nombre</th><th>Grupo actual</th><th>Área actual</th></tr></thead>
           <tbody>
             {visibles.map((u) => (
               <tr key={u.id} onClick={() => toggle(u.id)} style={{ cursor: 'pointer' }}>
                 <td><input type="checkbox" checked={sel.has(u.id)} readOnly style={{ width: 'auto' }} /></td>
                 <td>{u.numero_empleado}</td>
                 <td>{u.nombre}</td>
+                <td className={u.grupo_id === grupo.id ? 'muted' : ''}>{u.grupo_nombre || '—'}</td>
                 <td className="muted">{u.subgrupo_nombre || '—'}</td>
               </tr>
             ))}
-            {visibles.length === 0 && <tr><td colSpan={4} className="muted">El grupo no tiene integrantes.</td></tr>}
+            {visibles.length === 0 && <tr><td colSpan={5} className="muted">No hay empleados de planta activos en la sede.</td></tr>}
           </tbody>
         </table>
       </div>

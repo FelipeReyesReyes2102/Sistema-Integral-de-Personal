@@ -266,17 +266,22 @@ def asignar_jefes_subgrupo(subgrupo_id: int, data: AsignarJefes, db: Session = D
 @router.put("/subgrupos/{subgrupo_id}/miembros", response_model=GrupoOut)
 def asignar_miembros_subgrupo(subgrupo_id: int, data: AsignarMiembros, db: Session = Depends(get_db),
                               admin: Usuario = Depends(require_admin), alc: Alcance = Depends(alcance)):
-    """Reemplaza los integrantes del área; solo pueden ser integrantes del grupo."""
+    """Reemplaza los integrantes del área (personal de planta de la sede). Quien no estaba en el grupo pasa a él; quien
+    se quita del área sigue en el grupo, sin área."""
     sg = _subgrupo(db, subgrupo_id, alc)
+    g = sg.grupo
     nuevos = db.scalars(select(Usuario).where(Usuario.id.in_(data.usuario_ids))).all() if data.usuario_ids else []
-    fuera = [u.nombre for u in nuevos if u.grupo_id != sg.grupo_id]
-    if fuera:
-        raise HTTPException(400, f"Primero agrégalos al grupo {sg.grupo.nombre}: {', '.join(fuera)}")
+    otra_sede = [u.nombre for u in nuevos if u.sede_id != g.sede_id]
+    if otra_sede:
+        raise HTTPException(400, f"Solo empleados de la sede del grupo: {', '.join(otra_sede)}")
+    no_planta = [u.nombre for u in nuevos if u.rol != ROL_PLANTA]
+    if no_planta:
+        raise HTTPException(400, f"Solo se pueden asignar empleados de planta: {', '.join(no_planta)}")
     for u in db.scalars(select(Usuario).where(Usuario.subgrupo_id == sg.id)):
         if u.id not in data.usuario_ids:
             u.subgrupo_id = None
     for u in nuevos:
-        u.subgrupo_id = sg.id
+        u.grupo_id, u.subgrupo_id = g.id, sg.id
     auditar(db, "area_integrantes", actor_id=admin.id, detalle=f"{sg.grupo.nombre} → {sg.nombre}: {len(nuevos)} integrante(s)")
     db.commit()
     db.refresh(sg.grupo)

@@ -99,13 +99,18 @@ def test_areas_con_sus_jefes():
     assert r.status_code == 201, r.text
     assert admin.post(f"/api/grupos/{gid}/subgrupos", json={"nombre": "Calidad"}).status_code == 409
     area = next(a for a in r.json()["subgrupos"] if a["nombre"] == "Calidad")
-    # Solo integrantes del grupo; jefes válidos de la sede
+    # Solo personal de planta de la sede (pasa al grupo si no estaba); jefes válidos de la sede
     assert admin.put(f"/api/subgrupos/{area['id']}/miembros", json={"usuario_ids": [ids["noj"]]}).status_code == 400
+    with SessionLocal() as db:
+        db.get(Usuario, ids["emp"]).grupo_id = None
+        db.commit()
     assert admin.put(f"/api/subgrupos/{area['id']}/jefes", json={"usuario_ids": [ids["noj"]]}).status_code == 400
     admin.put(f"/api/subgrupos/{area['id']}/jefes", json={"usuario_ids": [ids["otro"]]})
     r = admin.put(f"/api/subgrupos/{area['id']}/miembros", json={"usuario_ids": [ids["emp"]]})
     a = next(x for x in r.json()["subgrupos"] if x["id"] == area["id"])
     assert a["total_miembros"] == 1 and [j["nombre"] for j in a["jefes"]] == ["Ciro Jefe Ajeno"]
+    with SessionLocal() as db:
+        assert db.get(Usuario, ids["emp"]).grupo_id == gid  # entró al grupo al asignarle el área
 
     # Eva (área Calidad) queda con el jefe del área, ya no con el del grupo
     me = entrar("gj-5@o-tek.com", PWD).get("/api/auth/me").json()
