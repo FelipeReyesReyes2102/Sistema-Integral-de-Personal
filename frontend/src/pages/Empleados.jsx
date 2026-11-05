@@ -254,7 +254,7 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
       turno_id: form.turno_id ? Number(form.turno_id) : null,
       grupo_id: form.rol === 'planta' && form.grupo_id ? Number(form.grupo_id) : null,
       jefe_id: form.jefe_id ? Number(form.jefe_id) : null,
-      email: ['planta', 'caseta'].includes(form.rol) ? null : (form.email || '').trim() || null,
+      email: (form.email || '').trim() || null,
       email_personal: (form.email_personal || '').trim() || null,
       fecha_nacimiento: form.fecha_nacimiento || null,
       direccion: (form.direccion || '').trim() || null,
@@ -317,14 +317,8 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
       <section className="emp-seccion">
         <h4><KeyRound size={15} /> Cuenta y acceso</h4>
         <div className="form-grid">
-        {['planta', 'caseta'].includes(form.rol) ? (
-          <div className="full alerta warn" style={{ margin: 0 }}>
-            El personal de {form.rol === 'caseta' ? 'caseta' : 'planta'} no tiene correo corporativo: registra su <b>correo personal</b> (ahí recibirá sus avisos de turno)
-            y podrá entrar con su número de nómina.
-          </div>
-        ) : (
         <div className="campo full">
-          <span>Correo corporativo</span>
+          <span>Correo corporativo {['planta', 'caseta'].includes(form.rol) && <span className="muted">(opcional; p. ej. supervisores)</span>}</span>
           <div className="ms-buscar">
             <input type="email" value={form.email} onChange={set('email')} placeholder="nombre@o-tek.com"
               onKeyDown={(e) => { if (e.key === 'Enter' && graph) { e.preventDefault(); buscarMicrosoft() } }} />
@@ -334,17 +328,16 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
               </button>
             )}
           </div>
-          {!graph && form.rol !== 'planta' && (
+          {!graph && (
             <span className="muted" style={{ fontSize: 11 }}>
               Para cargar los datos y la foto desde Microsoft, configura MICROSOFT_GRAPH_ENABLED (ver docs/MICROSOFT_ENTRA.md).
             </span>
           )}
         </div>
-        )}
-        <label className="campo">Correo personal {['planta', 'caseta'].includes(form.rol) ? '' : '(opcional)'}
+        <label className="campo">Correo personal (opcional)
           <input type="email" value={form.email_personal || ''} onChange={set('email_personal')} placeholder="nombre@gmail.com" />
           <span className="muted" style={{ fontSize: 11 }}>
-            {['planta', 'caseta'].includes(form.rol) ? 'Se usa para los avisos por correo y también sirve para iniciar sesión.' : 'También sirve para iniciar sesión. Los avisos se envían al correo corporativo.'}
+            También sirve para iniciar sesión. Los avisos van al correo corporativo; si no tiene, a este.
           </span>
         </label>
         <label className="campo">Número de nómina

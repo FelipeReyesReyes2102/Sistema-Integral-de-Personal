@@ -94,9 +94,9 @@ def test_correo_corporativo_y_personal():
     assert r.status_code == 201 and r.json()["email"] is None
     r = admin.post("/api/usuarios", json={**nuevo("oficina", "C-1", "C1@O-tek.com"), "email_personal": "c1@gmail.com"})
     assert r.status_code == 201 and r.json()["email"] == "c1@o-tek.com" and r.json()["email_personal"] == "c1@gmail.com"
-    # Planta: no tiene correo corporativo aunque se envíe; solo personal
+    # Planta también puede tener correo corporativo (p. ej. supervisores) además del personal
     r = admin.post("/api/usuarios", json={**nuevo("planta", "P-1", "p1@o-tek.com"), "email_personal": "p1@gmail.com"})
-    assert r.status_code == 201 and r.json()["email"] is None and r.json()["email_personal"] == "p1@gmail.com"
+    assert r.status_code == 201 and r.json()["email"] == "p1@o-tek.com" and r.json()["email_personal"] == "p1@gmail.com"
     r = admin.post("/api/usuarios", json={**nuevo("planta", "P-2", None)})  # planta sin ningún correo: permitido
     assert r.status_code == 201
     assert admin.post("/api/usuarios", json={**nuevo("planta", "P-3", None), "email_personal": "malo"}).status_code == 422

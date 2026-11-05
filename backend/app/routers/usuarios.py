@@ -13,7 +13,6 @@ from ..database import get_db
 from ..models import (
     ROL_ADMIN, ROL_GERENCIA_GH, ROL_OFICINA, ROL_PLANTA, ROL_SUPERADMIN, AdminSede, Grupo, PeriodoVacaciones, Sede,
     TipoJornada, Turno, Usuario,
-    tiene_correo_corporativo,
 )
 from ..correo import EMAIL
 from ..schemas import AjustePeriodo, EmpleadoMicrosoftOut, PeriodoOut, RegistrarJefeIn, UsuarioIn, UsuarioOut
@@ -409,9 +408,8 @@ def _limpiar(data: UsuarioIn) -> dict:
     valores = data.model_dump(exclude={"password", "foto", "quitar_foto", "dias_disponibles", "sedes_admin"})
     corporativo = (valores.get("email") or "").strip().lower() or None
     personal = (valores.get("email_personal") or "").strip().lower() or None
-    if not tiene_correo_corporativo(data.rol):
-        corporativo = None  # planta no tiene correo corporativo
-    # Oficinas sin correo (p. ej. importados de Excel): entran con su nómina y contraseña hasta que se capture
+    # El correo corporativo es opcional para cualquier tipo de usuario (p. ej. supervisores de planta lo tienen);
+    # sin correo entran con su nómina y contraseña
     for etiqueta, valor in (("corporativo", corporativo), ("personal", personal)):
         if valor and not EMAIL.match(valor):
             raise HTTPException(422, f"El correo {etiqueta} no es válido.")

@@ -22,11 +22,6 @@ ROLES = (ROL_SUPERADMIN, ROL_GERENCIA_GH, ROL_ADMIN, ROL_OFICINA, ROL_PLANTA, RO
 ROLES_ADMIN = (ROL_ADMIN, ROL_GERENCIA_GH, ROL_SUPERADMIN)
 
 
-def tiene_correo_corporativo(rol: str) -> bool:
-    """Solo el personal de oficinas tiene correo corporativo (planta y caseta usan su correo personal)."""
-    return rol not in (ROL_PLANTA, ROL_CASETA)
-
-
 def correo_contacto(usuario) -> str | None:
     """Correo para avisos personales: el corporativo y, si no tiene, el personal."""
     return (usuario.email or usuario.email_personal) if usuario is not None else None
