@@ -141,3 +141,47 @@ def test_aviso_de_los_viernes(ids, monkeypatch):
     assert len(ENVIADOS) == 2
     # Envío manual desde la pantalla
     assert admin.post("/api/rotacion/avisos").json()["enviados"] == 2
+
+
+def test_grupo_con_turno_fijo(ids):
+    """El Grupo C no rota y queda siempre de día; A y B rotan; al desactivar, C sigue en su turno fijo."""
+    t, g = ids
+    with SessionLocal() as db:
+        sede = sede_principal(db).id
+        gc = db.query(Grupo).filter(Grupo.nombre == "Grupo C fijo").first()
+        if gc is None:
+            gc = Grupo(nombre="Grupo C fijo", sede_id=sede, tipo_ciclo="semanal", dias_semana="0,1,2,3,4")
+            db.add(gc)
+            db.flush()
+        u = db.query(Usuario).filter(Usuario.email_personal == "carlos@empresa.com").one()
+        grupo_original = u.grupo_id
+        u.grupo_id, u.turno_id = gc.id, t["Noche"]
+        db.commit()
+        gc_id = gc.id
+    try:
+        admin = entrar("admin@empresa.com", "Admin123")
+        datos = config_activa(t, g)
+        datos["grupos"].append({"grupo_id": gc_id, "en_rotacion": False, "turno_fijo_id": t["Día"]})
+        r = admin.put("/api/rotacion", json=datos)
+        assert r.status_code == 200, r.text
+        c = next(x for x in r.json()["grupos"] if x["id"] == gc_id)
+        assert c["turno_fijo_id"] == t["Día"] and c["turno_actual"] == "Día"
+        with SessionLocal() as db:
+            assert db.query(Usuario).filter(Usuario.email_personal == "carlos@empresa.com").one().turno.nombre == "Día"
+            rotacion.sincronizar(db, sede_principal(db).id, date.today() + timedelta(weeks=1))  # sigue de día
+            assert db.query(Usuario).filter(Usuario.email_personal == "carlos@empresa.com").one().turno.nombre == "Día"
+        # Al desactivar con turno único Noche, el Grupo C sigue de día y los demás quedan de noche
+        r = admin.put("/api/rotacion", json={**datos, "activo": False, "turno_unico_id": t["Noche"]})
+        assert r.status_code == 200, r.text
+        with SessionLocal() as db:
+            assert db.query(Usuario).filter(Usuario.email_personal == "carlos@empresa.com").one().turno.nombre == "Día"
+            assert db.query(Usuario).filter(Usuario.email_personal == "maria@empresa.com").one().turno.nombre == "Noche"
+        # Un turno fijo de otra sede no se acepta
+        datos["grupos"][-1]["turno_fijo_id"] = 999999
+        assert admin.put("/api/rotacion", json=datos).status_code == 422
+    finally:
+        with SessionLocal() as db:
+            u = db.query(Usuario).filter(Usuario.email_personal == "carlos@empresa.com").one()
+            u.grupo_id = grupo_original
+            db.get(Grupo, gc_id).turno_fijo_id = None
+            db.commit()

@@ -165,6 +165,8 @@ def asignar_miembros(grupo_id: int, data: AsignarMiembros, db: Session = Depends
         if data.turno_id is not None:
             u.turno_id = data.turno_id
     db.commit()
+    from .. import rotacion
+    rotacion.sincronizar(db, g.sede_id)  # los nuevos integrantes toman el turno de la rotación o el turno fijo del grupo
     return _grupo_out(db, g)
 
 
@@ -284,6 +286,8 @@ def asignar_miembros_subgrupo(subgrupo_id: int, data: AsignarMiembros, db: Sessi
         u.grupo_id, u.subgrupo_id = g.id, sg.id
     auditar(db, "area_integrantes", actor_id=admin.id, detalle=f"{sg.grupo.nombre} → {sg.nombre}: {len(nuevos)} integrante(s)")
     db.commit()
+    from .. import rotacion
+    rotacion.sincronizar(db, g.sede_id)
     db.refresh(sg.grupo)
     return _grupo_out(db, sg.grupo)
 

@@ -17,7 +17,8 @@ export default function RotacionTurnos({ onCambio }) {
     setForm({
       activo: e.activo, fecha_inicio: e.fecha_inicio || '', semanas: e.semanas, turnos_orden: e.turnos_orden,
       turno_unico_id: e.turno_unico_id || '', aviso_activo: e.aviso_activo, aviso_hora: e.aviso_hora,
-      grupos: e.grupos.map((g) => ({ grupo_id: g.id, en_rotacion: g.en_rotacion, turno_inicial_id: g.turno_inicial_id || '' })),
+      grupos: e.grupos.map((g) => ({ grupo_id: g.id, en_rotacion: g.en_rotacion, turno_inicial_id: g.turno_inicial_id || '',
+        turno_fijo_id: g.turno_fijo_id || '' })),
     })
   }
   const cargar = () => api('/rotacion').then(aplicar).catch((e) => setMsg({ ok: false, t: e.message }))
@@ -32,8 +33,9 @@ export default function RotacionTurnos({ onCambio }) {
   })
   const setGrupo = (gid, k, v) => setForm({ ...form, grupos: form.grupos.map((g) => (g.grupo_id === gid ? { ...g, [k]: v } : g)) })
   const diaCambio = form.fecha_inicio ? DIAS[(new Date(`${form.fecha_inicio}T12:00`).getDay() + 6) % 7] : null
-  const afectados = estado.grupos.filter((g) => form.grupos.find((x) => x.grupo_id === g.id)?.en_rotacion || g.en_rotacion)
-    .reduce((s, g) => s + g.miembros, 0)
+  const fijoDe = (gid) => form.grupos.find((x) => x.grupo_id === gid)?.turno_fijo_id
+  const afectados = estado.grupos.filter((g) => !fijoDe(g.id)).reduce((s, g) => s + g.miembros, 0)
+  const sinFijo = estado.grupos.some((g) => !fijoDe(g.id))
 
   async function guardar() {
     if (estado.activo && !form.activo && !window.confirm(
@@ -46,7 +48,10 @@ export default function RotacionTurnos({ onCambio }) {
         body: {
           ...form, fecha_inicio: form.fecha_inicio || null, semanas: Number(form.semanas), aviso_hora: Number(form.aviso_hora),
           turno_unico_id: form.turno_unico_id ? Number(form.turno_unico_id) : null,
-          grupos: form.grupos.map((g) => ({ ...g, turno_inicial_id: g.turno_inicial_id ? Number(g.turno_inicial_id) : null })),
+          grupos: form.grupos.map((g) => ({
+            ...g, turno_inicial_id: g.turno_inicial_id ? Number(g.turno_inicial_id) : null,
+            turno_fijo_id: g.turno_fijo_id && !(form.activo && g.en_rotacion) ? Number(g.turno_fijo_id) : null,
+          })),
         },
       })
       aplicar(r)
@@ -81,8 +86,9 @@ export default function RotacionTurnos({ onCambio }) {
         <span className="muted" style={{ fontSize: 13 }}>{estado.descripcion}</span>
       </div>
       <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
-        Con la rotación activa, los grupos seleccionados cambian de turno automáticamente cada periodo. Al desactivarla,
-        todo el personal de los grupos queda en un solo turno.
+        Con la rotación activa, los grupos marcados cambian de turno automáticamente cada periodo. Un grupo que no rota
+        puede tener un <b>turno fijo</b>: su personal queda siempre en ese turno, con la rotación activa o desactivada. Al
+        desactivarla, el personal de los grupos sin turno fijo queda en un solo turno.
       </p>
 
       <div className="cfg-grid">
@@ -101,7 +107,7 @@ export default function RotacionTurnos({ onCambio }) {
               {estado.turnos.map((t) => <option key={t.id} value={t.id}>{t.nombre} ({t.hora_entrada} - {t.hora_salida})</option>)}
             </select>
           </div>
-          {!form.activo && <span className="of-ayuda">Al guardar, {afectados} empleado(s) de los grupos quedarán en este turno.</span>}
+          {!form.activo && <span className="of-ayuda">Al guardar, {afectados} empleado(s) de los grupos sin turno fijo quedarán en este turno.</span>}
         </div>
 
         {form.activo && (
@@ -137,33 +143,6 @@ export default function RotacionTurnos({ onCambio }) {
               </div>
             </div>
 
-            <div className="full">
-              <div className="tabla-wrap">
-                <table className="tabla">
-                  <thead><tr><th>Rota</th><th>Grupo</th><th>Empleados</th><th>Turno en el primer periodo</th><th>Turno actual</th></tr></thead>
-                  <tbody>
-                    {estado.grupos.map((g) => {
-                      const f = form.grupos.find((x) => x.grupo_id === g.id)
-                      return (
-                        <tr key={g.id}>
-                          <td><input type="checkbox" style={{ width: 'auto' }} checked={f.en_rotacion} onChange={(e) => setGrupo(g.id, 'en_rotacion', e.target.checked)} /></td>
-                          <td><span className="punto" style={{ background: g.color }} />{g.nombre}</td>
-                          <td>{g.miembros}</td>
-                          <td>
-                            <select style={{ width: 180 }} disabled={!f.en_rotacion} value={f.turno_inicial_id}
-                              onChange={(e) => setGrupo(g.id, 'turno_inicial_id', e.target.value)}>
-                              <option value="">—</option>
-                              {form.turnos_orden.map((id) => <option key={id} value={id}>{turnoNombre(id)}</option>)}
-                            </select>
-                          </td>
-                          <td>{g.turno_actual || <span className="muted">—</span>}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
 
             <div className="of">
               <div className="of-caja"><span className="of-et">Aviso semanal por correo</span>
@@ -183,6 +162,42 @@ export default function RotacionTurnos({ onCambio }) {
             </div>
           </>
         )}
+        <div className="full">
+          <div className="tabla-wrap">
+            <table className="tabla">
+              <thead><tr>{form.activo && <th>Rota</th>}<th>Grupo</th><th>Empleados</th><th>Turno</th><th>Turno actual</th></tr></thead>
+              <tbody>
+                {estado.grupos.map((g) => {
+                  const f = form.grupos.find((x) => x.grupo_id === g.id)
+                  const rotaAqui = form.activo && f.en_rotacion
+                  return (
+                    <tr key={g.id}>
+                      {form.activo && <td><input type="checkbox" style={{ width: 'auto' }} checked={f.en_rotacion} onChange={(e) => setGrupo(g.id, 'en_rotacion', e.target.checked)} /></td>}
+                      <td><span className="punto" style={{ background: g.color }} />{g.nombre}</td>
+                      <td>{g.miembros}</td>
+                      <td>
+                        {rotaAqui ? (
+                          <select style={{ width: 220 }} value={f.turno_inicial_id} title="Turno en el primer periodo"
+                            onChange={(e) => setGrupo(g.id, 'turno_inicial_id', e.target.value)}>
+                            <option value="">Primer periodo…</option>
+                            {form.turnos_orden.map((id) => <option key={id} value={id}>Empieza en {turnoNombre(id)}</option>)}
+                          </select>
+                        ) : (
+                          <select style={{ width: 220 }} value={f.turno_fijo_id} title="Turno fijo del grupo"
+                            onChange={(e) => setGrupo(g.id, 'turno_fijo_id', e.target.value)}>
+                            <option value="">{form.activo ? 'Sin turno fijo' : 'Turno único'}</option>
+                            {estado.turnos.map((t) => <option key={t.id} value={t.id}>Siempre {t.nombre} ({t.hora_entrada}-{t.hora_salida})</option>)}
+                          </select>
+                        )}
+                      </td>
+                      <td>{g.turno_actual || <span className="muted">—</span>}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <div className="fila" style={{ marginTop: 16 }}>

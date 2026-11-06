@@ -19,6 +19,7 @@ class GrupoRotacionIn(BaseModel):
     grupo_id: int
     en_rotacion: bool
     turno_inicial_id: int | None = None
+    turno_fijo_id: int | None = None  # si no rota: turno en el que queda siempre el grupo
 
 
 class RotacionIn(BaseModel):
@@ -56,8 +57,9 @@ def _estado(db: Session, sede_id: int | None) -> dict:
         "turnos": [{"id": t.id, "nombre": t.nombre, "hora_entrada": t.hora_entrada.strftime("%H:%M"),
                     "hora_salida": t.hora_salida.strftime("%H:%M")} for t in turnos.values()],
         "grupos": [{"id": g.id, "nombre": g.nombre, "color": g.color, "en_rotacion": g.en_rotacion,
-                    "turno_inicial_id": g.rotacion_turno_inicial_id, "miembros": miembros.get(g.id, 0),
-                    "turno_actual": (turnos[t].nombre if (t := rotacion.turno_de_grupo(cfg, g, date.today())) in turnos else None)}
+                    "turno_inicial_id": g.rotacion_turno_inicial_id, "turno_fijo_id": g.turno_fijo_id,
+                    "miembros": miembros.get(g.id, 0),
+                    "turno_actual": (turnos[t].nombre if (t := rotacion.turno_asignado(cfg, g, date.today())) in turnos else None)}
                    for g in grupos],
         "vista_previa": vista,
     }
@@ -87,8 +89,10 @@ def guardar(data: RotacionIn, request: Request, db: Session = Depends(get_db), a
             if g.turno_inicial_id not in orden:
                 errores.append("Cada grupo que rota debe tener un turno inicial de los turnos en rotación.")
                 break
-    elif data.turno_unico_id not in turnos_validos:
+    elif data.turno_unico_id not in turnos_validos and any(not g.turno_fijo_id for g in data.grupos):
         errores.append("Al desactivar la rotación elige el turno único para todo el personal de los grupos.")
+    if any(g.turno_fijo_id and not g.en_rotacion and g.turno_fijo_id not in turnos_validos for g in data.grupos):
+        errores.append("El turno fijo de un grupo debe ser un turno de la sede.")
     if errores:
         raise HTTPException(422, " ".join(errores))
 
@@ -99,6 +103,7 @@ def guardar(data: RotacionIn, request: Request, db: Session = Depends(get_db), a
         if g.grupo_id in grupos:
             grupos[g.grupo_id].en_rotacion = g.en_rotacion
             grupos[g.grupo_id].rotacion_turno_inicial_id = g.turno_inicial_id if g.en_rotacion else None
+            grupos[g.grupo_id].turno_fijo_id = None if g.en_rotacion else g.turno_fijo_id
     cfg.activo, cfg.fecha_inicio, cfg.semanas = data.activo, data.fecha_inicio, data.semanas
     cfg.turnos_orden = ",".join(str(t) for t in dict.fromkeys(orden))
     cfg.turno_unico_id = data.turno_unico_id
@@ -110,9 +115,10 @@ def guardar(data: RotacionIn, request: Request, db: Session = Depends(get_db), a
         cambios = rotacion.sincronizar(db, sede_id)
         detalle = f"rotación activa · {cambios} usuario(s) actualizados"
     else:
-        # Todos los integrantes de los grupos (los que rotaban y los marcados) quedan en un solo turno
+        # Los integrantes de los grupos sin turno fijo quedan en un solo turno; los de turno fijo, en el suyo
         ids = list({g.grupo_id for g in data.grupos if g.grupo_id in grupos} | {gid for gid, g in grupos.items() if g.en_rotacion})
-        cambios = rotacion.aplicar_turno_unico(db, data.turno_unico_id, ids)
+        cambios = rotacion.aplicar_turno_unico(db, data.turno_unico_id, ids) if data.turno_unico_id else 0
+        cambios += rotacion.sincronizar(db, sede_id)
         detalle = f"rotación {'desactivada' if estaba_activo else 'inactiva'} · turno único · {cambios} usuario(s)"
     auditar(db, "rotacion_turnos", actor_id=admin.id, detalle=detalle, request=request)
     db.commit()

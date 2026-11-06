@@ -237,6 +237,8 @@ class Grupo(Base):
     # Rotación de turnos: si participa y con qué turno empieza el primer periodo
     en_rotacion: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     rotacion_turno_inicial_id: Mapped[int | None] = mapped_column(ForeignKey("turnos.id", ondelete="SET NULL"))
+    # Turno fijo: si el grupo no rota, todos sus integrantes quedan siempre en este turno (con o sin rotación activa)
+    turno_fijo_id: Mapped[int | None] = mapped_column(ForeignKey("turnos.id", ondelete="SET NULL"))
 
     miembros: Mapped[list["Usuario"]] = relationship(back_populates="grupo")
     sede: Mapped[Sede | None] = relationship()

@@ -5,7 +5,10 @@ Con la rotación activa, cada grupo participante cambia de turno cada `semanas` 
 El turno vigente se copia a `Usuario.turno_id` (sincronización diaria) para que el resto del sistema
 (permisos, avisos a caseta, jornada) use siempre el turno actual.
 
-Con la rotación desactivada, todos los integrantes de los grupos pasan al `turno_unico_id`.
+Los grupos que no rotan pueden tener un `turno_fijo_id`: sus integrantes quedan siempre en ese turno, con la
+rotación activa o desactivada (p. ej. el Grupo C siempre de día mientras A y B rotan entre día y noche).
+
+Con la rotación desactivada, los integrantes de los grupos sin turno fijo pasan al `turno_unico_id`.
 """
 import html
 import logging
@@ -54,10 +57,21 @@ def turno_de_grupo(cfg: RotacionTurnos, grupo: Grupo, fecha: date) -> int | None
     return ids[(ids.index(grupo.rotacion_turno_inicial_id) + numero_periodo(cfg, fecha)) % len(ids)]
 
 
+def rota(cfg: RotacionTurnos, grupo: Grupo) -> bool:
+    return bool(cfg.activo and grupo.en_rotacion)
+
+
+def turno_asignado(cfg: RotacionTurnos, grupo: Grupo, fecha: date) -> int | None:
+    """Turno que le corresponde al grupo: el de la rotación si rota; si no, su turno fijo (o None)."""
+    if rota(cfg, grupo):
+        return turno_de_grupo(cfg, grupo, fecha)
+    return grupo.turno_fijo_id
+
+
 def turno_efectivo(db: Session, usuario: Usuario, fecha: date) -> Turno | None:
     cfg = config(db, usuario.sede_id)
     if usuario.grupo is not None:
-        tid = turno_de_grupo(cfg, usuario.grupo, fecha)
+        tid = turno_asignado(cfg, usuario.grupo, fecha)
         if tid:
             return db.get(Turno, tid)
     return usuario.turno
@@ -68,24 +82,24 @@ def sincronizar(db: Session, sede_id: int | None, hoy: date | None = None) -> in
     hoy = hoy or date.today()
     cfg = config(db, sede_id)
     cambios = 0
-    if cfg.activo:
-        for g in db.scalars(select(Grupo).where(Grupo.en_rotacion.is_(True), Grupo.sede_id == sede_id)):
-            tid = turno_de_grupo(cfg, g, hoy)
-            if not tid:
-                continue
-            for u in db.scalars(select(Usuario).where(Usuario.grupo_id == g.id, Usuario.activo.is_(True))):
-                if u.turno_id != tid:
-                    u.turno_id = tid
-                    cambios += 1
+    for g in db.scalars(select(Grupo).where(Grupo.sede_id == sede_id)):
+        tid = turno_asignado(cfg, g, hoy)  # grupos que rotan y grupos con turno fijo
+        if not tid:
+            continue
+        for u in db.scalars(select(Usuario).where(Usuario.grupo_id == g.id, Usuario.activo.is_(True))):
+            if u.turno_id != tid:
+                u.turno_id = tid
+                cambios += 1
     cfg.ultima_sincronizacion = hoy
     db.commit()
     return cambios
 
 
 def aplicar_turno_unico(db: Session, turno_id: int, grupo_ids: list[int]) -> int:
-    """Al desactivar la rotación: todos los integrantes de los grupos quedan en un solo turno."""
+    """Al desactivar la rotación: los integrantes de los grupos sin turno fijo quedan en un solo turno."""
     cambios = 0
-    for u in db.scalars(select(Usuario).where(Usuario.grupo_id.in_(grupo_ids), Usuario.activo.is_(True))):
+    sin_fijo = select(Grupo.id).where(Grupo.id.in_(grupo_ids), Grupo.turno_fijo_id.is_(None))
+    for u in db.scalars(select(Usuario).where(Usuario.grupo_id.in_(sin_fijo), Usuario.activo.is_(True))):
         if u.turno_id != turno_id:
             u.turno_id = turno_id
             cambios += 1
