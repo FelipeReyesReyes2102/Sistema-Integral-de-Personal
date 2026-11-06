@@ -115,6 +115,7 @@ def test_areas_con_sus_jefes():
     # Eva (área Calidad) queda con el jefe del área, ya no con el del grupo
     me = entrar("gj-5@o-tek.com", PWD).get("/api/auth/me").json()
     assert me["jefes_grupo"] == [ids["otro"]] and me["subgrupo_nombre"] == "Calidad"
+    assert me["jefes_grupo_nombres"] == ["Ciro Jefe Ajeno"]  # se muestran en Empleados y en caseta
     ana, ciro = entrar("gj-1@o-tek.com", PWD), entrar("gj-3@o-tek.com", PWD)
     assert ids["emp"] in [m["usuario"]["id"] for m in ciro.get("/api/equipo").json()]
     assert ids["emp"] not in [m["usuario"]["id"] for m in ana.get("/api/equipo").json()]

@@ -176,6 +176,7 @@ class UsuarioOut(UsuarioBase, ORM):
     grupo_nombre: str | None = None
     jefe_nombre: str | None = None
     jefes_grupo: list[int] = []          # jefes de su área o grupo de planta (también aprueban sus solicitudes)
+    jefes_grupo_nombres: list[str] = []
     subgrupo_id: int | None = None       # área dentro de su grupo (se asigna desde Grupos)
     subgrupo_nombre: str | None = None
     antiguedad_anios: int = 0

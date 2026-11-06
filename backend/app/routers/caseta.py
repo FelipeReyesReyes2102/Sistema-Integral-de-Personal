@@ -25,6 +25,8 @@ from ..models import (
 from ..security import ahora, auditar, get_current_user
 from ..sedes import ahora_en, sedes_visibles
 
+from ..services import nombres_jefes_de_grupo  # noqa: E402
+
 router = APIRouter(prefix="/api/caseta", tags=["caseta"])
 
 
@@ -103,7 +105,8 @@ def empleados(q: str | None = None, con_permisos: bool = False, limite: int = 30
             continue
         h = horarios.horario_de(u.turno, dia)
         fila = {**_persona(u), "id": u.id, "entrada_hoy": h["entrada"].strftime("%H:%M") if h else None,
-                "salida_hoy": h["salida"].strftime("%H:%M") if h else None, "jefe_nombre": u.jefe.nombre if u.jefe else None}
+                "salida_hoy": h["salida"].strftime("%H:%M") if h else None,
+                "jefe_nombre": u.jefe.nombre if u.jefe else (", ".join(nombres_jefes_de_grupo(db, u)) or None)}
         if con_permisos:
             q_p = select(Permiso).where(Permiso.usuario_id == u.id, Permiso.estado.in_((SOLICITADO, VALIDADO)),
                                         Permiso.fecha <= dia, func.coalesce(Permiso.fecha_fin, Permiso.fecha) >= dia)

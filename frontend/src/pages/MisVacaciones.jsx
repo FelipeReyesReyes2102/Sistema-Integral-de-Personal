@@ -267,7 +267,8 @@ export default function MisVacaciones({ usuarioId }) {
         </dd>
         {empleado.fecha_nacimiento && <><dt>Cumpleaños</dt><dd>{diaMes(empleado.fecha_nacimiento)}</dd></>}
         {empleado.numero_empleado && <><dt>Nómina</dt><dd>{empleado.numero_empleado}</dd></>}
-        {empleado.jefe_nombre && <><dt>Jefe</dt><dd>{empleado.jefe_nombre}</dd></>}
+        {empleado.jefe_nombre ? <><dt>Jefe</dt><dd>{empleado.jefe_nombre}</dd></>
+          : empleado.jefes_grupo_nombres?.length > 0 && <><dt>{empleado.subgrupo_nombre ? `Jefes (${empleado.subgrupo_nombre})` : 'Jefes del grupo'}</dt><dd>{empleado.jefes_grupo_nombres.join(', ')}</dd></>}
         {empleado.grupo_nombre && <><dt>Grupo</dt><dd>{empleado.grupo_nombre}</dd></>}
       </dl>
       <MiTurno usuarioId={usuarioId} incrustado />

@@ -106,7 +106,12 @@ export default function Empleados() {
                   {u.tipo_jornada_nombre && <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>{u.tipo_jornada_nombre}</div>}
                   {u.es_jefe && <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>Jefe · {u.total_a_cargo} a cargo</div>}
                 </td>
-                <td>{u.jefe_nombre || <span className="muted">Sin jefe</span>}</td>
+                <td>{u.jefe_nombre || (u.jefes_grupo_nombres?.length ? (
+                  <>
+                    {u.jefes_grupo_nombres.join(', ')}
+                    <div className="muted" style={{ fontSize: 11 }}>{u.subgrupo_nombre ? `Jefes del área ${u.subgrupo_nombre}` : 'Jefes del grupo'}</div>
+                  </>
+                ) : <span className="muted">Sin jefe</span>)}</td>
                 <td>{fmtFecha(u.fecha_ingreso, false)}</td>
                 <td>{u.antiguedad_anios} año(s)</td>
                 <td title={u.saldo_detalle || 'Sin periodos vigentes'}>

@@ -258,6 +258,7 @@ def usuario_out(u: Usuario) -> UsuarioOut:
     db = object_session(u)
     if db is not None and u.grupo_id:
         out.jefes_grupo = jefes_de_grupo(db, u)
+        out.jefes_grupo_nombres = nombres_jefes_de_grupo(db, u)
         out.subgrupo_nombre = u.subgrupo.nombre if u.subgrupo else None
     if db is not None and u.rol == ROL_GERENCIA_GH:
         out.sedes_admin = sorted(db.scalars(select(AdminSede.sede_id).where(AdminSede.usuario_id == u.id)))
@@ -291,6 +292,11 @@ def jefes_de_grupo(db: Session, empleado: Usuario) -> list[int]:
     else:
         return []
     return [i for i in db.scalars(q.order_by(Usuario.nombre)) if i != empleado.id]
+
+
+def nombres_jefes_de_grupo(db: Session, empleado: Usuario) -> list[str]:
+    """Nombres de los jefes activos de su área o grupo (para mostrarlos cuando no tiene jefe directo)."""
+    return [j.nombre for i in jefes_de_grupo(db, empleado) if (j := db.get(Usuario, i)) and j.activo]
 
 
 def es_jefe_de(actor: Usuario, empleado: Usuario | None) -> bool:
