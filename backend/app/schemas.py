@@ -541,6 +541,8 @@ class PermisoOut(ORM):
     falta_gh: bool = False
     pasos: list[PasoOut] = []           # cadena de aprobación (vacía = flujo de la sede)
     paso_actual: str | None = None
+    lote: int | None = None
+    lote_fechas: list[date] = []  # días del lote (solo en el principal)
 
 
 class ValidarPermisoIn(BaseModel):

@@ -332,3 +332,35 @@ def test_acceso_negado_en_teams_sin_comentario_pide_motivo(graph, monkeypatch):
     assert fila["motivo_rechazo"] == "Sin autorización de horas extra" and fila["motivo_pendiente"] is False
     _limpiar(ret["id"])
     adm.delete("/api/sharepoint/permisos")
+
+
+def test_permiso_de_varios_dias_una_tarjeta_en_teams(graph, monkeypatch):
+    """Permiso de varios días: solo el principal pide aprobación en Teams y al aprobarlo quedan todos los días."""
+    from app import correo
+    from tests.test_permisos_varios import _borrar
+    from tests.test_home_office import lunes_en
+    monkeypatch.setattr(correo, "enviar", lambda *a: None)
+    adm, ana = super_login(), login("ana@empresa.com", "Cambiar123")
+    cfg = adm.put("/api/sharepoint/permisos/conectar", json={"url": URL}).json()
+    teams = {"aprobacion_teams": True, "col_decision": "Decision", "col_comentario": "ComentarioTeams",
+             "col_respondio": "Respondio", "cuenta_flujo": "Flujos@o-tek.com"}
+    assert adm.put("/api/sharepoint/permisos", json={"activo": True, "mapeo": cfg["mapeo"], "valores": cfg["valores"],
+                                                     **teams}).status_code == 200
+    lunes = lunes_en(19)
+    _borrar("ana@empresa.com", lunes, lunes + timedelta(days=6))
+    r = ana.post("/api/permisos/varios", json={
+        "tipo": "llegada_tarde", "fecha": str(lunes), "fecha_fin": str(lunes + timedelta(days=4)), "hora_inicio": "08:00",
+        "hora_fin": "09:00", "motivo": "Cita", "tipo_nomina": "reposicion", "enviar": True, "firma": FIRMA})
+    assert r.status_code == 201, r.text
+    creados = sorted(r.json(), key=lambda p: p["fecha"])
+    sharepoint.procesar_pendientes()
+    items = {v["Title"]: (k, v) for k, v in graph["items"].items()}
+    k0, principal = items[f"PER-{creados[0]['id']}"]
+    assert principal.get("CorreoJefe")
+    assert all(not items[f"PER-{p['id']}"][1].get("CorreoJefe") for p in creados[1:])
+    jefe = adm.get(f"/api/usuarios/{creados[0]['aprobador_id']}").json()
+    graph["items"][k0].update({"Decision": "Approve", "Respondio": jefe["email"], "ComentarioTeams": "Ok"})
+    assert sharepoint.revisar_decisiones() == 1
+    assert {ana.get(f"/api/permisos/{p['id']}").json()["estado"] for p in creados} == {"validado"}
+    _borrar("ana@empresa.com", lunes, lunes + timedelta(days=6))
+    adm.delete("/api/sharepoint/permisos")

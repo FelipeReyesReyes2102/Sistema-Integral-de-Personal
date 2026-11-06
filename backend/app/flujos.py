@@ -217,6 +217,9 @@ def mensaje_paso(p: Permiso, paso: PasoSolicitud) -> tuple[str, str, str]:
         cuando = f"{p.fecha:%d/%m/%Y} al {(p.fecha_fin or p.fecha):%d/%m/%Y}"
     else:
         cuando = f"{p.fecha:%d/%m/%Y} de {p.hora_inicio:%H:%M} a {p.hora_fin:%H:%M} ({p.horas:g} h)"
+        from . import lotes
+        if (dias := lotes.texto_fechas(db, p)):
+            cuando = f"{dias} · de {p.hora_inicio:%H:%M} a {p.hora_fin:%H:%M} ({p.horas:g} h cada día)"
     activos = [x for x in p.pasos if x.estado != OMITIDO]
     n = next((i for i, x in enumerate(activos, 1) if x is paso), 1)
     previos = [f"{x.etiqueta}: {x.decidido_por.nombre if x.decidido_por else '—'}" for x in p.pasos if x.estado == APROBADO]
@@ -238,6 +241,8 @@ def avisar(ids: set[int]):
     with SessionLocal() as db:
         for pid in ids:
             p = db.get(Permiso, pid)
+            if p is not None and p.lote and p.lote != p.id:
+                continue  # día de un lote: el aviso va con el principal
             paso = actual(p) if p is not None and p.estado == SOLICITADO else None
             if paso is None:
                 continue

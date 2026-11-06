@@ -107,7 +107,7 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
       if (permiso) await api(`/permisos/${permiso.id}`, { method: 'PUT', body })
       else if (varios) {
         const r = await api('/permisos/varios', { method: 'POST', body })
-        window.alert(`Se ${r.length === 1 ? 'creó 1 permiso' : `crearon ${r.length} permisos`}, uno por cada día laboral del rango.`)
+        window.alert(`Se ${r.length === 1 ? 'creó 1 permiso' : `crearon ${r.length} permisos`}, uno por cada día laboral del rango. Tu jefe los aprueba todos juntos.`)
       } else await api('/permisos', { method: 'POST', body })
       window.dispatchEvent(new Event('pendientes:refrescar'))
       onSaved()

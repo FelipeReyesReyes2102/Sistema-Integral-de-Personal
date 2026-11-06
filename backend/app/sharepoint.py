@@ -301,6 +301,10 @@ def datos_registro(tipo: str, reg) -> dict:
     if tipo == "permisos" and getattr(reg, "pasos", None):  # cadena de aprobación: aprueba quien tiene el paso actual
         from .flujos import correos_actuales
         comunes["correo_jefe"] = correos_actuales(reg) or comunes["correo_jefe"]
+    if tipo == "permisos" and getattr(reg, "lote", None):
+        from . import lotes
+        if lotes.es_secundario(reg):
+            comunes["correo_jefe"] = None  # sin correo del jefe el flujo no pide aprobación: va en la del principal
     if tipo == "equipos":
         from .equipos import situacion
         return {**comunes, "folio": f"EQ-{reg.id}", "tipo_equipo": reg.tipo_equipo, "marca": reg.marca,
@@ -319,7 +323,16 @@ def datos_registro(tipo: str, reg) -> dict:
             "fecha_hora_inicio": ini, "fecha_hora_fin": fin,
             "hora_inicio": reg.hora_inicio.strftime("%H:%M") if reg.hora_inicio and reg.tipo != "home_office" else None,
             "hora_fin": reg.hora_fin.strftime("%H:%M") if reg.hora_fin and reg.tipo != "home_office" else None,
-            "horas": reg.horas, "motivo": reg.motivo, "tipo_nomina": reg.tipo_nomina, "observaciones": reg.observaciones}
+            "horas": reg.horas, "motivo": _motivo_lote(reg), "tipo_nomina": reg.tipo_nomina, "observaciones": reg.observaciones}
+
+
+def _motivo_lote(reg) -> str | None:
+    """En el principal de un lote, el motivo lleva todas las fechas (la tarjeta de Teams las muestra)."""
+    if not getattr(reg, "lote", None) or reg.lote != reg.id or _sesion(reg) is None:
+        return reg.motivo
+    from . import lotes
+    dias = lotes.texto_fechas(_sesion(reg), reg)
+    return f"{reg.motivo or ''} · Aplica a {dias}".strip(" ·") if dias else reg.motivo
 
 
 def _convertir(valor, columna: dict, campo: str, tipo: str, valores: dict, tz: ZoneInfo):
@@ -495,6 +508,9 @@ def _enviar(db: Session, env: EnvioSharePoint) -> int:
 def reencolar(db: Session, permiso: Permiso):
     """Cadena de aprobación: el paso nuevo va a Teams. Se vacían las columnas de decisión y se actualiza el correo
     de quien aprueba; un flujo que se dispara también al modificarse el elemento vuelve a pedir la aprobación."""
+    from . import lotes
+    if lotes.es_secundario(permiso):
+        return
     sede = permiso.usuario.sede_id if permiso.usuario else None
     lista = db.scalar(select(ListaSharePoint).where(ListaSharePoint.sede_id == sede, ListaSharePoint.tipo == "permisos",
                                                     ListaSharePoint.activo, ListaSharePoint.aprobacion_teams))
@@ -621,24 +637,32 @@ def revisar_decisiones() -> int:
                 aplicadas += 1
                 eq.notificar(reg.id, "equipo_autorizado" if nuevo == VALIDADO else "equipo_rechazado")
                 continue
+            from . import lotes
             from .services import aplicar_rechazo_teams, aprobar
             asignar_actor(db, revisor, "Teams (Power Automate)")
-            final, pide_motivo = True, False
+            final, pide_motivo, otros = True, False, []
+            antes = lotes.punto(reg) if lista.tipo == "permisos" else None
             if nuevo == RECHAZADO:
                 if lista.tipo == "permisos":
                     flujos.rechazar(reg, revisor, "teams", comentario)
                 reg.estado, reg.revisado_por_id, reg.fecha_revision = nuevo, revisor.id, datetime.now()
                 pide_motivo = aplicar_rechazo_teams(reg, comentario)
+                if lista.tipo == "permisos":
+                    lotes.rechazar(reg, antes, revisor, "teams", comentario)
             else:
                 final = aprobar(reg, revisor, "teams", comentario)
                 if comentario and lista.tipo == "permisos":
                     reg.observaciones = comentario
+                if lista.tipo == "permisos":
+                    otros = lotes.aprobar(reg, antes, revisor, "teams", comentario, comentario)
             env.decision_nota = None
             db.commit()
             db.info.pop("bitacora_actor", None)
             aplicadas += 1
             if lista.tipo == "permisos" and nuevo == VALIDADO and final:
                 correo.notificar_permiso(reg.id, "permiso_autorizado")
+            for pid in otros:
+                correo.notificar_permiso(pid, "permiso_autorizado")
             if pide_motivo:
                 from .routers.caseta import pedir_motivo_rechazo
                 pedir_motivo_rechazo(reg.id)

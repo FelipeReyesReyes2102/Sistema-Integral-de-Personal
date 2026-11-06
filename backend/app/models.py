@@ -456,6 +456,8 @@ class Permiso(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), index=True)
+    # Permiso de varios días pedido junto: id del permiso principal (el primer día); se aprueba una sola vez
+    lote: Mapped[int | None] = mapped_column(Integer, index=True)
     tipo: Mapped[str] = mapped_column(String(30))
     fecha: Mapped[date] = mapped_column(Date, index=True)
     fecha_fin: Mapped[date | None] = mapped_column(Date)  # home office: último día del rango

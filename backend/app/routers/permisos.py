@@ -5,7 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, object_session
 
-from .. import correo, flujos, horarios, reglas, tipos_permiso
+from .. import correo, flujos, horarios, lotes, reglas, tipos_permiso
 from ..database import get_db
 from ..models import (
     BORRADOR, CANCELADO, ESTADOS_ACTIVOS, PERMISO_CONSULTA_MEDICA, PERMISO_HOME_OFFICE, RECHAZADO, ROL_ADMIN,
@@ -39,6 +39,8 @@ def _out(p: Permiso) -> PermisoOut:
         fin = p.fecha_fin or p.fecha
         o.dias = len(reglas.dias_laborales(p.fecha, fin, ciclo_de(p.usuario), festivos_de(db, p.usuario, p.fecha, fin)))
     o.aprobado_jefe_nombre = p.aprobado_jefe.nombre if p.aprobado_jefe else None
+    if p.lote and p.lote == p.id:
+        o.lote_fechas = lotes.fechas(db, p)
     o.falta_gh = p.estado == SOLICITADO and p.aprobado_jefe_id is not None
     o.pasos = [PasoOut(orden=x.orden, etiqueta=x.etiqueta, estado=x.estado, comentario=x.comentario, canal=x.canal,
                        fecha=x.fecha, decidido_por_nombre=x.decidido_por.nombre if x.decidido_por else None,
@@ -156,7 +158,8 @@ def _empleado_para(db: Session, data: PermisoIn, user: Usuario) -> Usuario:
     return empleado
 
 
-def _crear_uno(db: Session, data: PermisoIn, empleado: Usuario, user: Usuario, aprobador_id: int | None) -> Permiso:
+def _crear_uno(db: Session, data: PermisoIn, empleado: Usuario, user: Usuario, aprobador_id: int | None,
+               lote: int | None = None) -> Permiso:
     v = _preparar(db, data, empleado, user)
     if data.enviar:
         _validar_envio(data.motivo, data.tipo_nomina, data.firma, v["cfg"].pide_nomina)
@@ -164,7 +167,7 @@ def _crear_uno(db: Session, data: PermisoIn, empleado: Usuario, user: Usuario, a
                 hora_inicio=v["hora_inicio"], hora_fin=v["hora_fin"], horas=v["horas"], motivo=data.motivo,
                 aprobador_id=aprobador_id,
                 departamento=data.departamento or empleado.departamento, tipo_nomina=data.tipo_nomina,
-                firma=data.firma, estado=SOLICITADO if data.enviar else BORRADOR)
+                firma=data.firma, estado=SOLICITADO if data.enviar else BORRADOR, lote=lote)
     db.add(p)
     db.flush()  # para que el límite del tipo cuente este permiso al validar el siguiente día
     if p.estado == SOLICITADO:
@@ -205,7 +208,11 @@ def crear_varios(data: PermisoIn, db: Session = Depends(get_db), user: Usuario =
     creados = []
     for d in dias:
         try:
-            creados.append(_crear_uno(db, data.model_copy(update={"fecha": d, "fecha_fin": None}), empleado, user, aprobador_id))
+            lote = creados[0].id if creados and data.enviar and len(dias) > 1 else None
+            creados.append(_crear_uno(db, data.model_copy(update={"fecha": d, "fecha_fin": None}), empleado, user,
+                                      aprobador_id, lote))
+            if lote is None and data.enviar and len(dias) > 1:
+                creados[0].lote = creados[0].id  # el primer día es el principal del lote
         except HTTPException as e:
             db.rollback()
             raise HTTPException(e.status_code, f"{d:%d/%m/%Y}: {e.detail}")
@@ -358,13 +365,17 @@ def validar(pid: int, tareas: BackgroundTasks, data: ValidarPermisoIn | None = N
         p.tipo_nomina = data.tipo_nomina
     if p.registrado_por_id and not p.tipo_nomina:
         raise HTTPException(422, "Indica cómo se considera el tiempo del retardo en nómina para validarlo.")
+    antes = lotes.punto(p)
     final = aprobar(p, user)
     if data and data.observaciones:
         p.observaciones = data.observaciones
+    otros = lotes.aprobar(p, antes, user, observaciones=data.observaciones if data else None)  # demás días del lote
     db.commit()
     # Aviso a caseta en segundo plano (solo al quedar validado): si el correo falla, la autorización no se afecta
     if final:
         tareas.add_task(correo.notificar_permiso, p.id, "permiso_autorizado")
+    for pid in otros:
+        tareas.add_task(correo.notificar_permiso, pid, "permiso_autorizado")
     return _out(p)
 
 
@@ -378,9 +389,11 @@ def _motivo(p: Permiso, motivo: str | None) -> str | None:
 @router.post("/{pid}/rechazar", response_model=PermisoOut)
 def rechazar(pid: int, data: RechazoIn, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
     p = _revisable(db, pid, user)
+    antes = lotes.punto(p)
     flujos.rechazar(p, user, "sip", data.motivo)
     p.estado, p.motivo_rechazo, p.motivo_rechazo_pendiente = RECHAZADO, _motivo(p, data.motivo), False
     p.revisado_por_id, p.fecha_revision = user.id, datetime.now()
+    lotes.rechazar(p, antes, user, "sip", data.motivo)
     db.commit()
     return _out(p)
 

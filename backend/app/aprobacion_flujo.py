@@ -118,6 +118,9 @@ def contenido(tipo: str, reg) -> dict:
             lineas.append(f"**Nómina:** {NOMINA.get(reg.tipo_nomina, reg.tipo_nomina)}")
         if reg.motivo:
             lineas.append(f"**Motivo:** {reg.motivo}")
+        from . import lotes
+        if (dias := lotes.texto_fechas(object_session(reg), reg)):
+            lineas.append(f"**Aplica a {dias}** (se aprueban todos juntos)")
         titulo = f"Permiso de {u.nombre} ({base['folio']}): {nombre_tipo}"
     lineas.append("También puedes resolverla en SIP-O.")
     return {**base, "titulo": titulo[:250], "detalles": "\n\n".join(lineas)}
@@ -140,6 +143,8 @@ def _encolar(session: Session, _ctx):
         tipo = _tipo_de(o)
         if o.estado != SOLICITADO:
             continue
+        if isinstance(o, Permiso) and o.lote and o.lote != o.id:
+            continue  # día de un lote: se aprueba con el principal
         sede = con.execute(select(U.c.sede_id).where(U.c.id == o.usuario_id)).scalar()
         if tipo not in canales.get(sede, set()):
             continue
@@ -152,7 +157,9 @@ def _encolar(session: Session, _ctx):
 
 def reencolar(db: Session, permiso: Permiso):
     """Cadena de aprobación: el paso nuevo va a Teams con otra tarjeta y otro token (la decisión anterior ya no sirve)."""
-    from . import flujos
+    from . import flujos, lotes
+    if lotes.es_secundario(permiso):
+        return
     sede = permiso.usuario.sede_id if permiso.usuario else None
     paso = flujos.actual(permiso)
     if paso is None or not canal_activo(db, sede, "permisos"):
@@ -321,17 +328,23 @@ def aplicar(db: Session, s: SolicitudAprobacion, canal: CanalAprobacion, reg, it
         db.info.pop("bitacora_actor", None)
         eq.notificar(reg.id, "equipo_autorizado" if nuevo == VALIDADO else "equipo_rechazado")
         return True
+    from . import lotes
     from .services import aplicar_rechazo_teams, aprobar
-    final, pide_motivo = True, False
+    final, pide_motivo, otros = True, False, []
+    antes = lotes.punto(reg) if s.tipo == "permisos" else None
     if nuevo == RECHAZADO:
         if s.tipo == "permisos":
             flujos.rechazar(reg, revisor, "teams", comentario)
         reg.estado, reg.revisado_por_id, reg.fecha_revision = nuevo, revisor.id, datetime.now()
         pide_motivo = aplicar_rechazo_teams(reg, comentario)
+        if s.tipo == "permisos":
+            lotes.rechazar(reg, antes, revisor, "teams", comentario)
     else:
         final = aprobar(reg, revisor, "teams", comentario)
         if comentario and s.tipo == "permisos":
             reg.observaciones = comentario
+        if s.tipo == "permisos":
+            otros = lotes.aprobar(reg, antes, revisor, "teams", comentario, comentario)
     if s.token == token:
         s.estado, s.decision_nota, s.resuelto, s.actualizado = "resuelta", None, ahora(), ahora()
     # (si cambió el token, la cadena pasó a otro paso que también va a Teams: queda en cola su tarjeta)
@@ -339,6 +352,8 @@ def aplicar(db: Session, s: SolicitudAprobacion, canal: CanalAprobacion, reg, it
     db.info.pop("bitacora_actor", None)
     if s.tipo == "permisos" and nuevo == VALIDADO and final:
         correo.notificar_permiso(reg.id, "permiso_autorizado")
+    for pid in otros:
+        correo.notificar_permiso(pid, "permiso_autorizado")
     if pide_motivo:
         from .routers.caseta import pedir_motivo_rechazo
         pedir_motivo_rechazo(reg.id)

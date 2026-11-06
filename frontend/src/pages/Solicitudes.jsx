@@ -109,7 +109,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
   const vacio = estado === 'solicitado' && !buscar
     ? <div className="vacio-ok"><b>No hay nada pendiente</b>Cuando alguien envíe una solicitud aparecerá aquí.</div>
     : 'No hay solicitudes con estos filtros.'
-  const filtrada = lista.filter((s) => !buscar || (s.usuario_nombre || s.paciente_nombre)?.toLowerCase().includes(buscar.toLowerCase()))
+  const filtrada = agruparLotes(tab, lista).filter((s) => !buscar || (s.usuario_nombre || s.paciente_nombre)?.toLowerCase().includes(buscar.toLowerCase()))
 
   return (
     <div className="card">
@@ -256,7 +256,14 @@ export default function Solicitudes({ modo = 'jefe' }) {
                 ) : (
                   <>
                     <td>{nombreTipo(s)}</td>
-                    <td>{fmtFecha(s.fecha)}{s.por_dias && s.fecha_fin && s.fecha_fin !== s.fecha ? ` → ${fmtFecha(s.fecha_fin)}` : ''}</td>
+                    <td>
+                      {s.dias_lote ? (
+                        <>
+                          <b>{s.dias_lote.length} días</b> <span className="chip" title="Se aprueban o rechazan todos juntos">una sola aprobación</span>
+                          <div className="muted" style={{ fontSize: 12 }}>{s.dias_lote.map((f) => fmtFecha(f)).join(', ')}</div>
+                        </>
+                      ) : <>{fmtFecha(s.fecha)}{s.por_dias && s.fecha_fin && s.fecha_fin !== s.fecha ? ` → ${fmtFecha(s.fecha_fin)}` : ''}</>}
+                    </td>
                     <td>{s.por_dias
                       ? <span className="muted">{s.dias ?? '—'} día(s) laborales</span>
                       : <>{hhmm(s.hora_inicio)} - {hhmm(s.hora_fin)} <span className="muted">({num(s.horas)} h)</span></>}</td>
@@ -396,7 +403,10 @@ export default function Solicitudes({ modo = 'jefe' }) {
                 observaciones: validarPermiso.obs || null, tipo_nomina: validarPermiso.nomina || null,
               })}>Validar</button>
           </>}>
-          <p><b>{validarPermiso.usuario_nombre}</b> · {nombreTipo(validarPermiso)} · {fmtFecha(validarPermiso.fecha)} {hhmm(validarPermiso.hora_inicio)}-{hhmm(validarPermiso.hora_fin)}</p>
+          <p><b>{validarPermiso.usuario_nombre}</b> · {nombreTipo(validarPermiso)} · {validarPermiso.dias_lote
+            ? `${validarPermiso.dias_lote.length} días (${validarPermiso.dias_lote.map((f) => fmtFecha(f)).join(', ')})`
+            : fmtFecha(validarPermiso.fecha)} {hhmm(validarPermiso.hora_inicio)}-{hhmm(validarPermiso.hora_fin)}</p>
+          {validarPermiso.dias_lote && <p className="muted" style={{ marginTop: -6, fontSize: 13 }}>Se validan todos los días juntos.</p>}
           {validarPermiso.registrado_por_nombre && (
             <div className="alerta warn" style={{ margin: '0 0 10px' }}>
               Retardo registrado en caseta por <b>{validarPermiso.registrado_por_nombre}</b>: el empleado no lo solicitó ni lo firmó.
@@ -418,4 +428,30 @@ export default function Solicitudes({ modo = 'jefe' }) {
       )}
     </div>
   )
+}
+
+/** Junta en una fila los días de un permiso pedido para varios días (mismo lote y mismo punto de aprobación). */
+function agruparLotes(tab, lista) {
+  if (tab !== 'permisos') return lista
+  const grupos = new Map()
+  const res = []
+  for (const s of lista) {
+    if (!s.lote) { res.push(s); continue }
+    const k = `${s.lote}|${s.estado}|${s.paso_actual || ''}|${s.falta_gh ? 1 : 0}`
+    const g = grupos.get(k)
+    if (!g) {
+      const fila = { ...s, dias_lote: [s.fecha], ids_lote: [s.id] }
+      grupos.set(k, fila)
+      res.push(fila)
+    } else {
+      g.dias_lote.push(s.fecha)
+      g.ids_lote.push(s.id)
+      if (s.id === s.lote) Object.assign(g, { ...s, dias_lote: g.dias_lote, ids_lote: g.ids_lote })  // el principal representa al lote
+    }
+  }
+  for (const g of grupos.values()) {
+    g.dias_lote.sort()
+    if (g.dias_lote.length < 2) delete g.dias_lote
+  }
+  return res
 }
