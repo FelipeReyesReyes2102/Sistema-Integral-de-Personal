@@ -82,7 +82,9 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
   const pideNomina = !esHO && cfg.pide_nomina !== false
   const completo = form.tipo && form.fecha && form.motivo.trim() && form.departamento && (!requiereJefe || form.aprobador_id)
     && (esHO ? form.fecha_fin >= form.fecha : form.hora_inicio && form.hora_fin && (!pideNomina || form.tipo_nomina))
-  const naturales = esHO && form.fecha && form.fecha_fin ? Math.round((new Date(form.fecha_fin) - new Date(form.fecha)) / 864e5) + 1 : 0
+  const naturales = form.fecha && form.fecha_fin ? Math.round((new Date(form.fecha_fin) - new Date(form.fecha)) / 864e5) + 1 : 0
+  // Permiso por horas en varios días: al crear se puede indicar "hasta" y se genera uno por cada día laboral
+  const varios = !esHO && !permiso && form.fecha_fin > form.fecha
 
   // Cuánto lleva usado del límite del tipo (mes, año o en total)
   useEffect(() => {
@@ -97,13 +99,16 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
     const body = {
       ...form, enviar, usuario_id: usuario?.id, firma,
       tipo_nomina: pideNomina ? form.tipo_nomina || null : null,
-      fecha_fin: esHO ? form.fecha_fin : null,
+      fecha_fin: esHO || varios ? form.fecha_fin : null,
       hora_inicio: esHO ? null : form.hora_inicio || null,
       hora_fin: esHO ? null : form.hora_fin || null,
     }
     try {
       if (permiso) await api(`/permisos/${permiso.id}`, { method: 'PUT', body })
-      else await api('/permisos', { method: 'POST', body })
+      else if (varios) {
+        const r = await api('/permisos/varios', { method: 'POST', body })
+        window.alert(`Se ${r.length === 1 ? 'creó 1 permiso' : `crearon ${r.length} permisos`}, uno por cada día laboral del rango.`)
+      } else await api('/permisos', { method: 'POST', body })
       window.dispatchEvent(new Event('pendientes:refrescar'))
       onSaved()
     } catch (e) {
@@ -135,9 +140,15 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
         </select>
       </Campo>
 
-      <Campo label={esHO ? 'Desde' : 'Fecha'} requerido>
+      <Campo label={esHO || !permiso ? 'Desde' : 'Fecha'} requerido>
         <input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value, fecha_fin: form.fecha_fin < e.target.value ? e.target.value : form.fecha_fin })} />
       </Campo>
+      {!esHO && !permiso && (
+        <Campo label="Hasta" ayuda={varios ? `${naturales} día(s) naturales: se crea un permiso con el mismo horario por cada día laboral.`
+          : 'Para varios días, elige el último día.'}>
+          <input type="date" value={form.fecha_fin} min={form.fecha} onChange={set('fecha_fin')} />
+        </Campo>
+      )}
       {esHO ? (
         <Campo label="Hasta" requerido ayuda={naturales > 0 ? `${naturales} día(s) naturales; solo cuentan tus días laborales.` : null}>
           <input type="date" value={form.fecha_fin} min={form.fecha} onChange={set('fecha_fin')} />

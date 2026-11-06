@@ -143,8 +143,7 @@ def listar(estado: str | None = None, tipo: str | None = None, usuario_id: int |
     return [_out(p) for p in db.scalars(q)]
 
 
-@router.post("", response_model=PermisoOut, status_code=201)
-def crear(data: PermisoIn, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
+def _empleado_para(db: Session, data: PermisoIn, user: Usuario) -> Usuario:
     empleado = user
     if data.usuario_id and data.usuario_id != user.id:
         if not es_admin(user):
@@ -154,8 +153,10 @@ def crear(data: PermisoIn, db: Session = Depends(get_db), user: Usuario = Depend
             _404()
     if not solicita_vacaciones(empleado):
         raise HTTPException(403, "El médico de planta y el personal de caseta no solicitan permisos en el sistema.")
-    _tipo_habilitado(db, empleado, data.tipo)
-    aprobador_id = resolver_aprobador(db, empleado, data.aprobador_id)
+    return empleado
+
+
+def _crear_uno(db: Session, data: PermisoIn, empleado: Usuario, user: Usuario, aprobador_id: int | None) -> Permiso:
     v = _preparar(db, data, empleado, user)
     if data.enviar:
         _validar_envio(data.motivo, data.tipo_nomina, data.firma, v["cfg"].pide_nomina)
@@ -165,11 +166,51 @@ def crear(data: PermisoIn, db: Session = Depends(get_db), user: Usuario = Depend
                 departamento=data.departamento or empleado.departamento, tipo_nomina=data.tipo_nomina,
                 firma=data.firma, estado=SOLICITADO if data.enviar else BORRADOR)
     db.add(p)
+    db.flush()  # para que el límite del tipo cuente este permiso al validar el siguiente día
     if p.estado == SOLICITADO:
-        db.flush()
         flujos.iniciar(db, p)
+    return p
+
+
+@router.post("", response_model=PermisoOut, status_code=201)
+def crear(data: PermisoIn, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
+    empleado = _empleado_para(db, data, user)
+    _tipo_habilitado(db, empleado, data.tipo)
+    aprobador_id = resolver_aprobador(db, empleado, data.aprobador_id)
+    p = _crear_uno(db, data, empleado, user, aprobador_id)
     db.commit()
     return _out(p)
+
+
+MAX_DIAS_VARIOS = 31
+
+
+@router.post("/varios", response_model=list[PermisoOut], status_code=201)
+def crear_varios(data: PermisoIn, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
+    """Permiso por horas en varios días (de `fecha` a `fecha_fin`): crea uno por cada día laboral del empleado, con el
+    mismo horario. Si alguno no es válido no se crea ninguno."""
+    empleado = _empleado_para(db, data, user)
+    cfg = _tipo_habilitado(db, empleado, data.tipo)
+    fin = data.fecha_fin or data.fecha
+    if cfg.modalidad == "dias":
+        raise HTTPException(422, f"{cfg.nombre} ya se solicita por rango de días.")
+    if fin < data.fecha:
+        raise HTTPException(422, "La fecha final no puede ser anterior a la inicial.")
+    if (fin - data.fecha).days > MAX_DIAS_VARIOS - 1:
+        raise HTTPException(422, f"Puedes pedir el mismo permiso para máximo {MAX_DIAS_VARIOS} días naturales a la vez.")
+    dias = reglas.dias_laborales(data.fecha, fin, ciclo_de(empleado), festivos_de(db, empleado, data.fecha, fin))
+    if not dias:
+        raise HTTPException(422, "El rango no contiene días laborales.")
+    aprobador_id = resolver_aprobador(db, empleado, data.aprobador_id)
+    creados = []
+    for d in dias:
+        try:
+            creados.append(_crear_uno(db, data.model_copy(update={"fecha": d, "fecha_fin": None}), empleado, user, aprobador_id))
+        except HTTPException as e:
+            db.rollback()
+            raise HTTPException(e.status_code, f"{d:%d/%m/%Y}: {e.detail}")
+    db.commit()
+    return [_out(p) for p in creados]
 
 
 def _obtener(db: Session, pid: int, user: Usuario) -> Permiso:

@@ -727,7 +727,8 @@ function BarraSeleccion({ seleccion, calc, periodos, periodoId, onPeriodo, hayGe
         <TreePalm size={14} /> Solicitar vacaciones
       </button>
       {homeOffice && <button className="btn btn-sm" onClick={onHomeOffice} disabled={!seleccion.fin}><Laptop size={14} /> Home office</button>}
-      {permisos && (unDia || permisoPorDias) && <button className="btn btn-sm" onClick={onPermiso}><Clock size={14} /> Solicitar permiso</button>}
+      {permisos && <button className="btn btn-sm" onClick={onPermiso}
+        title={unDia ? undefined : 'Un permiso por cada día laboral seleccionado'}><Clock size={14} /> Solicitar permiso</button>}
       {onEquipo && <button className="btn btn-sm" onClick={onEquipo} disabled={!seleccion.fin}
         title="Sacar un equipo de cómputo de la empresa en estas fechas"><Laptop size={14} /> Salida de equipo</button>}
       <button className="icon-btn plain" title="Cancelar selección (Esc)" onClick={onLimpiar}><X size={16} /></button>
