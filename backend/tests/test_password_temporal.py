@@ -97,3 +97,37 @@ def test_temporal_vencida_y_oficinas():
         sa_id = sa.id if sa else None
     if sa_id:
         assert adm.post(f"/api/usuarios/{sa_id}/password-temporal").status_code == 403
+
+
+def _usuario(adm, nomina):
+    with SessionLocal() as db:
+        u = db.query(Usuario).filter(Usuario.numero_empleado == nomina).first()
+        if u:
+            return u.id
+    return alta(adm, nomina)["id"]
+
+
+def test_restablecer_varios_a_la_vez():
+    adm = admin()
+    ids = [_usuario(adm, n) for n in ("TM-1", "TM-2", "TM-3")]
+    with SessionLocal() as db:
+        yo = db.query(Usuario).filter(Usuario.email == "admin@empresa.com").one().id
+    # Una temporal distinta para cada uno; se omite la propia cuenta
+    r = adm.post("/api/usuarios/restablecer-passwords", json={"usuario_ids": ids + [yo]})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert [x["usuario_id"] for x in d["restablecidos"]] == ids and len(d["omitidos"]) == 1
+    claves = [x["password_temporal"] for x in d["restablecidos"]]
+    assert all(len(c) == 6 and c.isdigit() for c in claves)
+    c, r = entrar("TM-2", claves[1])
+    assert r.status_code == 200 and c.get("/api/auth/me").json()["debe_cambiar_password"]
+
+    # La misma contraseña para todos: deben cambiarla al entrar
+    r = adm.post("/api/usuarios/restablecer-passwords", json={"usuario_ids": ids, "password": "Inicial*2026"})
+    assert r.status_code == 200 and r.json()["password_comun"] and len(r.json()["restablecidos"]) == 3
+    assert all(x["password_temporal"] is None for x in r.json()["restablecidos"])
+    assert entrar("TM-3", "Inicial*2026")[1].status_code == 200
+    assert entrar("TM-3", claves[2])[1].status_code != 200  # la anterior ya no sirve
+    assert adm.post("/api/usuarios/restablecer-passwords", json={"usuario_ids": ids, "password": "123"}).status_code == 422
+    with SessionLocal() as db:
+        assert db.query(Usuario).filter(Usuario.id == ids[0]).one().debe_cambiar_password

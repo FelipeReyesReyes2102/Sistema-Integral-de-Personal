@@ -5,6 +5,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from .. import microsoft
@@ -233,6 +234,49 @@ def restablecer_password(usuario_id: int, request: Request, db: Session = Depend
     out = usuario_out(u)
     out.password_temporal, out.password_temporal_expira = temporal, u.password_temporal_expira
     return out
+
+
+class RestablecerVariosIn(BaseModel):
+    usuario_ids: list[int] = Field(min_length=1, max_length=500)
+    password: str | None = Field(None, min_length=6, max_length=128)  # vacía: una temporal aleatoria para cada uno
+
+
+@router.post("/usuarios/restablecer-passwords")
+def restablecer_varios(data: RestablecerVariosIn, request: Request, db: Session = Depends(get_db),
+                       admin: Usuario = Depends(require_admin)):
+    """Restablece la contraseña de varios empleados: una temporal de 6 dígitos distinta para cada uno, o la misma
+    contraseña indicada por el administrador. En ambos casos deben cambiarla al entrar. Se muestran una sola vez."""
+    comun = (data.password or "").strip() or None
+    if comun and comun != data.password:
+        raise HTTPException(422, "La contraseña no debe empezar ni terminar con espacios.")
+    resultados, omitidos = [], []
+    for uid in dict.fromkeys(data.usuario_ids):
+        u = db.get(Usuario, uid)
+        if not u or not admin_permite(admin, u.sede_id):
+            omitidos.append({"usuario_id": uid, "nombre": None, "motivo": "No encontrado en tus sedes"})
+            continue
+        motivo = ("Es tu propia cuenta: usa la opción Contraseña del menú" if u.id == admin.id
+                  else "Solo un super administrador puede restablecer a otro super administrador"
+                  if u.rol == ROL_SUPERADMIN and admin.rol != ROL_SUPERADMIN
+                  else "Está desactivado" if not u.activo
+                  else "Su tipo de usuario entra solo con Microsoft" if not puede_usar_password(u) else None)
+        if motivo:
+            omitidos.append({"usuario_id": u.id, "nombre": u.nombre, "numero_empleado": u.numero_empleado, "motivo": motivo})
+            continue
+        if comun:
+            u.password_hash, u.debe_cambiar_password = hash_password(comun), True
+            u.password_temporal_expira, u.intentos_fallidos, u.bloqueado_hasta = None, 0, None
+            valor = None
+        else:
+            valor = asignar_password_temporal(u)
+        limpiar_sesiones_de(db, u.id)
+        auditar(db, "password_restablecida", usuario_id=u.id, actor_id=admin.id,
+                detalle="restablecimiento masivo" + (" · contraseña común" if comun else ""), request=request)
+        resultados.append({"usuario_id": u.id, "nombre": u.nombre, "numero_empleado": u.numero_empleado,
+                           "email": u.email, "email_personal": u.email_personal, "password_temporal": valor,
+                           "expira": u.password_temporal_expira})
+    db.commit()
+    return {"restablecidos": resultados, "omitidos": omitidos, "password_comun": bool(comun)}
 
 
 @router.put("/usuarios/{usuario_id}", response_model=UsuarioOut)

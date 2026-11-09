@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Briefcase, CalendarDays, Cloud, Copy, FileSpreadsheet, KeyRound, Pencil, Plus, Scale, Search, ShieldCheck, UserPlus, UserRound, UserX } from 'lucide-react'
+import { Briefcase, CalendarDays, Cloud, Copy, Download, FileSpreadsheet, KeyRound, Pencil, Plus, Scale, Search, ShieldCheck, UserPlus, UserRound, UserX } from 'lucide-react'
 import { api, sedeActiva } from '../api'
 import Avatar from '../components/Avatar'
 import Modal from '../components/Modal'
@@ -27,6 +27,8 @@ export default function Empleados() {
   const [saldos, setSaldos] = useState(null)
   const [temporal, setTemporal] = useState(null) // usuario con contraseña temporal recién generada
   const [importar, setImportar] = useState(false)
+  const [sel, setSel] = useState(() => new Set())  // empleados elegidos para restablecer su contraseña
+  const [masivo, setMasivo] = useState(false)
 
   async function restablecer(u) {
     if (!window.confirm(`¿Generar una nueva contraseña temporal para ${u.nombre}? La actual dejará de funcionar y se cerrarán sus sesiones.`)) return
@@ -58,6 +60,15 @@ export default function Empleados() {
   }
 
   const f = (k) => (e) => setFiltros({ ...filtros, [k]: e.target.value })
+  const elegibles = lista.filter((u) => u.activo && u.id !== user.id && u.puede_usar_password !== false
+    && (u.rol !== 'superadmin' || soySuper))
+  const todos = elegibles.length > 0 && elegibles.every((u) => sel.has(u.id))
+  const marcar = (id) => setSel((s0) => { const n = new Set(s0); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const marcarTodos = () => setSel((s0) => {
+    const n = new Set(s0)
+    elegibles.forEach((u) => (todos ? n.delete(u.id) : n.add(u.id)))
+    return n
+  })
 
   return (
     <div className="card">
@@ -72,6 +83,12 @@ export default function Empleados() {
           {grupos.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
         </select>
         <div className="espacio" />
+        {sel.size > 0 && (
+          <span className="fila" style={{ gap: 6 }}>
+            <button className="btn" onClick={() => setMasivo(true)}><KeyRound size={16} /> Restablecer contraseña ({sel.size})</button>
+            <button className="btn btn-sm" onClick={() => setSel(new Set())} title="Quitar la selección">Quitar selección</button>
+          </span>
+        )}
         <button className="btn" onClick={() => setImportar(true)}><FileSpreadsheet size={16} /> Importar desde Excel</button>
         <button className="btn btn-primary" onClick={() => setEditar({ ...VACIO, sede_id: Number(sedeActiva()) || user.sede_id || '' })}>
           <Plus size={16} /> Nuevo empleado
@@ -80,11 +97,14 @@ export default function Empleados() {
       <div className="tabla-wrap">
         <table className="tabla">
           <thead>
-            <tr><th>No. nómina</th><th>Nombre</th>{variasSedes && <th>Sede</th>}<th>Tipo</th><th>Jefe directo</th><th>Ingreso</th><th>Antigüedad</th><th>Días disponibles</th><th>Grupo</th><th>Turno</th><th>Estado</th><th /></tr>
+            <tr><th><input type="checkbox" style={{ width: 'auto' }} checked={todos} onChange={marcarTodos}
+              title="Elegir a todos los de la lista para restablecer su contraseña" aria-label="Elegir a todos" /></th><th>No. nómina</th><th>Nombre</th>{variasSedes && <th>Sede</th>}<th>Tipo</th><th>Jefe directo</th><th>Ingreso</th><th>Antigüedad</th><th>Días disponibles</th><th>Grupo</th><th>Turno</th><th>Estado</th><th /></tr>
           </thead>
           <tbody>
             {lista.map((u) => (
               <tr key={u.id} style={{ opacity: u.activo ? 1 : 0.5 }}>
+                <td>{elegibles.includes(u) && <input type="checkbox" style={{ width: 'auto' }} checked={sel.has(u.id)} onChange={() => marcar(u.id)}
+                  aria-label={`Elegir a ${u.nombre}`} />}</td>
                 <td>{u.numero_empleado}</td>
                 <td>
                   <div className="persona">
@@ -146,6 +166,7 @@ export default function Empleados() {
       {editar && <FormEmpleado inicial={editar} turnos={turnos} grupos={grupos} estado={estado} soySuper={soySuper} sedes={user.sedes || []}
         onClose={() => setEditar(null)}
         onSaved={(creado) => { setEditar(null); cargar(); if (creado?.password_temporal) setTemporal(creado) }} />}
+      {masivo && <RestablecerVarios usuarios={lista.filter((u) => sel.has(u.id))} onClose={(hecho) => { setMasivo(false); if (hecho) { setSel(new Set()); cargar() } }} />}
       {temporal && <PasswordTemporal usuario={temporal} onClose={() => setTemporal(null)} />}
       {importar && <ImportarEmpleados onClose={() => setImportar(false)} onImportado={cargar} />}
       {saldos && <Saldos usuario={saldos} onClose={() => setSaldos(null)} />}
@@ -608,6 +629,102 @@ function Saldos({ usuario, onClose }) {
       <p className="muted" style={{ fontSize: 12 }}>
         El ajuste en horas permite sumar o restar saldo (p. ej. días pendientes de un sistema anterior). Usa valores negativos para restar.
       </p>
+    </Modal>
+  )
+}
+
+/** Restablece la contraseña de varios empleados: una temporal distinta para cada uno o la misma para todos. */
+function RestablecerVarios({ usuarios, onClose }) {
+  const [modo, setModo] = useState('aleatoria')
+  const [password, setPassword] = useState('')
+  const [res, setRes] = useState(null)
+  const [error, setError] = useState('')
+  const [ocupado, setOcupado] = useState(false)
+  const [copiado, setCopiado] = useState(false)
+
+  async function aplicar() {
+    if (!window.confirm(`¿Restablecer la contraseña de ${usuarios.length} empleado(s)? Sus contraseñas actuales dejarán de funcionar y se cerrarán sus sesiones.`)) return
+    setError('')
+    setOcupado(true)
+    try {
+      setRes(await api('/usuarios/restablecer-passwords', {
+        method: 'POST', body: { usuario_ids: usuarios.map((u) => u.id), password: modo === 'comun' ? password : null },
+      }))
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setOcupado(false)
+    }
+  }
+  const valor = (r) => r.password_temporal || password
+  const texto = () => res.restablecidos.map((r) => `${r.numero_empleado || ''}\t${r.nombre}\t${valor(r)}`).join('\n')
+  function descargar() {
+    const filas = [['Nomina', 'Nombre', 'Contraseña temporal'], ...res.restablecidos.map((r) => [r.numero_empleado || '', r.nombre, valor(r)])]
+    const csv = '\ufeff' + filas.map((f) => f.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n')
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    a.download = `contrasenas-temporales-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
+  if (res) {
+    return (
+      <Modal ancho titulo="Contraseñas restablecidas" onClose={() => onClose(true)}
+        pie={<>
+          <button className="btn" onClick={() => { navigator.clipboard?.writeText(texto()); setCopiado(true) }}><Copy size={14} /> {copiado ? 'Copiada' : 'Copiar lista'}</button>
+          <button className="btn" onClick={descargar}><Download size={14} /> Descargar (Excel)</button>
+          <button className="btn btn-primary" onClick={() => onClose(true)}>Listo</button>
+        </>}>
+        <div className="alerta warn" style={{ marginTop: 0 }}>
+          <b>Solo se muestran esta vez.</b> Entrega a cada persona su contraseña; al entrar deberá crear la suya.
+          {res.password_comun ? ' Todos quedaron con la contraseña que escribiste.' : ' Las temporales de 6 dígitos vencen en unos días.'}
+          {' '}Si descargas la lista, guárdala en un lugar seguro y bórrala cuando ya las hayas entregado.
+        </div>
+        <div className="tabla-wrap" style={{ maxHeight: 360, overflowY: 'auto' }}>
+          <table className="tabla">
+            <thead><tr><th>No.</th><th>Nombre</th><th>Entra con</th><th>Contraseña</th></tr></thead>
+            <tbody>
+              {res.restablecidos.map((r) => (
+                <tr key={r.usuario_id}>
+                  <td>{r.numero_empleado}</td>
+                  <td>{r.nombre}</td>
+                  <td className="muted" style={{ fontSize: 12 }}>{[r.numero_empleado && `nómina ${r.numero_empleado}`, r.email, r.email_personal].filter(Boolean).join(' · ')}</td>
+                  <td><code style={{ fontSize: 15 }}>{valor(r)}</code></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {res.omitidos.length > 0 && (
+          <div className="alerta error">
+            No se restablecieron {res.omitidos.length}: {res.omitidos.map((o) => `${o.nombre || `#${o.usuario_id}`} (${o.motivo})`).join('; ')}.
+          </div>
+        )}
+      </Modal>
+    )
+  }
+  const valida = modo === 'aleatoria' || (password.length >= 6 && password.trim() === password)
+  return (
+    <Modal titulo={`Restablecer contraseña de ${usuarios.length} empleado(s)`} onClose={() => onClose(false)}
+      pie={<>
+        <button className="btn" onClick={() => onClose(false)}>Cancelar</button>
+        <button className="btn btn-primary" disabled={!valida || ocupado} onClick={aplicar}><KeyRound size={14} /> Restablecer</button>
+      </>}>
+      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+        {usuarios.slice(0, 8).map((u) => u.nombre).join(', ')}{usuarios.length > 8 ? ` y ${usuarios.length - 8} más` : ''}.
+      </p>
+      <label className="checkbox"><input type="radio" name="modo" checked={modo === 'aleatoria'} onChange={() => setModo('aleatoria')} />
+        <span><b>Una temporal distinta para cada uno</b> (6 dígitos al azar; vence en unos días)</span></label>
+      <label className="checkbox" style={{ marginTop: 6 }}><input type="radio" name="modo" checked={modo === 'comun'} onChange={() => setModo('comun')} />
+        <span><b>La misma contraseña para todos</b> (por ejemplo, la inicial de la empresa)</span></label>
+      {modo === 'comun' && (
+        <label className="campo" style={{ marginTop: 8 }}>Contraseña (mínimo 6 caracteres)
+          <input type="text" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </label>
+      )}
+      <p className="muted" style={{ fontSize: 12 }}>En ambos casos deberán crear su propia contraseña al entrar. Se cierran sus sesiones abiertas.</p>
+      {error && <div className="alerta error">{error}</div>}
     </Modal>
   )
 }
