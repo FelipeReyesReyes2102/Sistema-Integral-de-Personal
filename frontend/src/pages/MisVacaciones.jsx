@@ -36,7 +36,7 @@ const leerOcultos = () => {
 }
 
 export default function MisVacaciones({ usuarioId }) {
-  const { user } = useAuth()
+  const { user, recargar } = useAuth()
   const [empleado, setEmpleado] = useState(usuarioId ? null : user)
   const [periodos, setPeriodos] = useState([])
   const [periodoSel, setPeriodoSel] = useState(null)
@@ -151,7 +151,24 @@ export default function MisVacaciones({ usuarioId }) {
   const franjasDelAnio = franjas.filter((x) => x.desde <= `${anio}-12-31` && x.hasta >= `${anio}-01-01`)
   const franjasVisibles = franjas.filter((x) => !ocultos.includes(x.nombre))
 
-  // Aniversario de ingreso en el año mostrado: siempre resaltado (renueva el periodo de vacaciones)
+  // Cumpleaños y aniversarios: en mi calendario se muestran según mis preferencias (Registros o menú Cumpleaños)
+  const verCumples = !!usuarioId || user?.ver_cumpleanos !== false
+  const verAnivs = !!usuarioId || user?.ver_aniversarios !== false
+  const cumplesVisibles = useMemo(() => (calendario?.cumpleanos || [])
+    .filter((c) => (c.tipo === 'aniversario' ? verAnivs : verCumples)), [calendario, verCumples, verAnivs])
+  const calendarioVisible = useMemo(() => calendario && { ...calendario, cumpleanos: cumplesVisibles }, [calendario, cumplesVisibles])
+  async function alternarEstimados(k) {
+    const p = { ver_cumpleanos: user?.ver_cumpleanos !== false, ver_aniversarios: user?.ver_aniversarios !== false }
+    p[k] = !p[k]
+    try {
+      await api('/estimados/preferencias', { method: 'PUT', body: p })
+      await recargar()
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  // Aniversario de ingreso en el año mostrado: resaltado (renueva el periodo de vacaciones) salvo que lo oculte
   const aniversario = useMemo(() => {
     const fi = empleado?.fecha_ingreso
     if (!fi || Number(fi.slice(0, 4)) >= anio) return null
@@ -235,9 +252,9 @@ export default function MisVacaciones({ usuarioId }) {
     }
     r.festivo.dias = (calendario?.festivos || []).length
     r.equipo.dias = equipos.filter((s) => s.estado !== 'cancelado' && s.fecha_inicio.slice(0, 4) <= String(anio) && s.fecha_fin.slice(0, 4) >= String(anio)).length
-    r.cumpleanos.dias = (calendario?.cumpleanos || []).length
+    r.cumpleanos.dias = cumplesVisibles.length
     return r
-  }, [eventos, permisos, equipos, calendario, anio])
+  }, [eventos, permisos, equipos, calendario, cumplesVisibles, anio])
 
   const base = periodo ? Math.max(periodo.horas_otorgadas, periodo.horas_total) : 0
   const pct = (h) => (base > 0 ? `${Math.max(0, (h / base) * 100)}%` : '0%')
@@ -362,7 +379,8 @@ export default function MisVacaciones({ usuarioId }) {
             || (registros[k]?.dias || 0) > 0}
           ocultos={ocultos} onPeriodo={alternarPeriodo}
           onTodosPeriodos={(ver) => setOcultos(ver ? [] : franjasDelAnio.map((x) => x.nombre))}
-          aniversario={aniversario} miCumple={(calendario?.cumpleanos || []).find((c) => c.propio)}
+          aniversario={aniversario} miCumple={(calendario?.cumpleanos || []).find((c) => c.propio && c.tipo !== 'aniversario')}
+          verCumples={verCumples} verAnivs={verAnivs} onEstimados={usuarioId ? undefined : alternarEstimados}
           onFoco={(k) => setFoco((f) => (f === k ? null : k))}
           onAbrir={(k) => { setFoco(k === 'todas' ? null : k); setLista(k) }} />
       </div>
@@ -394,16 +412,16 @@ export default function MisVacaciones({ usuarioId }) {
             onNuevoPermiso={() => setModal({ tipo: 'perm' })}
             onEquipo={usuarioId ? null : () => setModal({ tipo: 'equipo', inicial: seleccion ? { fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin || seleccion.inicio } : null })} />
         )}
-        <YearCalendar anio={anio} onAnio={setAnio} datos={calendario} seleccion={seleccion} compacto
+        <YearCalendar anio={anio} onAnio={setAnio} datos={calendarioVisible} seleccion={seleccion} compacto
           onSeleccion={soloLectura ? undefined : setSeleccion}
           onDia={(f) => setModal({ tipo: 'dia', fecha: f })}
-          franjas={franjasVisibles} aniversario={aniversario}
+          franjas={franjasVisibles} aniversario={verAnivs ? aniversario : null}
           foco={foco} />
       </div>
 
       {lista && (
         <ListaSolicitudes categoria={lista} anio={anio} vacaciones={vacaciones} permisos={permisos} consultas={consultas} equipos={equipos}
-          festivos={calendario?.festivos || []} cumpleanos={calendario?.cumpleanos || []} esAdmin={esAdmin} soloLectura={soloLectura} accion={accion}
+          festivos={calendario?.festivos || []} cumpleanos={cumplesVisibles} esAdmin={esAdmin} soloLectura={soloLectura} accion={accion}
           onVer={(i) => setModal({ tipo: 'ver', item: i })}
           onEditar={(i) => setModal({ tipo: i.cat === 'vacaciones' ? 'vac' : 'perm', item: i })}
           onConsulta={(i) => setModal({ tipo: 'consulta', item: i })}
@@ -444,7 +462,7 @@ export default function MisVacaciones({ usuarioId }) {
 
 /** Registros del año por categoría (clic: abre sus solicitudes) y leyenda de periodos y estados del calendario. */
 function PanelRegistros({ anio, registros, franjas, foco, onFoco, onAbrir, ocultos, onPeriodo, onTodosPeriodos, aniversario, miCumple,
-  visible = () => true }) {
+  verCumples = true, verAnivs = true, onEstimados, visible = () => true }) {
   const algunoVisible = franjas.some((x) => !ocultos.includes(x.nombre))
   // Solo las categorías con algo registrado en el año (vacaciones siempre)
   const cats = Object.entries(CATEGORIAS).filter(([k]) => k !== 'consulta_medica' && k !== 'aniversario' && visible(k)
@@ -495,14 +513,26 @@ function PanelRegistros({ anio, registros, franjas, foco, onFoco, onAbrir, ocult
             {algunoVisible ? 'Quitar colores de periodo' : 'Ver colores de periodo'}
           </button>
         )}
-        {aniversario && (
+        {aniversario && (onEstimados ? (
+          <button type="button" className={`ley-especial aniv ${verAnivs ? '' : 'oculto'}`} aria-pressed={verAnivs}
+            onClick={() => onEstimados('ver_aniversarios')}
+            title={`${aniversario.titulo}\n${verAnivs ? 'Ocultar' : 'Mostrar'} los aniversarios en tu calendario (el tuyo y los de tus compañeros)`}>
+            <IconoCategoria cat="aniversario" size={11} /> Aniversario {diaMes(aniversario.fecha)} {verAnivs ? <Eye size={11} /> : <EyeOff size={11} />}
+          </button>
+        ) : (
           <span className="ley-especial aniv" title={aniversario.titulo}>
             <IconoCategoria cat="aniversario" size={11} /> Aniversario {diaMes(aniversario.fecha)}
           </span>
-        )}
-        {miCumple && (
+        ))}
+        {miCumple && (onEstimados ? (
+          <button type="button" className={`ley-especial cumple ${verCumples ? '' : 'oculto'}`} aria-pressed={verCumples}
+            onClick={() => onEstimados('ver_cumpleanos')}
+            title={`${verCumples ? 'Ocultar' : 'Mostrar'} los cumpleaños en tu calendario (el tuyo y los de tus compañeros)`}>
+            <IconoCategoria cat="cumpleanos" size={11} /> Tu cumpleaños {diaMes(miCumple.fecha)} {verCumples ? <Eye size={11} /> : <EyeOff size={11} />}
+          </button>
+        ) : (
           <span className="ley-especial cumple"><IconoCategoria cat="cumpleanos" size={11} /> Tu cumpleaños {diaMes(miCumple.fecha)}</span>
-        )}
+        ))}
         <span className="ley-estados">
           <i style={estiloEvento('vacaciones', 'validado')}>A</i> Aprobado
           <i style={estiloEvento('vacaciones', 'solicitado')}>P</i> Pendiente
@@ -538,8 +568,8 @@ function ListaSolicitudes({ categoria, anio, vacaciones, permisos, consultas, eq
     const proximo = cumpleanos.find((c) => c.fecha >= hoy)
     return (
       <Modal titulo={`Cumpleaños y aniversarios ${anio}`} onClose={onClose}
-        pie={<><a className="btn" href="/cumpleanos">Pedir ver los de un compañero</a><button className="btn" onClick={onClose}>Cerrar</button></>}>
-        <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>Solo ves los de las personas que te autorizaron.</p>
+        pie={<><a className="btn" href="/cumpleanos">Preferencias</a><button className="btn" onClick={onClose}>Cerrar</button></>}>
+        <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>Cumpleaños y aniversarios del personal de tu sede.</p>
         {cumpleanos.length === 0 && <div className="muted">Aún no hay cumpleaños ni aniversarios que mostrar.</div>}
         <div className="lista-cumples">
           {cumpleanos.map((c) => (

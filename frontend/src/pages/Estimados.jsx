@@ -29,8 +29,8 @@ export default function Estimados() {
     <div className="estimados">
       <div className="card">
         <p className="muted" style={{ margin: '0 0 10px', fontSize: 13 }}>
-          Los cumpleaños y aniversarios del personal de tu sede aparecen en tu calendario. Si no quieres verlos, desmárcalos.
-          Tu cumpleaños y tu aniversario siempre los ves.
+          Los cumpleaños y aniversarios del personal de tu sede aparecen en tu calendario. Si no quieres verlos, desmárcalos
+          (también se ocultan los tuyos). Puedes hacerlo aquí o con los indicadores de tu cumpleaños y aniversario en Registros.
         </p>
         <div className="fila" style={{ gap: 24 }}>
           <label className="checkbox"><input type="checkbox" checked={pref.ver_cumpleanos} onChange={(e) => preferencia('ver_cumpleanos', e.target.checked)} />
