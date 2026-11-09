@@ -16,7 +16,7 @@ const PAGINAS = {
   '/': ['Mis vacaciones y ausencias'],
   '/caseta': ['Caseta', 'Revisa quién tiene permiso de salir hoy y solicita el ingreso de quien llega tarde.'],
   '/equipos': ['Salida de equipo de cómputo', 'Pide permiso para sacar un equipo de la empresa y consulta en qué va tu solicitud.'],
-  '/cumpleanos': ['Cumpleaños y aniversarios', 'Elige de quién quieres ver el cumpleaños en tu calendario y quién puede ver el tuyo.'],
+  '/cumpleanos': ['Cumpleaños y aniversarios', 'Los del personal de tu sede aparecen en tu calendario; puedes ocultarlos.'],
   '/ti': ['Salidas de equipo (TI)', 'Revisa las salidas de equipo ya autorizadas por el jefe: séllalas o recházalas.'],
   '/aprobaciones': ['Por aprobar', 'Solicitudes de tu personal que esperan tu respuesta.'],
   '/mi-equipo': ['Mi equipo', 'Las personas que te reportan, sus días disponibles y su calendario.'],
@@ -114,7 +114,7 @@ export default function Layout() {
             <>
               <div className="seccion">Mi espacio</div>
               {link('/', Home, 'Mis vacaciones')}
-              {link('/cumpleanos', Cake, 'Cumpleaños', badge(pendientes.estimados))}
+              {link('/cumpleanos', Cake, 'Cumpleaños')}
             </>
           )}
           {jefe && (

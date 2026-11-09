@@ -1,115 +1,68 @@
 import { useEffect, useState } from 'react'
-import { Award, Cake, Check, Send, UserMinus, X } from 'lucide-react'
+import { Award, Cake } from 'lucide-react'
 import { api } from '../api'
 import Avatar from '../components/Avatar'
-import BuscadorPaciente from '../components/BuscadorPaciente'
+import { fmtFecha } from '../utils'
 
-const ESTADO = { pendiente: 'Esperando respuesta', aceptada: 'Lo ves en tu calendario', rechazada: 'No aceptó' }
-
-function Persona({ p, children, nota }) {
-  return (
-    <div className="est-fila">
-      <Avatar usuario={p} tam={36} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <b>{p.nombre}</b>
-        <div className="muted" style={{ fontSize: 12 }}>{[p.puesto, p.departamento, p.sede_nombre].filter(Boolean).join(' · ')}</div>
-        {nota}
-      </div>
-      <div className="fila" style={{ gap: 6, flexWrap: 'nowrap' }}>{children}</div>
-    </div>
-  )
-}
-
-/** Cumpleaños y aniversarios: preferencias, solicitudes y quién ve los míos. */
+/** Cumpleaños y aniversarios del personal de la sede: preferencias del calendario y próximos. */
 export default function Estimados() {
   const [datos, setDatos] = useState(null)
-  const [elegida, setElegida] = useState(null)
-  const [msg, setMsg] = useState(null)
-  const cargar = () => api('/estimados').then(setDatos).catch((e) => setMsg({ ok: false, t: e.message }))
+  const [error, setError] = useState('')
+  const cargar = () => api('/estimados').then(setDatos).catch((e) => setError(e.message))
   useEffect(() => { cargar() }, [])
-
-  async function hacer(ruta, metodo = 'POST', body, texto) {
-    setMsg(null)
-    try {
-      await api(ruta, { method: metodo, body })
-      if (texto) setMsg({ ok: true, t: texto })
-      cargar()
-      window.dispatchEvent(new Event('pendientes:refrescar'))
-    } catch (e) {
-      setMsg({ ok: false, t: e.message })
-    }
-  }
 
   async function preferencia(k, v) {
     const p = { ...datos.preferencias, [k]: v }
     setDatos({ ...datos, preferencias: p })
-    await hacer('/estimados/preferencias', 'PUT', p)
+    setError('')
+    try {
+      await api('/estimados/preferencias', { method: 'PUT', body: p })
+      cargar()
+    } catch (e) {
+      setError(e.message)
+    }
   }
 
-  if (!datos) return <div className="card">{msg ? <div className="alerta error">{msg.t}</div> : 'Cargando…'}</div>
+  if (!datos) return <div className="card">{error ? <div className="alerta error">{error}</div> : 'Cargando…'}</div>
   const pref = datos.preferencias
   return (
     <div className="estimados">
       <div className="card">
         <p className="muted" style={{ margin: '0 0 10px', fontSize: 13 }}>
-          Solo las personas que tú autorizas ven tu cumpleaños y tu aniversario.
+          Los cumpleaños y aniversarios del personal de tu sede aparecen en tu calendario. Si no quieres verlos, desmárcalos.
+          Tu cumpleaños y tu aniversario siempre los ves.
         </p>
         <div className="fila" style={{ gap: 24 }}>
           <label className="checkbox"><input type="checkbox" checked={pref.ver_cumpleanos} onChange={(e) => preferencia('ver_cumpleanos', e.target.checked)} />
-            <Cake size={15} /> Ver cumpleaños de las personas que me autorizaron</label>
+            <Cake size={15} /> Ver cumpleaños en mi calendario</label>
           <label className="checkbox"><input type="checkbox" checked={pref.ver_aniversarios} onChange={(e) => preferencia('ver_aniversarios', e.target.checked)} />
-            <Award size={15} /> Ver sus aniversarios en la empresa</label>
+            <Award size={15} /> Ver aniversarios en la empresa en mi calendario</label>
         </div>
-        {msg && <div className={`alerta ${msg.ok ? 'ok' : 'error'}`} style={{ marginTop: 10 }}>{msg.t}</div>}
+        {error && <div className="alerta error" style={{ marginTop: 10 }}>{error}</div>}
       </div>
 
-      {datos.recibidas.length > 0 && (
-        <div className="card est-recibidas">
-          <b>Te pidieron ver tu cumpleaños y aniversario ({datos.recibidas.length})</b>
-          {datos.recibidas.map((c) => (
-            <Persona key={c.id} p={c.persona}>
-              <button className="btn btn-sm btn-success" onClick={() => hacer(`/estimados/${c.id}/aceptar`, 'POST', null, `${c.persona.nombre} ya puede ver tu cumpleaños y aniversario.`)}><Check size={14} /> Aceptar</button>
-              <button className="btn btn-sm" onClick={() => hacer(`/estimados/${c.id}/rechazar`)}><X size={14} /> No aceptar</button>
-            </Persona>
-          ))}
-        </div>
-      )}
-
       <div className="card">
-        <b>Pedir ver los de un compañero</b>
-        <div style={{ marginTop: 8 }}>
-          <BuscadorPaciente value={elegida} onChange={setElegida} endpoint="/estimados/buscar" placeholder="Nombre, apellido o nómina…"
-            extra={(p) => (p.estado ? ESTADO[p.estado] : 'Aún no le has enviado solicitud')} />
-        </div>
-        {elegida && (
-          <div className="fila" style={{ marginTop: 10, justifyContent: 'flex-end' }}>
-            <button className="btn btn-primary" disabled={elegida.estado === 'aceptada' || elegida.estado === 'pendiente'}
-              onClick={async () => { await hacer('/estimados', 'POST', { persona_id: elegida.id }, `Solicitud enviada a ${elegida.nombre}.`); setElegida(null) }}>
-              <Send size={15} /> Enviar solicitud
-            </button>
+        <b>Próximos {datos.dias} días</b>
+        {datos.proximos.length === 0 && (
+          <div className="muted" style={{ padding: '10px 0' }}>
+            {pref.ver_cumpleanos || pref.ver_aniversarios ? 'No hay cumpleaños ni aniversarios en los próximos días.' : 'Tienes ocultos los cumpleaños y aniversarios.'}
           </div>
         )}
-      </div>
-
-      <div className="card">
-        <b>Personas que veo ({datos.veo.filter((c) => c.estado === 'aceptada').length})</b>
-        {datos.veo.length === 0 && <div className="muted" style={{ padding: '10px 0' }}>Aún no has pedido ver los de nadie.</div>}
-        {datos.veo.map((c) => (
-          <Persona key={c.id} p={c.persona} nota={<span className={`pill ${c.estado === 'aceptada' ? 'validado' : c.estado === 'pendiente' ? 'solicitado' : 'rechazado'}`}>{ESTADO[c.estado]}</span>}>
-            {c.estado === 'rechazada' && <button className="btn btn-sm" onClick={() => hacer('/estimados', 'POST', { persona_id: c.persona.id }, `Solicitud enviada otra vez a ${c.persona.nombre}.`)}><Send size={14} /> Volver a pedir</button>}
-            <button className="btn btn-sm" title={c.estado === 'aceptada' ? 'Dejar de ver' : 'Cancelar solicitud'}
-              onClick={() => hacer(`/estimados/${c.id}`, 'DELETE')}><X size={14} /> {c.estado === 'aceptada' ? 'Dejar de ver' : 'Quitar'}</button>
-          </Persona>
-        ))}
-      </div>
-
-      <div className="card">
-        <b>Quién ve los míos ({datos.me_ven.length})</b>
-        {datos.me_ven.length === 0 && <div className="muted" style={{ padding: '10px 0' }}>Nadie ve tu cumpleaños ni tu aniversario.</div>}
-        {datos.me_ven.map((c) => (
-          <Persona key={c.id} p={c.persona}>
-            <button className="btn btn-sm btn-danger" onClick={() => hacer(`/estimados/${c.id}`, 'DELETE', null, `${c.persona.nombre} ya no ve tu cumpleaños ni tu aniversario.`)}><UserMinus size={14} /> Quitar acceso</button>
-          </Persona>
+        {datos.proximos.map((e) => (
+          <div key={`${e.tipo}-${e.usuario_id}-${e.fecha}`} className="est-fila">
+            <Avatar usuario={{ id: e.usuario_id, nombre: e.nombre, tiene_foto: e.tiene_foto }} tam={36} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <b>{e.nombre}{e.propio ? ' (tú)' : ''}</b>
+              <div className="muted" style={{ fontSize: 12 }}>{e.puesto}</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div className="fila" style={{ gap: 6, justifyContent: 'flex-end' }}>
+                {e.tipo === 'cumpleanos' ? <Cake size={15} /> : <Award size={15} />}
+                {e.tipo === 'cumpleanos' ? 'Cumpleaños' : `${e.anios} año(s) en O-tek`}
+              </div>
+              <div className="muted" style={{ fontSize: 12 }}>{fmtFecha(e.fecha)}</div>
+            </div>
+          </div>
         ))}
       </div>
     </div>

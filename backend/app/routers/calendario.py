@@ -9,7 +9,7 @@ from .. import reglas
 from .. import tipos_permiso
 from ..database import get_db
 from ..models import (
-    ESTADOS_ACTIVOS, PERMISO_HOME_OFFICE, RECHAZADO, ROL_ADMIN, ROL_MEDICO, SOLICITADO, TIPOS_PERMISO, VALIDADO, ConsultaMedica, ContactoCalendario, Festivo, Incapacidad, Permiso,
+    ESTADOS_ACTIVOS, PERMISO_HOME_OFFICE, RECHAZADO, ROL_ADMIN, ROL_MEDICO, SOLICITADO, TIPOS_PERMISO, VALIDADO, ConsultaMedica, Festivo, Incapacidad, Permiso,
     SolicitudVacaciones, Usuario,
 )
 from ..models import ROLES_ADMIN, es_admin, es_medico  # noqa: F401
@@ -81,16 +81,16 @@ def _fecha_en(anio: int, d: date) -> date:
 
 
 def _cumpleanos(db: Session, anio: int, yo: Usuario, con_cumpleanos: bool) -> list[dict]:
-    """Mi cumpleaños y, de las personas que aceptaron mi solicitud, su cumpleaños y su aniversario en la empresa
-    (según mis preferencias). Solo día y mes del cumpleaños: nunca el año de nacimiento ni la edad."""
+    """Cumpleaños y aniversarios en la empresa del personal activo de mi sede. Los míos siempre se ven; los de los
+    demás, según mis preferencias (puedo ocultarlos de mi calendario). Del cumpleaños solo día y mes: nunca el año
+    de nacimiento ni la edad."""
     res = []
     if con_cumpleanos and yo.fecha_nacimiento:
         res.append({"fecha": _fecha_en(anio, yo.fecha_nacimiento).isoformat(), "tipo": "cumpleanos", "nombre": yo.nombre,
                     "usuario_id": yo.id, "tiene_foto": yo.foto_tipo is not None, "puesto": yo.puesto, "propio": True})
     if not (yo.ver_cumpleanos or yo.ver_aniversarios):
         return res
-    personas = db.scalars(select(Usuario).join(ContactoCalendario, ContactoCalendario.persona_id == Usuario.id).where(
-        ContactoCalendario.solicitante_id == yo.id, ContactoCalendario.estado == "aceptada", Usuario.activo.is_(True)))
+    personas = db.scalars(select(Usuario).where(Usuario.activo.is_(True), Usuario.sede_id == yo.sede_id, Usuario.id != yo.id))
     for u in personas:
         base = {"nombre": u.nombre, "usuario_id": u.id, "tiene_foto": u.foto_tipo is not None, "puesto": u.puesto, "propio": False}
         if con_cumpleanos and yo.ver_cumpleanos and u.fecha_nacimiento:
@@ -224,8 +224,6 @@ def pendientes(db: Session = Depends(get_db), user: Usuario = Depends(get_curren
         Permiso.estado == RECHAZADO, Permiso.motivo_rechazo_pendiente.is_(True), Permiso.revisado_por_id == user.id)) or 0
     from .equipos import pendientes as pendientes_equipos
     res.update(pendientes_equipos(db, user))
-    from .estimados import contar_recibidas
-    res["estimados"] = contar_recibidas(db, user)  # solicitudes para ver mi cumpleaños (no suman a Por aprobar)
     res["total"] = res["vacaciones"] + res["permisos"] + res["incapacidades"] + res["equipos"] + res["motivos_pendientes"]
     if es_admin(user):
         de_sede = lambda m: (m.usuario_id.in_(select(Usuario.id).where(alc.filtro(Usuario.sede_id))),)  # noqa: E731

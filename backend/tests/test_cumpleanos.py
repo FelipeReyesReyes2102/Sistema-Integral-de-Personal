@@ -1,4 +1,4 @@
-"""Cumpleaños: se capturan en el empleado y se ven en el calendario de quien tenga su autorización (solo día y mes)."""
+"""Cumpleaños: se capturan en el empleado y se ven en el calendario del personal de su sede (solo día y mes)."""
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -14,7 +14,7 @@ def entrar(usuario, password):
     return c
 
 
-def test_cumpleanos_autorizados_sin_anio():
+def test_cumpleanos_de_la_sede_sin_anio():
     adm = entrar("admin@empresa.com", "Admin123")
     r = adm.post("/api/usuarios", json={"numero_empleado": "C-100", "nombre": "Cumple Prueba", "rol": "oficina",
                                        "email": "cumple@o-tek.com", "fecha_ingreso": "2020-01-15",
@@ -22,14 +22,7 @@ def test_cumpleanos_autorizados_sin_anio():
     assert r.status_code == 201, r.text
     assert r.json()["fecha_nacimiento"] == "1992-02-29"
 
-    # Sin su autorización no aparece; con ella, con la fecha del año consultado y sin el año de nacimiento
-    assert not any(x["nombre"] == "Cumple Prueba" for x in adm.get("/api/calendario?anio=2027").json()["cumpleanos"])
-    from app.database import SessionLocal
-    from app.models import ContactoCalendario, Usuario
-    with SessionLocal() as db:
-        yo = db.query(Usuario).filter(Usuario.email == "admin@empresa.com").one()
-        db.add(ContactoCalendario(solicitante_id=yo.id, persona_id=r.json()["id"], estado="aceptada"))
-        db.commit()
+    # Aparece con la fecha del año consultado y sin el año de nacimiento
     cal = adm.get("/api/calendario?anio=2027").json()
     c = next(x for x in cal["cumpleanos"] if x["nombre"] == "Cumple Prueba" and x["tipo"] == "cumpleanos")
     assert c["fecha"] == "2027-02-28"  # 29 de febrero en año no bisiesto
