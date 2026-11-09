@@ -9,7 +9,7 @@ import TablaSalidas from '../components/TablaSalidas'
 import Modal from '../components/Modal'
 import {
   ESTADOS, ESTADOS_INCAPACIDAD, RESULTADOS_CONSULTA, ROLES, TIPOS_INCAPACIDAD, TIPOS_NOMINA, TIPOS_PERMISO_SOLICITABLES, fmtFecha,
-  esTI, nombreTipo, hhmm, num,
+  SALIDAS_EQUIPO, esTI, nombreTipo, hhmm, num,
 } from '../utils'
 
 /**
@@ -114,7 +114,7 @@ export default function Solicitudes({ modo = 'jefe' }) {
   return (
     <div className="card">
       <div className="pestanas" role="tablist">
-        {PESTANAS.filter(([k]) => (admin || k !== 'consultas') && (!admin || k !== 'equipos' || esTI(user))).map(([k, t]) => (
+        {PESTANAS.filter(([k]) => (admin || k !== 'consultas') && (k !== 'equipos' || (SALIDAS_EQUIPO && (!admin || esTI(user))))).map(([k, t]) => (
           <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'activo' : ''} onClick={() => setTab(k)}>{t}{marca(k)}</button>
         ))}
       </div>

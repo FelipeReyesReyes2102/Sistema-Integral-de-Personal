@@ -1,4 +1,5 @@
 """Salida de equipos de cómputo (F-630-03): empleado solicita, jefe autoriza, TI sella o rechaza y caseta registra."""
+import pytest
 from datetime import date, timedelta
 
 from app import correo
@@ -10,6 +11,13 @@ from app.seed import main as seed
 from tests.test_api import FIRMA
 from tests.test_caseta import _caseta
 from tests.test_consultas import entrar
+
+
+@pytest.fixture(autouse=True)
+def _salidas_habilitadas(monkeypatch):
+    """La función está apagada en producción (ahora es un permiso común); estas pruebas la encienden."""
+    from app import equipos as _eq
+    monkeypatch.setattr(_eq, "HABILITADO", True)
 
 seed()
 HOY = date.today()

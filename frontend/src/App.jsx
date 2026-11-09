@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { useAuth } from './auth'
-import { esAdmin, esCaseta, esMedico, esSuperAdmin, esTI, inicioDe, sinVacaciones } from './utils'
+import { SALIDAS_EQUIPO, esAdmin, esCaseta, esMedico, esSuperAdmin, esTI, inicioDe, sinVacaciones } from './utils'
 import Layout, { esJefe } from './components/Layout'
 import Login from './pages/Login'
 import CambioObligatorio from './pages/CambioObligatorio'
@@ -82,7 +82,7 @@ export default function App() {
         <Route index element={sinVacaciones(user) ? <Navigate to={inicioDe(user)} replace /> : <MisVacaciones />} />
         <Route path="/consultas" element={<SoloMedico><Consultas /></SoloMedico>} />
         <Route path="/caseta" element={<SoloCaseta><Caseta /></SoloCaseta>} />
-        <Route path="/equipos" element={<ConVacaciones><SalidasEquipo /></ConVacaciones>} />
+        {SALIDAS_EQUIPO && <Route path="/equipos" element={<ConVacaciones><SalidasEquipo /></ConVacaciones>} />}
         <Route path="/ti" element={<SoloTI><TI /></SoloTI>} />
         <Route path="/cumpleanos" element={<ConVacaciones><Estimados /></ConVacaciones>} />
         <Route path="/aprobaciones" element={<SoloJefe><Solicitudes modo="jefe" /></SoloJefe>} />

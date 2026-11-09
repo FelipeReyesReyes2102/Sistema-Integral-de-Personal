@@ -3,7 +3,7 @@ import { AlarmClock, Ban, CheckCircle2, DoorOpen, Footprints, Hourglass, Laptop,
 import { api } from '../api'
 import Avatar from '../components/Avatar'
 import BuscadorPaciente from '../components/BuscadorPaciente'
-import { CATEGORIAS, fmtFecha } from '../utils'
+import { CATEGORIAS, SALIDAS_EQUIPO, fmtFecha } from '../utils'
 
 const ahoraHHMM = () => new Date().toTimeString().slice(0, 5)
 const minutos = (a, b) => {
@@ -400,7 +400,7 @@ export default function Caseta() {
       )}
       <Pendientes lista={lista} onCancelar={cancelar} />
       {tab === 'hoy'
-        ? <><EquiposHoy /><PermisosHoy onSolicitar={solicitar} pendientesIds={lista.filter((r) => ['solicitado', 'validado'].includes(r.estado)).map((r) => r.usuario_id)} /></>
+        ? <>{SALIDAS_EQUIPO && <EquiposHoy />}<PermisosHoy onSolicitar={solicitar} pendientesIds={lista.filter((r) => ['solicitado', 'validado'].includes(r.estado)).map((r) => r.usuario_id)} /></>
         : <Retardos lista={lista} inicial={seleccion} onRegistrado={cargar} />}
     </>
   )

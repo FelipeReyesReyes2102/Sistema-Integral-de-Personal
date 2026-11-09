@@ -5,7 +5,7 @@ import { api, sedeActiva } from '../api'
 import Avatar from '../components/Avatar'
 import Modal from '../components/Modal'
 import ImportarEmpleados from '../components/ImportarEmpleados'
-import { ROLES, esSuperAdmin, fmtFecha, num } from '../utils'
+import { ROLES, SALIDAS_EQUIPO, esSuperAdmin, fmtFecha, num } from '../utils'
 import { useAuth } from '../auth'
 
 const VACIO = {
@@ -526,7 +526,7 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
               <input type="checkbox" checked={!!form.puede_consultas} onChange={set('puede_consultas')} /> Puede registrar consultas médicas e incapacidades
             </label>
           )}
-          {!['medico', 'caseta'].includes(form.rol) && (
+          {SALIDAS_EQUIPO && !['medico', 'caseta'].includes(form.rol) && (
             <label className="checkbox">
               <input type="checkbox" checked={!!form.puede_ti} onChange={set('puede_ti')} /> TI: puede revisar (sellar o rechazar) las salidas de equipo de cómputo
             </label>

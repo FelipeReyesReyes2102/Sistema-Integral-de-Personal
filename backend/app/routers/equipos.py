@@ -126,6 +126,8 @@ def firmas(sid: int, db: Session = Depends(get_db), user: Usuario = Depends(get_
 @router.post("", response_model=SalidaEquipoOut, status_code=201)
 def crear(data: SalidaEquipoIn, request: Request, tareas: BackgroundTasks, db: Session = Depends(get_db),
           user: Usuario = Depends(get_current_user)):
+    if not eq.HABILITADO:
+        raise HTTPException(410, eq.MENSAJE_DESHABILITADO)
     emp = _destino(db, user, data.usuario_id)
     _validar(data, emp, user)
     s = SalidaEquipo(usuario_id=emp.id, estado=BORRADOR, aprobador_id=resolver_aprobador(db, emp, data.aprobador_id))
@@ -161,6 +163,8 @@ def editar(sid: int, data: SalidaEquipoIn, tareas: BackgroundTasks, db: Session 
 
 @router.post("/{sid}/enviar", response_model=SalidaEquipoOut)
 def enviar(sid: int, tareas: BackgroundTasks, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
+    if not eq.HABILITADO:
+        raise HTTPException(410, eq.MENSAJE_DESHABILITADO)
     s = eq.obtener(db, sid, user)
     eq.exigir(s.usuario_id == user.id or admin_permite(user, s.usuario.sede_id), "Solo el solicitante puede enviarla.", 403)
     eq.exigir(s.estado == BORRADOR, "La solicitud ya fue enviada.")
@@ -284,6 +288,8 @@ def registrar_regreso(sid: int, request: Request, db: Session = Depends(get_db),
 
 def pendientes(db: Session, user: Usuario) -> dict:
     """Para el círculo rojo: por autorizar como jefe y, para TI, autorizadas por el jefe sin revisar."""
+    if not eq.HABILITADO:
+        return {"equipos": 0}
     res = {"equipos": db.scalar(select(func.count(SalidaEquipo.id)).where(
         or_(SalidaEquipo.aprobador_id == user.id, SalidaEquipo.usuario_id.in_(del_grupo(user.id))),
         SalidaEquipo.usuario_id != user.id, SalidaEquipo.estado == SOLICITADO)) or 0}

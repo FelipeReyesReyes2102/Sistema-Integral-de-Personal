@@ -1,4 +1,5 @@
 """Autorización del jefe de una salida de equipo desde Teams: por lista de SharePoint y por flujo HTTP (Graph simulado)."""
+import pytest
 from app import aprobacion_flujo as af
 from app import correo, sharepoint
 from tests.test_aprobacion_flujo import FLUJO, LISTA, entorno  # noqa: F401 (fixture)
@@ -6,6 +7,13 @@ from tests.test_equipos import _datos, _limpiar
 from tests.test_consultas import entrar
 from tests.test_sharepoint import URL, graph, super_login  # noqa: F401 (fixture)
 from tests.test_api import FIRMA
+
+
+@pytest.fixture(autouse=True)
+def _salidas_habilitadas(monkeypatch):
+    """La función está apagada en producción (ahora es un permiso común); estas pruebas la encienden."""
+    from app import equipos as _eq
+    monkeypatch.setattr(_eq, "HABILITADO", True)
 
 TEAMS = {"aprobacion_teams": True, "col_decision": "Decision", "col_comentario": "ComentarioTeams",
          "col_respondio": "Respondio", "cuenta_flujo": "Flujos@o-tek.com"}

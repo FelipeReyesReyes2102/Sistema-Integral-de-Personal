@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { CalendarCheck, Laptop, Clock, ExternalLink, Link2, MessageSquareMore, RefreshCw, Save, Send, Share2, Unlink } from 'lucide-react'
 import { api } from '../api'
-import { fmtFecha } from '../utils'
+import { SALIDAS_EQUIPO, fmtFecha } from '../utils'
 
 const TITULOS = { vacaciones: { t: 'Vacaciones', i: CalendarCheck }, permisos: { t: 'Permisos y home office', i: Clock }, equipos: { t: 'Salida de equipos', i: Laptop } }
 const TIPOS_COL = { text: 'Texto', number: 'Número', currency: 'Moneda', dateTime: 'Fecha', choice: 'Opción', boolean: 'Sí/No',
@@ -255,7 +255,7 @@ export default function ConfigSharePoint({ sedeId }) {
         mismo elemento se actualiza al validarse, rechazarse o cancelarse. Los borradores no se envían. Requiere el permiso de
         aplicación <b>Sites.ReadWrite.All</b> (o Sites.Selected con acceso al sitio) en la app de Microsoft.
       </p>
-      {Object.keys(TITULOS).map((t) => <Lista key={t} datos={d.listas[t]} onCambio={cambiar} sedeId={sedeId} />)}
+      {Object.keys(TITULOS).filter((t) => SALIDAS_EQUIPO || t !== 'equipos').map((t) => <Lista key={t} datos={d.listas[t]} onCambio={cambiar} sedeId={sedeId} />)}
     </div>
   )
 }

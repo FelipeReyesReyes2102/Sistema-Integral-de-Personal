@@ -10,7 +10,7 @@ import PermisoModal from '../components/PermisoModal'
 import VacacionesModal from '../components/VacacionesModal'
 import YearCalendar from '../components/YearCalendar'
 import PasosCadena from '../components/PasosCadena'
-import {
+import { SALIDAS_EQUIPO,
   CATEGORIAS, esAdmin as esAdminFn, ESTADOS, ROLES, TIPOS_NOMINA, TIPOS_PERMISO_SOLICITABLES, ESTADOS_INCAPACIDAD, diaMes, nombreTipo, eventosPorFecha, estiloEvento, fmtFecha, hhmm, hoyISO, num,
   parseISO, toISO,
 } from '../utils'
@@ -82,7 +82,7 @@ export default function MisVacaciones({ usuarioId }) {
       const [ps, vs, pm, cs, eq] = await Promise.all([
         api('/periodos', { query: q }), api('/vacaciones', { query: q }), api('/permisos', { query: q }),
         api('/consultas', { query: q }).catch(() => []),
-        usuarioId ? [] : api('/equipos').catch(() => []),
+        usuarioId || !SALIDAS_EQUIPO ? [] : api('/equipos').catch(() => []),
       ])
       setPeriodos(ps)
       setVacaciones(vs)
@@ -410,7 +410,7 @@ export default function MisVacaciones({ usuarioId }) {
             onHomeOffice={() => setModal({ tipo: 'perm', tipoPermiso: 'home_office', fechaInicial: seleccion.inicio, fechaFinInicial: seleccion.fin || seleccion.inicio })}
             onNuevaVacacion={periodosConSaldo.length > 0 ? () => setModal({ tipo: 'vac' }) : null}
             onNuevoPermiso={() => setModal({ tipo: 'perm' })}
-            onEquipo={usuarioId ? null : () => setModal({ tipo: 'equipo', inicial: seleccion ? { fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin || seleccion.inicio } : null })} />
+            onEquipo={usuarioId || !SALIDAS_EQUIPO ? null : () => setModal({ tipo: 'equipo', inicial: seleccion ? { fecha_inicio: seleccion.inicio, fecha_fin: seleccion.fin || seleccion.inicio } : null })} />
         )}
         <YearCalendar anio={anio} onAnio={setAnio} datos={calendarioVisible} seleccion={seleccion} compacto
           onSeleccion={soloLectura ? undefined : setSeleccion}

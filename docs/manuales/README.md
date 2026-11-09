@@ -9,7 +9,6 @@ Un manual por tipo de usuario. El índice con todos está en [index.html](index.
 | [Manual del servicio médico](manual-servicio-medico.html) | Médico de planta y personal con permiso de consultas | Registrar consultas, buscador de pacientes, generar incapacidades, editar, bitácora de consultas, privacidad |
 | [Manual de caseta](manual-caseta.html) | Personal de caseta | Permisos de hoy, salidas de equipo de cómputo (revisión de seguridad), búsqueda de personas, solicitar ingreso por retardo, esperar la respuesta del jefe, corregir errores |
 | [Manual de Gestión Humana](manual-gh.html) | GH y Gerencia GH | Roles y sedes, empleados, todas las solicitudes, calendario general, caseta, grupos, turnos, festivos, configuración de la sede, tipos de permiso, bitácora |
-| [Manual de TI](manual-ti.html) | Personal de TI | Salidas de equipo de cómputo (F-630-03): ver, sellar o rechazar antes de que el equipo salga |
 | [Manual del super administrador](manual-superadmin.html) | Super administrador | Sedes, conexión con Microsoft, listas de SharePoint y aprobación en Teams por sede, solución de problemas |
 
 Son páginas HTML independientes: ábrelas en el navegador. Cuando cambie una pantalla o una regla de la aplicación, actualiza también el manual correspondiente.

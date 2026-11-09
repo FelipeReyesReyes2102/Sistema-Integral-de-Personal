@@ -23,6 +23,12 @@ from .sedes import admin_permite, hoy_de
 TIPOS = {"laptop": "Laptop", "escritorio": "De escritorio"}
 
 
+# Función apagada: la salida de equipo se pide como un permiso común («Salida de equipo»). Las salidas que ya existen
+# se conservan en la base. Para reactivarla, poner True (y SALIDAS_EQUIPO en frontend/src/utils.js).
+HABILITADO = False
+MENSAJE_DESHABILITADO = "La salida de equipo ahora se pide como un permiso: elige «Salida de equipo» en Solicitar permiso."
+
+
 def situacion(s: SalidaEquipo) -> str:
     if s.regreso_registrado:
         return "Regresó a planta"

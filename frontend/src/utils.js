@@ -32,8 +32,12 @@ export const esSuperAdmin = (u) => u?.rol === 'superadmin'
 export const esMedico = (u) => ['medico', 'superadmin'].includes(u?.rol) || !!u?.puede_consultas
 /** Personal de caseta (y GH): permisos validados del día y registro de retardos. */
 export const esCaseta = (u) => u?.rol === 'caseta' || esAdmin(u)
+/** Salida de equipo de cómputo (F-630-03, revisión de TI y caseta): apagada; ahora es el permiso «Salida de equipo».
+ *  Para reactivarla, poner true (y HABILITADO en backend/app/equipos.py). */
+export const SALIDAS_EQUIPO = false
+
 /** TI (y GH / super administrador): revisión de las salidas de equipo de cómputo. */
-export const esTI = (u) => !!u?.puede_ti || u?.rol === 'superadmin'  // GH sin la casilla de TI no ve todas las salidas
+export const esTI = (u) => SALIDAS_EQUIPO && (!!u?.puede_ti || u?.rol === 'superadmin')  // GH sin la casilla de TI no ve todas las salidas
 /** El médico de planta y caseta no piden vacaciones ni permisos: solo usan su apartado. */
 /** Texto de un cumpleaños o aniversario del calendario. */
 export const textoCumple = (c) => (c.tipo === 'aniversario'

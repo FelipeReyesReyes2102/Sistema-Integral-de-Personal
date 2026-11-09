@@ -180,7 +180,7 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
         </Campo>
       )}
 
-      <Campo label={esHO ? 'Actividades a realizar' : 'Motivo'} requerido full>
+      <Campo label={form.tipo === 'home_office' ? 'Actividades a realizar' : 'Motivo'} requerido full>
         <input value={form.motivo} onChange={set('motivo')} />
       </Campo>
       <Campo label="Jefe que aprueba" requerido={requiereJefe} full>
