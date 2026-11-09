@@ -111,6 +111,12 @@ a { color: var(--primary); }
 .tarjeta b { font-family: var(--display); font-size: 20px; }
 .tarjeta span { color: var(--muted); font-size: 15px; }
 .tarjeta .para { margin-top: 2px; }
+
+.captura { margin: 18px 0 22px; text-align: center; }
+.captura img { max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 22px rgba(15, 30, 60, .12); background: #fff; }
+.captura.modal img { max-width: min(100%, 620px); }
+.captura figcaption { font-size: 13px; color: var(--muted); margin-top: 8px; }
+@media print { .captura { break-inside: avoid; } .captura img { box-shadow: none; } }
 </style>
 </head>
 <body>
@@ -133,11 +139,11 @@ a { color: var(--primary); }
     </section>
     <section id="lista">
       <h2><span class="n">02</span>Ver las salidas</h2>
-      <p>La lista muestra empleado, equipo (tipo, marca, modelo, número de serie y accesorios), plazo, justificación y situación. Filtra por:</p><div class="tabla"><table><thead><tr><th>Filtro</th><th>Qué muestra</th></tr></thead><tbody><tr><td>Por revisar</td><td>Autorizadas por el jefe que TI no ha revisado y que aún no salen.</td></tr><tr><td>Esperando al jefe</td><td>Enviadas que el jefe todavía no autoriza (también puedes rechazarlas).</td></tr><tr><td>Autorizadas</td><td>Autorizadas por el jefe, con o sin sello de TI.</td></tr><tr><td>Equipos fuera de planta</td><td>Caseta registró la salida y aún no el regreso.</td></tr><tr><td>Rechazadas / Canceladas / Todas</td><td>El historial.</td></tr></tbody></table></div><p>El buscador encuentra por empleado, nómina, marca o número de serie. Con el ícono de documento ves el formato F-630-03 completo y puedes imprimirlo.</p>
+      <p>La lista muestra empleado, equipo (tipo, marca, modelo, número de serie y accesorios), plazo, justificación y situación. Filtra por:</p><figure class="captura"><img src="img/ti-lista.jpg" alt="Salidas de equipo autorizadas por el jefe, por revisar." loading="lazy"><figcaption>Salidas de equipo autorizadas por el jefe, por revisar.</figcaption></figure><div class="tabla"><table><thead><tr><th>Filtro</th><th>Qué muestra</th></tr></thead><tbody><tr><td>Por revisar</td><td>Autorizadas por el jefe que TI no ha revisado y que aún no salen.</td></tr><tr><td>Esperando al jefe</td><td>Enviadas que el jefe todavía no autoriza (también puedes rechazarlas).</td></tr><tr><td>Autorizadas</td><td>Autorizadas por el jefe, con o sin sello de TI.</td></tr><tr><td>Equipos fuera de planta</td><td>Caseta registró la salida y aún no el regreso.</td></tr><tr><td>Rechazadas / Canceladas / Todas</td><td>El historial.</td></tr></tbody></table></div><p>El buscador encuentra por empleado, nómina, marca o número de serie. Con el ícono de documento ves el formato F-630-03 completo y puedes imprimirlo.</p>
     </section>
     <section id="sellar">
       <h2><span class="n">03</span>Sellar la autorización de TI</h2>
-      <ol class="pasos"><li><span>En una salida autorizada por el jefe, pulsa <span class="ui">Sellar</span>.</span></li><li><span>Escribe una nota si hace falta (por ejemplo, <i>equipo inventariado</i>) y firma en el recuadro (opcional).</span></li><li><span>Pulsa <span class="ui">Sellar salida</span>. La situación cambia a <b>Autorizada por el jefe y TI</b> y caseta lo ve.</span></li></ol><p>El sello no es obligatorio para que el equipo salga: la salida queda permitida con la autorización del jefe, salvo que TI la rechace.</p>
+      <ol class="pasos"><li><span>En una salida autorizada por el jefe, pulsa <span class="ui">Sellar</span>.</span></li><li><span>Escribe una nota si hace falta (por ejemplo, <i>equipo inventariado</i>) y firma en el recuadro (opcional).</span></li><li><span>Pulsa <span class="ui">Sellar salida</span>. La situación cambia a <b>Autorizada por el jefe y TI</b> y caseta lo ve.</span></li></ol><figure class="captura modal"><img src="img/ti-sellar.jpg" alt="Sello de TI con nota y firma opcionales." loading="lazy"><figcaption>Sello de TI con nota y firma opcionales.</figcaption></figure><p>El sello no es obligatorio para que el equipo salga: la salida queda permitida con la autorización del jefe, salvo que TI la rechace.</p>
     </section>
     <section id="rechazar">
       <h2><span class="n">04</span>Rechazar una salida</h2>

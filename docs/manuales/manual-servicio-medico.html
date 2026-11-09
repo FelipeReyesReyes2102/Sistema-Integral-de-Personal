@@ -111,6 +111,12 @@ a { color: var(--primary); }
 .tarjeta b { font-family: var(--display); font-size: 20px; }
 .tarjeta span { color: var(--muted); font-size: 15px; }
 .tarjeta .para { margin-top: 2px; }
+
+.captura { margin: 18px 0 22px; text-align: center; }
+.captura img { max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 22px rgba(15, 30, 60, .12); background: #fff; }
+.captura.modal img { max-width: min(100%, 620px); }
+.captura figcaption { font-size: 13px; color: var(--muted); margin-top: 8px; }
+@media print { .captura { break-inside: avoid; } .captura img { box-shadow: none; } }
 </style>
 </head>
 <body>
@@ -133,11 +139,11 @@ a { color: var(--primary); }
     </section>
     <section id="pantalla">
       <h2><span class="n">02</span>La pantalla de consultas</h2>
-      <p>Arriba ves las <b>consultas de hoy</b>, los <b>enviados a casa hoy</b> y cuántas consultas hay en el periodo filtrado. Debajo hay dos pestañas:</p><ul><li><b>Consultas</b>: filtra por fechas, tipo de usuario o busca por nombre o nómina. Cada fila muestra horario, paciente, síntomas, medicamento, resultado, <b>estado de la incapacidad</b> y quién atendió, con botones para ver, editar o eliminar.</li><li><b>Bitácora</b>: quién registró, cambió o eliminó cada consulta e incapacidad, y quién las validó o rechazó.</li></ul>
+      <p>Arriba ves las <b>consultas de hoy</b>, los <b>enviados a casa hoy</b> y cuántas consultas hay en el periodo filtrado. Debajo hay dos pestañas:</p><figure class="captura"><img src="img/med-pantalla.jpg" alt="Consultas médicas: resumen del día, filtros y lista de consultas." loading="lazy"><figcaption>Consultas médicas: resumen del día, filtros y lista de consultas.</figcaption></figure><ul><li><b>Consultas</b>: filtra por fechas, tipo de usuario o busca por nombre o nómina. Cada fila muestra horario, paciente, síntomas, medicamento, resultado, <b>estado de la incapacidad</b> y quién atendió, con botones para ver, editar o eliminar.</li><li><b>Bitácora</b>: quién registró, cambió o eliminó cada consulta e incapacidad, y quién las validó o rechazó.</li></ul>
     </section>
     <section id="consulta">
       <h2><span class="n">03</span>Registrar una consulta</h2>
-      <ol class="pasos"><li><span>Pulsa <span class="ui">Registrar consulta</span>.</span></li><li><span>En <b>Paciente</b> escribe nombre, apellido, nómina, puesto o departamento: se busca sin acentos y con las palabras en cualquier orden. Usa las flechas y Enter, o haz clic.</span></li><li><span>Revisa la tarjeta del paciente: muestra su teléfono y su <b>contacto de emergencia</b>.</span></li><li><span>Captura fecha y horario (llegada y salida), síntomas, diagnóstico, medicamentos (dosis, frecuencia y duración), indicaciones y el resultado: <i>regresa a sus labores</i>, <i>se envía a casa</i> o <i>referido a clínica / IMSS</i>.</span></li><li><span>Pulsa <span class="ui">Guardar consulta</span>.</span></li></ol>
+      <ol class="pasos"><li><span>Pulsa <span class="ui">Registrar consulta</span>.</span></li><li><span>En <b>Paciente</b> escribe nombre, apellido, nómina, puesto o departamento: se busca sin acentos y con las palabras en cualquier orden. Usa las flechas y Enter, o haz clic.</span></li><li><span>Revisa la tarjeta del paciente: muestra su teléfono y su <b>contacto de emergencia</b>.</span></li><li><span>Captura fecha y horario (llegada y salida), síntomas, diagnóstico, medicamentos (dosis, frecuencia y duración), indicaciones y el resultado: <i>regresa a sus labores</i>, <i>se envía a casa</i> o <i>referido a clínica / IMSS</i>.</span></li><li><span>Pulsa <span class="ui">Guardar consulta</span>.</span></li></ol><figure class="captura"><img src="img/med-consulta.jpg" alt="Formulario de consulta médica." loading="lazy"><figcaption>Formulario de consulta médica.</figcaption></figure>
     </section>
     <section id="incapacidad">
       <h2><span class="n">04</span>Generar una incapacidad</h2>
@@ -149,7 +155,7 @@ a { color: var(--primary); }
     </section>
     <section id="bitacora">
       <h2><span class="n">06</span>Bitácora de consultas</h2>
-      <p>En la pestaña <b>Bitácora</b> ves, con fecha y hora, quién hizo cada cosa:</p><div class="tabla"><table><thead><tr><th>Evento</th><th>Quién aparece</th></tr></thead><tbody><tr><td>Consulta registrada, modificada o eliminada</td><td>Quien la registró o cambió.</td></tr><tr><td>Consulta abierta por GH</td><td>La persona de GH que abrió el detalle.</td></tr><tr><td>Incapacidad generada, modificada o quitada</td><td>Quien la capturó.</td></tr><tr><td>Incapacidad validada (con días ajustados y comentario)</td><td>El jefe o GH que la validó.</td></tr><tr><td>Incapacidad rechazada (con motivo)</td><td>El jefe o GH que la rechazó.</td></tr></tbody></table></div><p>Filtra por fechas, por tipo (consultas o incapacidades) o busca por paciente, nómina, persona o folio. La columna <i>Incapacidad hoy</i> muestra el estado actual y el ojo abre la consulta. La bitácora no guarda síntomas, diagnóstico ni medicamentos.</p>
+      <p>En la pestaña <b>Bitácora</b> ves, con fecha y hora, quién hizo cada cosa:</p><figure class="captura"><img src="img/med-bitacora.jpg" alt="Bitácora de consultas e incapacidades." loading="lazy"><figcaption>Bitácora de consultas e incapacidades.</figcaption></figure><div class="tabla"><table><thead><tr><th>Evento</th><th>Quién aparece</th></tr></thead><tbody><tr><td>Consulta registrada, modificada o eliminada</td><td>Quien la registró o cambió.</td></tr><tr><td>Consulta abierta por GH</td><td>La persona de GH que abrió el detalle.</td></tr><tr><td>Incapacidad generada, modificada o quitada</td><td>Quien la capturó.</td></tr><tr><td>Incapacidad validada (con días ajustados y comentario)</td><td>El jefe o GH que la validó.</td></tr><tr><td>Incapacidad rechazada (con motivo)</td><td>El jefe o GH que la rechazó.</td></tr></tbody></table></div><p>Filtra por fechas, por tipo (consultas o incapacidades) o busca por paciente, nómina, persona o folio. La columna <i>Incapacidad hoy</i> muestra el estado actual y el ojo abre la consulta. La bitácora no guarda síntomas, diagnóstico ni medicamentos.</p>
     </section>
     <section id="privacidad">
       <h2><span class="n">07</span>Quién ve qué</h2>
