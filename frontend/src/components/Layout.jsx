@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  Cake, CalendarDays, ClipboardCheck, Clock, DoorOpen, Home, MonitorCheck, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
+  BookOpen, Cake, CalendarDays, ClipboardCheck, Clock, DoorOpen, Home, MonitorCheck, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
   History, PartyPopper, Settings, ShieldCheck, Users, UsersRound, X,
 } from 'lucide-react'
 import { api, elegirSede, sedeActiva } from '../api'
@@ -37,6 +37,13 @@ export const esJefe = (u) => u?.es_jefe || esAdminFn(u)
 // Preferencia del menú lateral encogido (solo en este navegador)
 const leerColapsado = () => {
   try { return localStorage.getItem('sip-menu-colapsado') === '1' } catch { return false }
+}
+
+/** Manual que corresponde a cada tipo de usuario (en /manuales/, servido por el contenedor web). */
+function manualDe(user, jefe) {
+  const m = { superadmin: 'superadmin', admin: 'gh', gerencia_gh: 'gh', caseta: 'caseta', medico: 'servicio-medico' }[user.rol]
+    || (jefe ? 'jefe' : esTI(user) ? 'ti' : 'empleado')
+  return `/manuales/manual-${m}.html`
 }
 
 export default function Layout() {
@@ -151,6 +158,10 @@ export default function Layout() {
               {user.rol === 'superadmin' && link('/super-admin', ShieldCheck, 'Super administrador')}
             </>
           )}
+          <div className="seccion">Ayuda</div>
+          <a href={manualDe(user, jefe)} target="_blank" rel="noopener" className="nav-link" title={colapsado ? 'Manual de usuario' : undefined}>
+            <BookOpen size={18} /> <span className="nav-texto">Manual de usuario</span>
+          </a>
         </nav>
         <div className="usuario">
           <button type="button" className="usuario-boton" onClick={() => setPerfil(true)}

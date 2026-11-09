@@ -66,6 +66,8 @@ services:
     image: sip-o-web:${SIP_VERSION}
     build:
       context: ../frontend
+      additional_contexts:
+        manuales: ../docs/manuales
     restart: unless-stopped
     ports:
       - "127.0.0.1:${SIP_PUERTO:-8085}:8080"
