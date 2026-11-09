@@ -89,7 +89,7 @@ export default function App() {
         <Route path="/mi-equipo" element={<SoloJefe><MiEquipo /></SoloJefe>} />
         <Route path="/mi-equipo/:id/vacaciones" element={<SoloJefe><VacacionesEmpleado /></SoloJefe>} />
         <Route path="/solicitudes" element={<SoloAdmin><Solicitudes modo="admin" /></SoloAdmin>} />
-        <Route path="/equipo" element={<SoloAdmin><CalendarioEquipo /></SoloAdmin>} />
+        <Route path="/equipo" element={<SoloJefe><CalendarioEquipo /></SoloJefe>} />
         <Route path="/empleados" element={<SoloAdmin><Empleados /></SoloAdmin>} />
         <Route path="/empleados/:id/vacaciones" element={<SoloAdmin><VacacionesEmpleado /></SoloAdmin>} />
         <Route path="/turnos" element={<SoloAdmin><Turnos /></SoloAdmin>} />

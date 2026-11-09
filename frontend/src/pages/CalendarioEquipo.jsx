@@ -7,7 +7,7 @@ import { CATEGORIAS, DIAS_SEMANA, ESTADOS, MESES, ROLES, estiloEvento, hoyISO } 
 
 const CATS = ['vacaciones', 'home_office', 'llegada_tarde', 'salida_temprana', 'salida_intermedia', 'otro_permiso', 'consulta', 'incapacidad']
 
-/** Calendario general (administrador): vacaciones, permisos, home office y consultas de todo el personal. */
+/** Calendario general: GH y Gerencia GH ven a todo el personal de sus sedes; un jefe, solo a su equipo. */
 export default function CalendarioEquipo() {
   const hoy = new Date()
   const [anio, setAnio] = useState(hoy.getFullYear())
@@ -20,7 +20,7 @@ export default function CalendarioEquipo() {
   const [detalle, setDetalle] = useState(null)
   const hoyIso = hoyISO()
 
-  useEffect(() => { api('/grupos').then(setGrupos) }, [])
+  useEffect(() => { api('/grupos').then(setGrupos).catch(() => setGrupos([])) }, [])
   useEffect(() => {
     const t = setTimeout(() => {
       api('/calendario/equipo', { query: { anio, mes, ...filtros } }).then(setDatos).catch((e) => alert(e.message))

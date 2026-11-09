@@ -22,6 +22,7 @@ const PAGINAS = {
   '/mi-equipo': ['Mi equipo', 'Las personas que te reportan, sus días disponibles y su calendario.'],
   '/solicitudes': ['Todas las solicitudes', 'Todas las solicitudes de tus sedes, con su estado.'],
   '/equipo': ['Calendario general', 'Quién está de vacaciones, con permiso o incapacidad cada día.'],
+  '/equipo#jefe': ['Calendario del equipo', 'Quién de tu equipo está de vacaciones, con permiso o incapacidad cada día.'],
   '/empleados': ['Empleados', 'Alta, datos y permisos de cada persona.'],
   '/turnos': ['Turnos y rotación', 'Horarios de trabajo y rotación de los grupos de planta.'],
   '/grupos': ['Grupos de planta', 'Grupos de personal de planta y sus integrantes.'],
@@ -78,7 +79,7 @@ export default function Layout() {
     try { localStorage.setItem('sip-menu-colapsado', colapsado ? '1' : '0') } catch { /* sin almacenamiento */ }
   }, [colapsado])
 
-  const [titulo, descripcion] = PAGINAS[pathname] || [pathname.includes('/vacaciones') ? 'Vacaciones del colaborador' : '']
+  const [titulo, descripcion] = PAGINAS[pathname === '/equipo' && !esAdmin ? '/equipo#jefe' : pathname] || [pathname.includes('/vacaciones') ? 'Vacaciones del colaborador' : '']
   // El inicio y el calendario de un colaborador ocupan toda la pantalla: no llevan encabezado
   const conEncabezado = pathname !== '/' && !pathname.includes('/vacaciones')
   const badge = (n) => n > 0 && <span className="badge">{n}</span>
@@ -122,6 +123,7 @@ export default function Layout() {
               <div className="seccion">Mi personal</div>
               {link('/aprobaciones', ListChecks, 'Por aprobar', badge(pendientes.total))}
               {link('/mi-equipo', UsersRound, 'Mi equipo')}
+              {!esAdmin && link('/equipo', CalendarDays, 'Calendario del equipo')}
             </>
           )}
           {esTI(user) && (

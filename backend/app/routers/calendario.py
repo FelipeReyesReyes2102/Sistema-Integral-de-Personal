@@ -13,7 +13,7 @@ from ..models import (
     SolicitudVacaciones, Usuario,
 )
 from ..models import ROLES_ADMIN, es_admin, es_medico  # noqa: F401
-from ..security import get_current_user, require_admin
+from ..security import get_current_user, require_admin, require_jefe
 from ..sedes import Alcance, admin_permite, alcance
 from ..services import ciclo_de, consulta_festivos, del_grupo, empleado_visible, festivos_de
 
@@ -130,12 +130,15 @@ def calendario(anio: int, usuario_id: int | None = None, db: Session = Depends(g
 
 @router.get("/calendario/equipo")
 def calendario_equipo(anio: int, mes: int, grupo_id: int | None = None, rol: str | None = None, q: str | None = None,
-                      db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
-    """Vista mensual de todo el personal con todos sus eventos por día:
-    vacaciones, permisos, home office y consultas médicas (más festivos y descansos)."""
+                      db: Session = Depends(get_db), user: Usuario = Depends(require_jefe), alc: Alcance = Depends(alcance)):
+    """Vista mensual del personal con todos sus eventos por día: vacaciones, permisos, home office, consultas e
+    incapacidades (más festivos y descansos). GH y Gerencia GH ven a todo el personal de sus sedes; un jefe, solo a
+    su equipo (su personal directo y los integrantes de los grupos o áreas donde es jefe)."""
     desde = date(anio, mes, 1)
     hasta = date(anio, mes, monthrange(anio, mes)[1])
-    stmt = select(Usuario).where(Usuario.activo.is_(True), alc.filtro(Usuario.sede_id)).order_by(Usuario.nombre)
+    admin = es_admin(user)
+    alcance_personal = alc.filtro(Usuario.sede_id) if admin else or_(Usuario.jefe_id == user.id, Usuario.id.in_(del_grupo(user.id)))
+    stmt = select(Usuario).where(Usuario.activo.is_(True), alcance_personal).order_by(Usuario.nombre)
     if grupo_id:
         stmt = stmt.where(Usuario.grupo_id == grupo_id)
     if rol:
@@ -161,7 +164,7 @@ def calendario_equipo(anio: int, mes: int, grupo_id: int | None = None, rol: str
             dias[p["fecha"]]["eventos"].append({"cat": cat, "estado": p["estado"], "id": p["id"],
                                                  "hora_inicio": p["hora_inicio"], "hora_fin": p["hora_fin"]})
             totales["home_office" if cat == "home_office" else "permiso"] += 1
-        for c in _consultas(db, u, desde, hasta, con_detalle=True):
+        for c in _consultas(db, u, desde, hasta, con_detalle=admin):  # el jefe ve solo que hubo consulta y su horario
             dias[c["fecha"]]["eventos"].append({"cat": "consulta", "estado": "registrada", "id": c["id"],
                                                  "hora_inicio": c["hora_inicio"], "hora_fin": c["hora_fin"]})
             totales["consulta"] += 1
@@ -175,7 +178,8 @@ def calendario_equipo(anio: int, mes: int, grupo_id: int | None = None, rol: str
             "grupo": u.grupo.nombre if u.grupo else None, "grupo_color": u.grupo.color if u.grupo else None,
             "turno": u.turno.nombre if u.turno else None, "dias": dias,
         })
-    return {"anio": anio, "mes": mes, "total_dias": hasta.day, "empleados": empleados, "totales": totales}
+    return {"anio": anio, "mes": mes, "total_dias": hasta.day, "empleados": empleados, "totales": totales,
+            "solo_equipo": not admin}
 
 
 @router.get("/resumen/permisos")

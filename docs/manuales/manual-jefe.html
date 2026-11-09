@@ -130,7 +130,7 @@ a { color: var(--primary); }
 <div class="marco">
   <nav class="indice" aria-label="Contenido">
     <b>Contenido</b>
-    <ol><li><a href="#jefe">Qué cambia al ser jefe</a></li><li><a href="#bandeja">Por aprobar</a></li><li><a href="#permisos">Permisos y home office</a></li><li><a href="#acceso">Acceso a planta por retardo</a></li><li><a href="#incapacidades">Incapacidades</a></li><li><a href="#equipo">Salida de equipo de cómputo</a></li><li><a href="#teams">Aprobar desde Teams</a></li><li><a href="#equipo">Mi equipo</a></li><li><a href="#faq">Preguntas frecuentes</a></li></ol>
+    <ol><li><a href="#jefe">Qué cambia al ser jefe</a></li><li><a href="#bandeja">Por aprobar</a></li><li><a href="#permisos">Permisos y home office</a></li><li><a href="#acceso">Acceso a planta por retardo</a></li><li><a href="#incapacidades">Incapacidades</a></li><li><a href="#equipo">Salida de equipo de cómputo</a></li><li><a href="#teams">Aprobar desde Teams</a></li><li><a href="#miequipo">Mi equipo</a><a href="#calendario">Calendario del equipo</a></li><li><a href="#faq">Preguntas frecuentes</a></li></ol>
   </nav>
   <main>
     <section id="jefe">
@@ -161,12 +161,17 @@ a { color: var(--primary); }
       <h2><span class="n">07</span>Aprobar desde Teams</h2>
       <p>Si tu sede lo tiene activo, las solicitudes de tu equipo (vacaciones, permisos, accesos a planta y salidas de equipo) te llegan como <b>aprobación en Teams</b> y en Outlook. Funciona desde el celular, fuera de la oficina.</p><ul><li>Pulsa <i>Aprobar</i> o <i>Rechazar</i> y, si quieres, escribe un comentario. Si rechazas, ese texto queda como motivo.</li><li>SIP-O aplica tu respuesta en uno o dos minutos (en caseta, en menos de un minuto).</li><li>Si ya la resolviste en SIP-O, la respuesta de Teams se ignora.</li><li>Un permiso pedido para <b>varios días</b> llega en una sola tarjeta: tu respuesta aplica a todos los días.</li><li>Si el permiso tiene una <b>cadena de aprobación</b> (p. ej. jefe → TI → GH), al aprobar tu paso pasa al siguiente aprobador; en el detalle ves en qué paso va. Si rechazas, la solicitud termina.</li></ul>
     </section>
-    <section id="equipo">
+    <section id="miequipo">
       <h2><span class="n">08</span>Mi equipo</h2>
       <p>Tabla con cada colaborador: días disponibles del periodo (con su barra y aviso de días por vencer), vencimiento, próximas vacaciones y solicitudes por aprobar. Incluye a tu personal directo y a los integrantes de los grupos de planta donde GH te asignó como <b>jefe del grupo</b> o como jefe de una de sus <b>áreas</b> (por ejemplo Calidad o AMP): sus solicitudes también te aparecen en <i>Por aprobar</i> y cualquiera de los jefes del grupo puede aprobarlas. Con el ojo abres su calendario y su detalle. Úsala para planear ausencias antes de aprobar.</p><figure class="captura"><img src="img/jefe-miequipo.jpg" alt="Mi equipo: saldo, vencimientos y próximas vacaciones de cada colaborador." loading="lazy"><figcaption>Mi equipo: saldo, vencimientos y próximas vacaciones de cada colaborador.</figcaption></figure><h3>Cancelar una aprobación</h3><p>Puedes cancelar una solicitud que tú validaste; los días regresan al colaborador y, si era un permiso con aviso a caseta, se avisa la cancelación.</p>
     </section>
+    <section id="calendario">
+      <h2><span class="n">09</span>Calendario del equipo</h2>
+      <p>En <span class="ui">Mi personal → Calendario del equipo</span> ves, mes por mes, quién de tu equipo está de vacaciones, con permiso, home office, incapacidad o consulta médica cada día, junto con festivos y descansos. Sirve para detectar cruces antes de aprobar.</p><figure class="captura"><img src="img/jefe-calendario.jpg" alt="Calendario del equipo: cada fila es un colaborador y cada columna un día." loading="lazy"><figcaption>Calendario del equipo: cada fila es un colaborador y cada columna un día.</figcaption></figure><ul><li>Solo aparece <b>tu equipo</b>: tu personal directo y los integrantes de los grupos o áreas donde eres jefe.</li><li>Busca por nombre, filtra por tipo o grupo, o marca <b>Solo con eventos</b>. Con los botones de la leyenda resaltas un tipo de evento.</li><li>Haz clic en una celda para ver el detalle del día. De las consultas médicas solo ves el horario, nunca información clínica.</li></ul>
+    </section>
+
     <section id="faq">
-      <h2><span class="n">09</span>Preguntas frecuentes</h2>
+      <h2><span class="n">10</span>Preguntas frecuentes</h2>
       <details><summary>Una persona de mi equipo no aparece.</summary><p>Debe tenerte como jefe directo en su ficha y estar en tu sede. Pide a GH que lo revise.</p></details><details><summary>Aprobé en Teams y en SIP-O sigue pendiente.</summary><p>Espera uno o dos minutos. Si sigue igual, GH puede ver en la integración por qué no se aplicó (por ejemplo, si respondió otra cuenta).</p></details><details><summary>Aprobé y dice “Aprobada por el jefe”.</summary><p>Tu sede pide también la validación de GH. Ya no tienes que hacer nada.</p></details><details><summary>¿Por qué me pide la nómina al autorizar un retardo?</summary><p>Porque el colaborador no lo solicitó ni lo firmó: tú decides si ese tiempo es con goce, sin goce o reposición.</p></details>
     </section>
   </main>
