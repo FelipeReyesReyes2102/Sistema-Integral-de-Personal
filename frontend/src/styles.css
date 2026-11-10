@@ -961,3 +961,14 @@ button.ley-especial.oculto { background: #f1f3f6; color: var(--muted); text-deco
 .grupo-areas > .fila svg { color: var(--primary); }
 .grupo-area { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; background: var(--bg); border-radius: 8px; padding: 6px 8px; }
 .grupo-area .ga-datos { flex: 1 1 100%; min-width: 0; }
+
+/* Selector de vista Hoy / Mes (caseta) */
+.segmentado { display: inline-flex; border: 1px solid var(--border, #d9dee7); border-radius: 10px; overflow: hidden; background: #fff; }
+.segmentado button { border: 0; background: transparent; padding: 6px 16px; font: inherit; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; color: var(--muted, #5b6577); }
+.segmentado button.activo { background: var(--primary, #24508f); color: #fff; }
+.caseta-dia { margin-bottom: 14px; }
+.caseta-dia h4 { margin: 0 0 6px; font-size: 14px; }
+.caseta-dia h4.hoy { color: var(--primary, #24508f); }
+.caseta-dia table { table-layout: fixed; width: 100%; }
+.caseta-dia td:nth-child(2) { width: 30%; } .caseta-dia td:nth-child(3) { width: 18%; } .caseta-dia td:nth-child(4) { width: 30%; }
+@media (max-width: 720px) { .caseta-dia table { table-layout: auto; } .caseta-dia td:nth-child(5) { display: none; } }

@@ -8,7 +8,8 @@
 """
 import threading
 import time as _reloj
-from datetime import date, time
+from calendar import monthrange
+from datetime import date, time, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -89,6 +90,29 @@ def hoy(fecha: date | None = None, db: Session = Depends(get_db), user: Usuario 
     por_dias = sorted([f for f in filas if f["por_dias"]], key=lambda f: f["nombre"])
     return {"fecha": dia.isoformat(), "hora_local": ahora_en(user.sede).strftime("%H:%M"),
             "por_horas": por_horas, "por_dias": por_dias}
+
+
+@router.get("/mes")
+def mes(anio: int, mes: int, db: Session = Depends(get_db), user: Usuario = Depends(require_caseta)):
+    """Permisos validados de un mes en la sede, agrupados por día (los de varios días aparecen en cada día)."""
+    if not 1 <= mes <= 12 or not 2000 <= anio <= 2100:
+        raise HTTPException(422, "Mes no válido")
+    desde, hasta = date(anio, mes, 1), date(anio, mes, monthrange(anio, mes)[1])
+    usuarios = select(Usuario.id).where(Usuario.sede_id.in_([x for x in _sedes(db, user) if x is not None] or [-1]))
+    q = select(Permiso).where(Permiso.estado == VALIDADO, Permiso.usuario_id.in_(usuarios), Permiso.fecha <= hasta,
+                              func.coalesce(Permiso.fecha_fin, Permiso.fecha) >= desde)
+    por_dia: dict[date, list[dict]] = {}
+    for p in db.scalars(q):
+        fila = _fila(db, p)
+        d, fin = max(p.fecha, desde), min(p.fecha_fin or p.fecha, hasta)
+        while d <= fin:
+            por_dia.setdefault(d, []).append(fila)
+            d += timedelta(days=1)
+    dias = [{"fecha": d.isoformat(),
+             "permisos": sorted(f, key=lambda x: (x["por_dias"], x["hora_inicio"] or "", x["nombre"]))}
+            for d, f in sorted(por_dia.items())]
+    return {"anio": anio, "mes": mes, "hoy": ahora_en(user.sede).date().isoformat(), "dias": dias,
+            "total": sum(len(d["permisos"]) for d in dias)}
 
 
 @router.get("/empleados")

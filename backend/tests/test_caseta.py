@@ -139,3 +139,17 @@ def test_negar_acceso_exige_motivo(monkeypatch):
     assert fila["estado"] == "rechazado" and fila["motivo_rechazo"] == "Tercer retardo de la semana"
     assert fila["motivo_pendiente"] is False
     _limpiar(ret["id"])
+
+
+def test_permisos_del_mes_en_caseta():
+    from datetime import date
+    cas = _caseta()
+    hoy = date.today()
+    r = cas.get("/api/caseta/mes", params={"anio": hoy.year, "mes": hoy.month})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["anio"] == hoy.year and d["mes"] == hoy.month and isinstance(d["dias"], list)
+    assert all(p["estado"] == "validado" for dia in d["dias"] for p in dia["permisos"])
+    assert d["total"] == sum(len(x["permisos"]) for x in d["dias"])
+    assert cas.get("/api/caseta/mes", params={"anio": hoy.year, "mes": 13}).status_code == 422
+    assert entrar("ana@empresa.com").get("/api/caseta/mes", params={"anio": hoy.year, "mes": hoy.month}).status_code == 403

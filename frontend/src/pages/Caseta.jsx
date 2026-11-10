@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlarmClock, Ban, CheckCircle2, DoorOpen, Footprints, Hourglass, Laptop, MessageSquare, RefreshCw, Search, Send, X, XCircle } from 'lucide-react'
+import { AlarmClock, Ban, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, DoorOpen, Footprints, Hourglass, Laptop, MessageSquare, RefreshCw, Search, Send, X, XCircle } from 'lucide-react'
 import { api } from '../api'
 import Avatar from '../components/Avatar'
 import BuscadorPaciente from '../components/BuscadorPaciente'
-import { CATEGORIAS, SALIDAS_EQUIPO, fmtFecha } from '../utils'
+import { CATEGORIAS, MESES, SALIDAS_EQUIPO, fmtFecha } from '../utils'
 
 const ahoraHHMM = () => new Date().toTimeString().slice(0, 5)
 const minutos = (a, b) => {
@@ -74,6 +74,96 @@ function EquiposHoy() {
       </div>
       <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>Revisa que el equipo coincida (marca, modelo y número de serie) antes de registrar la salida.</p>
     </div>
+  )
+}
+
+/** Qué hace la persona con su permiso (para la vista del mes). */
+function movimiento(p) {
+  if (p.por_dias) return 'Fuera de planta todo el día'
+  if (p.categoria === 'llegada_tarde') return `Entra a las ${p.hora_fin}`
+  if (p.categoria === 'salida_temprana') return `Sale a las ${p.hora_inicio} y ya no regresa`
+  if (p.categoria === 'salida_intermedia') return `Sale a las ${p.hora_inicio} y regresa a las ${p.hora_fin}`
+  return `${p.hora_inicio} – ${p.hora_fin}`
+}
+
+/** Permisos autorizados de un mes, agrupados por día. */
+function PermisosMes() {
+  const hoy = new Date()
+  const [anio, setAnio] = useState(hoy.getFullYear())
+  const [mes, setMes] = useState(hoy.getMonth() + 1)
+  const [datos, setDatos] = useState(null)
+  const [buscar, setBuscar] = useState('')
+  const [error, setError] = useState('')
+  const cargar = () => api('/caseta/mes', { query: { anio, mes } }).then((d) => { setDatos(d); setError('') }).catch((e) => setError(e.message))
+  useEffect(() => { setDatos(null); cargar() }, [anio, mes])  // eslint-disable-line react-hooks/exhaustive-deps
+  const mover = (delta) => {
+    let m = mes + delta, a = anio
+    if (m < 1) { m = 12; a -= 1 }
+    if (m > 12) { m = 1; a += 1 }
+    setMes(m)
+    setAnio(a)
+  }
+  const norm = (t) => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const palabras = norm(buscar).split(/\s+/).filter(Boolean)
+  const coincide = (p) => palabras.every((w) => norm(`${p.nombre} ${p.numero_empleado} ${p.tipo_nombre}`).includes(w))
+  const dias = (datos?.dias || []).map((d) => ({ ...d, permisos: d.permisos.filter(coincide) })).filter((d) => d.permisos.length)
+
+  return (
+    <>
+      <div className="fila" style={{ marginBottom: 12 }}>
+        <div className="cal-nav">
+          <button onClick={() => mover(-1)} aria-label="Mes anterior"><ChevronLeft size={16} /></button>
+          <button className="zoom-titulo" onClick={() => { setAnio(hoy.getFullYear()); setMes(hoy.getMonth() + 1) }} title="Ir al mes actual">{MESES[mes - 1]} {anio}</button>
+          <button onClick={() => mover(1)} aria-label="Mes siguiente"><ChevronRight size={16} /></button>
+        </div>
+        <span className="muted" style={{ fontSize: 12 }}>{datos ? `${datos.total} permiso(s) autorizado(s)` : 'Cargando…'}</span>
+        <div className="espacio" />
+        <div className="bp-input" style={{ width: 260 }}>
+          <Search size={16} />
+          <input value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Filtrar por nombre, nómina o tipo" />
+          {buscar && <button type="button" className="icon-btn plain" title="Limpiar" onClick={() => setBuscar('')}><X size={14} /></button>}
+        </div>
+        <button className="btn btn-sm" onClick={cargar}><RefreshCw size={14} /> Actualizar</button>
+      </div>
+      {error && <div className="alerta error">{error}</div>}
+      {datos && dias.length === 0 && (
+        <div className="muted" style={{ padding: 16, textAlign: 'center' }}>{buscar ? 'Nadie coincide con el filtro.' : 'No hay permisos autorizados en este mes.'}</div>
+      )}
+      {dias.map((d) => (
+        <div key={d.fecha} className="caseta-dia">
+          <h4 className={d.fecha === datos.hoy ? 'hoy' : ''}>{fmtFecha(d.fecha)}{d.fecha === datos.hoy ? ' · hoy' : ''} <span className="muted">· {d.permisos.length}</span></h4>
+          <div className="tabla-wrap">
+            <table className="tabla">
+              <tbody>
+                {d.permisos.map((p) => (
+                  <tr key={`${d.fecha}-${p.id}`}>
+                    <td style={{ width: 44 }}><Avatar usuario={{ id: p.usuario_id, nombre: p.nombre, tiene_foto: p.tiene_foto }} tam={32} /></td>
+                    <td><b>{p.nombre}</b><div className="muted" style={{ fontSize: 12 }}>No. {p.numero_empleado}{p.departamento ? ` · ${p.departamento}` : ''}</div></td>
+                    <td><span className="chip" style={{ background: `${(CATEGORIAS[p.categoria] || {}).color || '#6d4c41'}1f` }}>{p.tipo_nombre}</span></td>
+                    <td>{movimiento(p)}</td>
+                    <td className="muted" style={{ fontSize: 12 }}>{p.autorizo ? `Autorizó: ${p.autorizo}` : ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+    </>
+  )
+}
+
+/** Permisos autorizados: vista del día (con búsqueda y solicitud de ingreso) o del mes. */
+function PermisosAutorizados(props) {
+  const [vista, setVista] = useState('hoy')
+  return (
+    <>
+      <div className="segmentado" role="tablist" style={{ marginBottom: 10 }}>
+        <button role="tab" aria-selected={vista === 'hoy'} className={vista === 'hoy' ? 'activo' : ''} onClick={() => setVista('hoy')}>Hoy</button>
+        <button role="tab" aria-selected={vista === 'mes'} className={vista === 'mes' ? 'activo' : ''} onClick={() => setVista('mes')}><CalendarDays size={14} /> Mes</button>
+      </div>
+      {vista === 'hoy' ? <PermisosHoy {...props} /> : <div className="card"><PermisosMes /></div>}
+    </>
   )
 }
 
@@ -388,7 +478,7 @@ export default function Caseta() {
   return (
     <>
       <div className="pestanas" role="tablist">
-        <button className={tab === 'hoy' ? 'activo' : ''} onClick={() => setTab('hoy')}>Permisos de hoy</button>
+        <button className={tab === 'hoy' ? 'activo' : ''} onClick={() => setTab('hoy')}>Permisos</button>
         <button className={tab === 'retardos' ? 'activo' : ''} onClick={() => setTab('retardos')}>
           Ingreso por retardo{pendientes > 0 && <span className="badge tab-badge" title={`${pendientes} esperando autorización`}>{pendientes}</span>}
         </button>
@@ -400,7 +490,7 @@ export default function Caseta() {
       )}
       <Pendientes lista={lista} onCancelar={cancelar} />
       {tab === 'hoy'
-        ? <>{SALIDAS_EQUIPO && <EquiposHoy />}<PermisosHoy onSolicitar={solicitar} pendientesIds={lista.filter((r) => ['solicitado', 'validado'].includes(r.estado)).map((r) => r.usuario_id)} /></>
+        ? <>{SALIDAS_EQUIPO && <EquiposHoy />}<PermisosAutorizados onSolicitar={solicitar} pendientesIds={lista.filter((r) => ['solicitado', 'validado'].includes(r.estado)).map((r) => r.usuario_id)} /></>
         : <Retardos lista={lista} inicial={seleccion} onRegistrado={cargar} />}
     </>
   )
