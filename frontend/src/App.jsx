@@ -22,6 +22,12 @@ import SuperAdmin from './pages/SuperAdmin'
 import CalendarioEquipo from './pages/CalendarioEquipo'
 import Consultas from './pages/Consultas'
 
+/** Por aprobar: el jefe ve las solicitudes de su personal; GH y el super administrador, las de todas sus sedes. */
+function PorAprobar() {
+  const { user } = useAuth()
+  return <Solicitudes modo={esAdmin(user) ? 'admin' : 'jefe'} />
+}
+
 function SoloConfig({ children }) {
   const { user } = useAuth()
   return esConfig(user) ? children : <Navigate to="/" replace />
@@ -90,10 +96,10 @@ export default function App() {
         {SALIDAS_EQUIPO && <Route path="/equipos" element={<ConVacaciones><SalidasEquipo /></ConVacaciones>} />}
         <Route path="/ti" element={<SoloTI><TI /></SoloTI>} />
         <Route path="/cumpleanos" element={<ConVacaciones><Estimados /></ConVacaciones>} />
-        <Route path="/aprobaciones" element={<SoloJefe><Solicitudes modo="jefe" /></SoloJefe>} />
+        <Route path="/aprobaciones" element={<SoloJefe><PorAprobar /></SoloJefe>} />
         <Route path="/mi-equipo" element={<SoloJefe><MiEquipo /></SoloJefe>} />
         <Route path="/mi-equipo/:id/vacaciones" element={<SoloJefe><VacacionesEmpleado /></SoloJefe>} />
-        <Route path="/solicitudes" element={<SoloAdmin><Solicitudes modo="admin" /></SoloAdmin>} />
+        <Route path="/solicitudes" element={<Navigate to="/aprobaciones" replace />} />
         <Route path="/equipo" element={<SoloJefe><CalendarioEquipo /></SoloJefe>} />
         <Route path="/empleados" element={<SoloAdmin><Empleados /></SoloAdmin>} />
         <Route path="/empleados/:id/vacaciones" element={<SoloAdmin><VacacionesEmpleado /></SoloAdmin>} />

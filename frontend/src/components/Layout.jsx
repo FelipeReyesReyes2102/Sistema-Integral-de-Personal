@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  BookOpen, Cake, CalendarDays, ClipboardCheck, Clock, DoorOpen, Home, MonitorCheck, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
+  BookOpen, Cake, CalendarDays, Clock, DoorOpen, Home, MonitorCheck, Stethoscope, KeyRound, ListChecks, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
   History, PartyPopper, Settings, ShieldCheck, Users, UsersRound, X,
 } from 'lucide-react'
 import { api, elegirSede, sedeActiva } from '../api'
@@ -19,8 +19,8 @@ const PAGINAS = {
   '/cumpleanos': ['Cumpleaños y aniversarios', 'Los del personal de tu sede aparecen en tu calendario; puedes ocultarlos.'],
   '/ti': ['Salidas de equipo (TI)', 'Revisa las salidas de equipo ya autorizadas por el jefe: séllalas o recházalas.'],
   '/aprobaciones': ['Por aprobar', 'Solicitudes de tu personal que esperan tu respuesta.'],
+  '/aprobaciones#gh': ['Por aprobar', 'Todas las solicitudes de tus sedes, con su estado.'],
   '/mi-equipo': ['Mi equipo', 'Las personas que te reportan, sus días disponibles y su calendario.'],
-  '/solicitudes': ['Todas las solicitudes', 'Todas las solicitudes de tus sedes, con su estado.'],
   '/equipo': ['Calendario general', 'Quién está de vacaciones, con permiso o incapacidad cada día.'],
   '/equipo#jefe': ['Calendario del equipo', 'Quién de tu equipo está de vacaciones, con permiso o incapacidad cada día.'],
   '/empleados': ['Empleados', 'Alta, datos y permisos de cada persona.'],
@@ -79,7 +79,7 @@ export default function Layout() {
     try { localStorage.setItem('sip-menu-colapsado', colapsado ? '1' : '0') } catch { /* sin almacenamiento */ }
   }, [colapsado])
 
-  const [titulo, descripcion] = PAGINAS[pathname === '/equipo' && !esAdmin ? '/equipo#jefe' : pathname] || [pathname.includes('/vacaciones') ? 'Vacaciones del colaborador' : '']
+  const [titulo, descripcion] = PAGINAS[pathname === '/equipo' && !esAdmin ? '/equipo#jefe' : pathname === '/aprobaciones' && esAdmin ? '/aprobaciones#gh' : pathname] || [pathname.includes('/vacaciones') ? 'Vacaciones del colaborador' : '']
   // El inicio y el calendario de un colaborador ocupan toda la pantalla: no llevan encabezado
   const conEncabezado = pathname !== '/' && !pathname.includes('/vacaciones')
   const badge = (n) => n > 0 && <span className="badge">{n}</span>
@@ -121,9 +121,9 @@ export default function Layout() {
           {jefe && (
             <>
               <div className="seccion">Mi personal</div>
-              {link('/aprobaciones', ListChecks, 'Por aprobar', badge(pendientes.total))}
+              {link('/aprobaciones', ListChecks, 'Por aprobar', badge(esAdmin ? pendientes.todas : pendientes.total))}
               {link('/mi-equipo', UsersRound, 'Mi equipo')}
-              {!esAdmin && link('/equipo', CalendarDays, 'Calendario del equipo')}
+              {link('/equipo', CalendarDays, esAdmin ? 'Calendario general' : 'Calendario del equipo')}
             </>
           )}
           {esTI(user) && (
@@ -147,8 +147,6 @@ export default function Layout() {
           {esAdmin && (
             <>
               <div className="seccion">Gestión Humana</div>
-              {link('/solicitudes', ClipboardCheck, 'Todas las solicitudes', badge(pendientes.todas))}
-              {link('/equipo', CalendarDays, 'Calendario general')}
               {link('/empleados', Users, 'Empleados')}
               {link('/caseta', DoorOpen, 'Caseta')}
             </>
@@ -212,7 +210,7 @@ export default function Layout() {
         {jefe && (
           <NavLink to="/aprobaciones">
             <ListChecks size={22} />Por aprobar
-            {badge(pendientes.total)}
+            {badge(esAdmin ? pendientes.todas : pendientes.total)}
           </NavLink>
         )}
         {jefe && <NavLink to="/mi-equipo"><UsersRound size={22} />Mi equipo</NavLink>}
