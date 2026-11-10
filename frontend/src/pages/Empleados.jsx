@@ -275,6 +275,12 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
 
   async function guardar() {
     setError('')
+    const faltan = [!(form.nombre || '').trim() && 'Nombre completo', !(form.numero_empleado || '').trim() && 'Número de nómina',
+      !form.fecha_ingreso && 'Fecha de ingreso'].filter(Boolean)
+    if (faltan.length) {
+      setError(`Falta capturar: ${faltan.join(', ')}.`)
+      return
+    }
     const body = {
       ...form,
       turno_id: form.turno_id ? Number(form.turno_id) : null,

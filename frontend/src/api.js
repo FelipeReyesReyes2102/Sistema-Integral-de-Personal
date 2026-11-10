@@ -6,10 +6,31 @@ function leerCookie(nombre) {
   return par ? decodeURIComponent(par.split('=')[1]) : ''
 }
 
+// Nombres de los campos y mensajes de validación en español (errores 422 del servidor)
+const CAMPOS = {
+  fecha_ingreso: 'Fecha de ingreso', numero_empleado: 'Número de nómina', nombre: 'Nombre', email: 'Correo corporativo',
+  email_personal: 'Correo personal', fecha_nacimiento: 'Fecha de nacimiento', telefono: 'Teléfono', password: 'Contraseña',
+  fecha: 'Fecha', fecha_inicio: 'Fecha de inicio', fecha_fin: 'Fecha de término', hora_inicio: 'Hora de inicio',
+  hora_fin: 'Hora de fin', motivo: 'Motivo', rol: 'Tipo de usuario', dias_disponibles: 'Días de vacaciones disponibles',
+}
+function traducir(msg = '') {
+  if (/required/i.test(msg)) return 'es obligatorio'
+  if (/valid date|datetime/i.test(msg)) return 'no es una fecha válida'
+  if (/valid time/i.test(msg)) return 'no es una hora válida'
+  if (/at least (\d+) character/i.test(msg)) return `debe tener al menos ${msg.match(/at least (\d+)/i)[1]} caracteres`
+  if (/at most (\d+) character/i.test(msg)) return `debe tener como máximo ${msg.match(/at most (\d+)/i)[1]} caracteres`
+  if (/valid number|valid integer/i.test(msg)) return 'debe ser un número'
+  if (/greater than or equal/i.test(msg)) return 'no puede ser negativo'
+  return msg
+}
+
 function mensajeError(detail, status) {
   if (!detail) return `Error ${status}`
   if (typeof detail === 'string') return detail
-  if (Array.isArray(detail)) return detail.map((d) => `${(d.loc || []).slice(-1)[0] || ''}: ${d.msg}`).join(' · ')
+  if (Array.isArray(detail)) return detail.map((d) => {
+    const campo = (d.loc || []).slice(-1)[0] || ''
+    return `${CAMPOS[campo] || campo}: ${traducir(d.msg)}`
+  }).join(' · ')
   return JSON.stringify(detail)
 }
 
