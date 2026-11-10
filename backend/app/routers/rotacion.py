@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from .. import horarios, rotacion
 from ..database import get_db
 from ..models import Grupo, Turno, Usuario
-from ..security import ahora, auditar, get_current_user, require_admin
+from ..security import ahora, auditar, get_current_user, require_config
 from ..sedes import Alcance, alcance, hoy_de
 
 router = APIRouter(prefix="/api", tags=["rotación de turnos"])
@@ -66,12 +66,12 @@ def _estado(db: Session, sede_id: int | None) -> dict:
 
 
 @router.get("/rotacion")
-def obtener(db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def obtener(db: Session = Depends(get_db), _=Depends(require_config), alc: Alcance = Depends(alcance)):
     return _estado(db, alc.defecto)
 
 
 @router.put("/rotacion")
-def guardar(data: RotacionIn, request: Request, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin),
+def guardar(data: RotacionIn, request: Request, db: Session = Depends(get_db), admin: Usuario = Depends(require_config),
             alc: Alcance = Depends(alcance)):
     sede_id = alc.defecto
     turnos_validos = {t.id for t in db.scalars(select(Turno).where(Turno.sede_id == sede_id))}
@@ -126,7 +126,7 @@ def guardar(data: RotacionIn, request: Request, db: Session = Depends(get_db), a
 
 
 @router.post("/rotacion/avisos")
-def enviar_avisos(db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def enviar_avisos(db: Session = Depends(get_db), _=Depends(require_config), alc: Alcance = Depends(alcance)):
     """Envía ahora el correo con el turno de la próxima semana (normalmente sale solo cada viernes)."""
     return rotacion.enviar_avisos(db, alc.defecto)
 

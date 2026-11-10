@@ -50,7 +50,20 @@ def actualizar_esquema(engine: Engine) -> list[str]:
 
         _migrar_datos(conn, agregadas, insp)
         _ajustes_idempotentes(conn)
+        _cifrar_consultas(conn)
     return agregadas
+
+
+def _cifrar_consultas(conn: Connection):
+    """Cifra la información clínica de las consultas que aún está en texto plano (idempotente)."""
+    from .cifrado import PREFIJO, cifrar
+    filas = conn.execute(text(
+        "SELECT id, sintomas, diagnostico, indicaciones FROM consultas_medicas "
+        "WHERE (sintomas IS NOT NULL AND sintomas NOT LIKE :p) OR (diagnostico IS NOT NULL AND diagnostico NOT LIKE :p) "
+        "OR (indicaciones IS NOT NULL AND indicaciones NOT LIKE :p)"), {"p": PREFIJO + "%"}).all()
+    for fila in filas:
+        conn.execute(text("UPDATE consultas_medicas SET sintomas = :s, diagnostico = :d, indicaciones = :i WHERE id = :id"),
+                     {"s": cifrar(fila.sintomas), "d": cifrar(fila.diagnostico), "i": cifrar(fila.indicaciones), "id": fila.id})
 
 
 def _reconstruir_sqlite(conn: Connection, tabla: Table, columnas_actuales: list[str]):

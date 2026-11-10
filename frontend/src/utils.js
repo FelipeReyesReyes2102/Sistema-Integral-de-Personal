@@ -21,15 +21,17 @@ export const TIPOS_NOMINA = {
 }
 
 export const ROLES = {
-  superadmin: 'Super administrador', gerencia_gh: 'Gerencia GH', admin: 'GH', oficina: 'Oficinas', planta: 'Planta',
+  superadmin: 'Super administrador', gerencia_gh: 'Gerencia GH', admin: 'GH', administrador: 'Administrador', oficina: 'Oficinas', planta: 'Planta',
   medico: 'Médico de planta', caseta: 'Caseta',
 }
 
 /** GH, Gerencia GH o super administrador (el super administrador tiene acceso a todo). */
 export const esAdmin = (u) => ['admin', 'gerencia_gh', 'superadmin'].includes(u?.rol)
 export const esSuperAdmin = (u) => u?.rol === 'superadmin'
+/** Puede cambiar los Ajustes de su sede: GH, Gerencia GH, super administrador y Administrador. */
+export const esConfig = (u) => esAdmin(u) || u?.rol === 'administrador'
 /** Médico de planta o usuario al que GH le permitió registrar consultas médicas. */
-export const esMedico = (u) => ['medico', 'superadmin'].includes(u?.rol) || !!u?.puede_consultas
+export const esMedico = (u) => u?.rol === 'medico' || !!u?.puede_consultas
 /** Personal de caseta (y GH): permisos validados del día y registro de retardos. */
 export const esCaseta = (u) => u?.rol === 'caseta' || esAdmin(u)
 /** Salida de equipo de cómputo (F-630-03, revisión de TI y caseta): apagada; ahora es el permiso «Salida de equipo».

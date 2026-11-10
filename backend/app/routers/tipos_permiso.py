@@ -7,7 +7,7 @@ from .. import tipos_permiso as tp
 from ..database import get_db
 from ..models import FlujoAprobacion, Permiso, Sede, TipoPermisoSede, Usuario
 from ..schemas import TipoPermisoIn, TipoPermisoOut
-from ..security import get_current_user, require_admin
+from ..security import get_current_user, require_config
 from ..sedes import Alcance, alcance
 
 router = APIRouter(prefix="/api", tags=["tipos de permiso"])
@@ -39,14 +39,14 @@ def _del_alcance(db: Session, tid: int, alc: Alcance) -> TipoPermisoSede:
 
 
 @router.get("/tipos-permiso", response_model=list[TipoPermisoOut])
-def listar(db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def listar(db: Session = Depends(get_db), _=Depends(require_config), alc: Alcance = Depends(alcance)):
     lista = tp.de_sede(db, alc.defecto)
     db.commit()
     return [_out(db, t) for t in lista]
 
 
 @router.post("/tipos-permiso", response_model=TipoPermisoOut, status_code=201)
-def crear(data: TipoPermisoIn, db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def crear(data: TipoPermisoIn, db: Session = Depends(get_db), _=Depends(require_config), alc: Alcance = Depends(alcance)):
     _validar(data, db, alc.defecto)
     sede = db.get(Sede, alc.defecto)
     if any(t.nombre.lower() == data.nombre.strip().lower() for t in tp.de_sede(db, sede.id)):
@@ -60,7 +60,7 @@ def crear(data: TipoPermisoIn, db: Session = Depends(get_db), _=Depends(require_
 
 
 @router.put("/tipos-permiso/{tid}", response_model=TipoPermisoOut)
-def editar(tid: int, data: TipoPermisoIn, db: Session = Depends(get_db), _=Depends(require_admin),
+def editar(tid: int, data: TipoPermisoIn, db: Session = Depends(get_db), _=Depends(require_config),
            alc: Alcance = Depends(alcance)):
     t = _del_alcance(db, tid, alc)
     _validar(data, db, t.sede_id)
@@ -76,7 +76,7 @@ def editar(tid: int, data: TipoPermisoIn, db: Session = Depends(get_db), _=Depen
 
 
 @router.delete("/tipos-permiso/{tid}", status_code=204)
-def borrar(tid: int, db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def borrar(tid: int, db: Session = Depends(get_db), _=Depends(require_config), alc: Alcance = Depends(alcance)):
     t = _del_alcance(db, tid, alc)
     if t.base:
         raise HTTPException(400, "Los tipos base no se eliminan; desactívalo si la sede no lo usa.")

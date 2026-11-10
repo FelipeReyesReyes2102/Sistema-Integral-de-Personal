@@ -33,12 +33,20 @@ export default function DetalleConsulta({ consultaId, resumen, onClose }) {
           </div>
         </div>
       )}
-      {!consultaId && (
+      {(!consultaId || c?.reservado) && (
         <div className="alerta warn" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Lock size={16} /> La información clínica solo la pueden ver el paciente y el servicio médico.
         </div>
       )}
-      {c && (
+      {c?.reservado && (
+        <table className="tabla">
+          <tbody>
+            <tr><td className="muted" style={{ width: 150 }}>Paciente</td><td>{c.paciente_nombre}{c.paciente_numero ? ` · No. ${c.paciente_numero}` : ''}</td></tr>
+            <tr><td className="muted">Medicamento</td><td>{c.medicamentos.length ? c.medicamentos.map((m) => m.nombre).join(', ') : '—'}</td></tr>
+          </tbody>
+        </table>
+      )}
+      {c && !c.reservado && (
         <table className="tabla">
           <tbody>
             <tr><td className="muted" style={{ width: 150 }}>Síntomas</td><td style={{ whiteSpace: 'pre-wrap' }}>{c.sintomas}</td></tr>

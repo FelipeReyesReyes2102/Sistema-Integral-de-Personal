@@ -89,7 +89,8 @@ export default function Login() {
     setEnviando(true)
     try {
       await login(email, password)
-      navigate('/', { replace: true })
+      if (new URLSearchParams(window.location.search).has('manuales')) window.location.assign('/manuales/')
+      else navigate('/', { replace: true })
     } catch (err) {
       setError(err.message)
     } finally {

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { api, elegirSede, sedeActiva } from '../api'
 import { useAuth } from '../auth'
-import { ROLES, esAdmin as esAdminFn, esMedico, esTI, sinVacaciones } from '../utils'
+import { ROLES, esAdmin as esAdminFn, esConfig, esMedico, esTI, sinVacaciones } from '../utils'
 import Avatar from './Avatar'
 import CambiarPassword from './CambiarPassword'
 import PerfilUsuario from './PerfilUsuario'
@@ -42,7 +42,7 @@ const leerColapsado = () => {
 
 /** Manual que corresponde a cada tipo de usuario (en /manuales/, servido por el contenedor web). */
 function manualDe(user, jefe) {
-  const m = { superadmin: 'superadmin', admin: 'gh', gerencia_gh: 'gh', caseta: 'caseta', medico: 'servicio-medico' }[user.rol]
+  const m = { superadmin: 'superadmin', admin: 'gh', gerencia_gh: 'gh', administrador: 'gh', caseta: 'caseta', medico: 'servicio-medico' }[user.rol]
     || (jefe ? 'jefe' : esTI(user) ? 'ti' : 'empleado')
   return `/manuales/manual-${m}.html`
 }
@@ -151,12 +151,16 @@ export default function Layout() {
               {link('/equipo', CalendarDays, 'Calendario general')}
               {link('/empleados', Users, 'Empleados')}
               {link('/caseta', DoorOpen, 'Caseta')}
+            </>
+          )}
+          {esConfig(user) && (
+            <>
               <div className="seccion">Ajustes</div>
               {link('/grupos', UsersRound, 'Grupos')}
               {link('/turnos', Clock, 'Turnos')}
               {link('/festivos', PartyPopper, 'Festivos')}
               {link('/configuracion', Settings, 'Configuración')}
-              {link('/bitacora', History, 'Bitácora')}
+              {esAdmin && link('/bitacora', History, 'Bitácora')}
               {user.rol === 'superadmin' && link('/super-admin', ShieldCheck, 'Super administrador')}
             </>
           )}

@@ -59,14 +59,22 @@ def test_flujo_consulta_medica():
     assert ana.get(f"/api/consultas/{consulta['id']}").status_code == 404
     assert ana.post("/api/consultas", json={"paciente_id": carlos["id"], "fecha": str(date.today()),
                                             "hora_inicio": "09:00", "sintomas": "x" * 5}).status_code == 403
-    # El administrador sí ve los registros completos (y queda en auditoría)
+    # GH solo ve fecha, paciente y medicamento (sin información clínica) y queda en auditoría
     admin = entrar("admin@empresa.com", "Admin123")
-    assert admin.get(f"/api/consultas/{consulta['id']}").json()["sintomas"] == "Dolor de cabeza y mareo"
-    assert any(x["id"] == consulta["id"] for x in admin.get("/api/consultas?todos=true").json())
+    det = admin.get(f"/api/consultas/{consulta['id']}").json()
+    assert det["reservado"] is True and det["sintomas"] is None and det["diagnostico"] is None
+    assert det["indicaciones"] is None and det["resultado"] is None and det["paciente_nombre"]
+    assert det["medicamentos"][0]["nombre"] and det["medicamentos"][0]["dosis"] is None
+    fila = next(x for x in admin.get("/api/consultas?todos=true").json() if x["id"] == consulta["id"])
+    assert fila["sintomas"] is None and fila["reservado"] is True
+    from sqlalchemy import text
     from app.database import SessionLocal
     from app.models import Auditoria
     with SessionLocal() as db:
         assert db.query(Auditoria).filter(Auditoria.evento == "consulta_vista_admin").count() >= 1
+        # En la base de datos la información clínica está cifrada
+        crudo = db.execute(text("SELECT sintomas FROM consultas_medicas WHERE id = :i"), {"i": consulta["id"]}).scalar()
+        assert crudo.startswith("enc1:") and "Dolor" not in crudo
 
     # Edición por el médico
     r = medico.put(f"/api/consultas/{consulta['id']}", json={**{k: consulta[k] for k in (

@@ -11,7 +11,7 @@ from ..schemas import (
     AsignarJefes, AsignarMiembros, FestivoIn, FestivoOut, GrupoIn, GrupoOut, ReglaIn, ReglaOut, SubgrupoIn, SubgrupoOut,
     TurnoIn, TurnoOut,
 )
-from ..security import auditar, get_current_user, require_admin, require_superadmin
+from ..security import auditar, get_current_user, require_config, require_superadmin
 from ..sedes import Alcance, alcance, sede_principal
 from ..services import puede_aprobar_a, reglas_de_sede
 
@@ -71,7 +71,7 @@ def _aplicar_turno(t: Turno, data: TurnoIn):
 
 
 @router.post("/turnos", response_model=TurnoOut, status_code=201)
-def crear_turno(data: TurnoIn, db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def crear_turno(data: TurnoIn, db: Session = Depends(get_db), _=Depends(require_config), alc: Alcance = Depends(alcance)):
     t = Turno(sede_id=alc.defecto)
     _aplicar_turno(t, data)
     db.add(t)
@@ -80,7 +80,7 @@ def crear_turno(data: TurnoIn, db: Session = Depends(get_db), _=Depends(require_
 
 
 @router.put("/turnos/{turno_id}", response_model=TurnoOut)
-def editar_turno(turno_id: int, data: TurnoIn, db: Session = Depends(get_db), _=Depends(require_admin),
+def editar_turno(turno_id: int, data: TurnoIn, db: Session = Depends(get_db), _=Depends(require_config),
                  alc: Alcance = Depends(alcance)):
     t = _de_sede(db.get(Turno, turno_id), alc, "Turno")
     _aplicar_turno(t, data)
@@ -89,7 +89,7 @@ def editar_turno(turno_id: int, data: TurnoIn, db: Session = Depends(get_db), _=
 
 
 @router.delete("/turnos/{turno_id}", status_code=204)
-def borrar_turno(turno_id: int, db: Session = Depends(get_db), _=Depends(require_admin),
+def borrar_turno(turno_id: int, db: Session = Depends(get_db), _=Depends(require_config),
                  alc: Alcance = Depends(alcance)):
     t = _de_sede(db.get(Turno, turno_id), alc, "Turno")
     db.delete(t)
@@ -112,7 +112,7 @@ def listar_grupos(db: Session = Depends(get_db), alc: Alcance = Depends(alcance)
 
 
 @router.post("/grupos", response_model=GrupoOut, status_code=201)
-def crear_grupo(data: GrupoIn, db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def crear_grupo(data: GrupoIn, db: Session = Depends(get_db), _=Depends(require_config), alc: Alcance = Depends(alcance)):
     _validar_grupo(data)
     g = Grupo(**data.model_dump(), sede_id=alc.defecto)
     db.add(g)
@@ -121,7 +121,7 @@ def crear_grupo(data: GrupoIn, db: Session = Depends(get_db), _=Depends(require_
 
 
 @router.put("/grupos/{grupo_id}", response_model=GrupoOut)
-def editar_grupo(grupo_id: int, data: GrupoIn, db: Session = Depends(get_db), _=Depends(require_admin),
+def editar_grupo(grupo_id: int, data: GrupoIn, db: Session = Depends(get_db), _=Depends(require_config),
                  alc: Alcance = Depends(alcance)):
     _validar_grupo(data)
     g = _de_sede(db.get(Grupo, grupo_id), alc, "Grupo")
@@ -132,7 +132,7 @@ def editar_grupo(grupo_id: int, data: GrupoIn, db: Session = Depends(get_db), _=
 
 
 @router.delete("/grupos/{grupo_id}", status_code=204)
-def borrar_grupo(grupo_id: int, db: Session = Depends(get_db), _=Depends(require_admin),
+def borrar_grupo(grupo_id: int, db: Session = Depends(get_db), _=Depends(require_config),
                  alc: Alcance = Depends(alcance)):
     g = _de_sede(db.get(Grupo, grupo_id), alc, "Grupo")
     for u in db.scalars(select(Usuario).where(Usuario.grupo_id == g.id)):
@@ -142,7 +142,7 @@ def borrar_grupo(grupo_id: int, db: Session = Depends(get_db), _=Depends(require
 
 
 @router.put("/grupos/{grupo_id}/miembros", response_model=GrupoOut)
-def asignar_miembros(grupo_id: int, data: AsignarMiembros, db: Session = Depends(get_db), _=Depends(require_admin),
+def asignar_miembros(grupo_id: int, data: AsignarMiembros, db: Session = Depends(get_db), _=Depends(require_config),
                      alc: Alcance = Depends(alcance)):
     """Reemplaza la lista de miembros del grupo (solo empleados de planta de la misma sede)."""
     g = _de_sede(db.get(Grupo, grupo_id), alc, "Grupo")
@@ -171,7 +171,7 @@ def asignar_miembros(grupo_id: int, data: AsignarMiembros, db: Session = Depends
 
 
 @router.put("/grupos/{grupo_id}/jefes", response_model=GrupoOut)
-def asignar_jefes(grupo_id: int, data: AsignarJefes, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin),
+def asignar_jefes(grupo_id: int, data: AsignarJefes, db: Session = Depends(get_db), admin: Usuario = Depends(require_config),
                   alc: Alcance = Depends(alcance)):
     """Reemplaza los jefes del grupo: cualquiera de ellos ve a los integrantes en Mi equipo y aprueba sus solicitudes."""
     g = _de_sede(db.get(Grupo, grupo_id), alc, "Grupo")
@@ -214,7 +214,7 @@ def _commit_area(db: Session):
 
 
 @router.post("/grupos/{grupo_id}/subgrupos", response_model=GrupoOut, status_code=201)
-def crear_subgrupo(grupo_id: int, data: SubgrupoIn, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin),
+def crear_subgrupo(grupo_id: int, data: SubgrupoIn, db: Session = Depends(get_db), admin: Usuario = Depends(require_config),
                    alc: Alcance = Depends(alcance)):
     g = _de_sede(db.get(Grupo, grupo_id), alc, "Grupo")
     db.add(Subgrupo(grupo_id=g.id, nombre=data.nombre.strip()))
@@ -226,7 +226,7 @@ def crear_subgrupo(grupo_id: int, data: SubgrupoIn, db: Session = Depends(get_db
 
 
 @router.put("/subgrupos/{subgrupo_id}", response_model=GrupoOut)
-def renombrar_subgrupo(subgrupo_id: int, data: SubgrupoIn, db: Session = Depends(get_db), _=Depends(require_admin),
+def renombrar_subgrupo(subgrupo_id: int, data: SubgrupoIn, db: Session = Depends(get_db), _=Depends(require_config),
                        alc: Alcance = Depends(alcance)):
     sg = _subgrupo(db, subgrupo_id, alc)
     sg.nombre = data.nombre.strip()
@@ -236,7 +236,7 @@ def renombrar_subgrupo(subgrupo_id: int, data: SubgrupoIn, db: Session = Depends
 
 
 @router.delete("/subgrupos/{subgrupo_id}", response_model=GrupoOut)
-def borrar_subgrupo(subgrupo_id: int, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin),
+def borrar_subgrupo(subgrupo_id: int, db: Session = Depends(get_db), admin: Usuario = Depends(require_config),
                     alc: Alcance = Depends(alcance)):
     """Sus integrantes siguen en el grupo, sin área (los atienden los jefes del grupo)."""
     sg = _subgrupo(db, subgrupo_id, alc)
@@ -252,7 +252,7 @@ def borrar_subgrupo(subgrupo_id: int, db: Session = Depends(get_db), admin: Usua
 
 @router.put("/subgrupos/{subgrupo_id}/jefes", response_model=GrupoOut)
 def asignar_jefes_subgrupo(subgrupo_id: int, data: AsignarJefes, db: Session = Depends(get_db),
-                           admin: Usuario = Depends(require_admin), alc: Alcance = Depends(alcance)):
+                           admin: Usuario = Depends(require_config), alc: Alcance = Depends(alcance)):
     sg = _subgrupo(db, subgrupo_id, alc)
     jefes = _jefes_validos(db, data.usuario_ids, sg.grupo.sede_id)
     db.execute(SubgrupoJefe.__table__.delete().where(SubgrupoJefe.subgrupo_id == sg.id))
@@ -267,7 +267,7 @@ def asignar_jefes_subgrupo(subgrupo_id: int, data: AsignarJefes, db: Session = D
 
 @router.put("/subgrupos/{subgrupo_id}/miembros", response_model=GrupoOut)
 def asignar_miembros_subgrupo(subgrupo_id: int, data: AsignarMiembros, db: Session = Depends(get_db),
-                              admin: Usuario = Depends(require_admin), alc: Alcance = Depends(alcance)):
+                              admin: Usuario = Depends(require_config), alc: Alcance = Depends(alcance)):
     """Reemplaza los integrantes del área (personal de planta de la sede). Quien no estaba en el grupo pasa a él; quien
     se quita del área sigue en el grupo, sin área."""
     sg = _subgrupo(db, subgrupo_id, alc)
@@ -309,7 +309,7 @@ def listar_festivos(anio: int | None = None, db: Session = Depends(get_db), alc:
 
 
 @router.post("/festivos", response_model=FestivoOut, status_code=201)
-def crear_festivo(data: FestivoIn, db: Session = Depends(get_db), _=Depends(require_admin),
+def crear_festivo(data: FestivoIn, db: Session = Depends(get_db), _=Depends(require_config),
                   alc: Alcance = Depends(alcance)):
     f = Festivo(**data.model_dump(), sede_id=alc.defecto)
     db.add(f)
@@ -318,7 +318,7 @@ def crear_festivo(data: FestivoIn, db: Session = Depends(get_db), _=Depends(requ
 
 
 @router.put("/festivos/{festivo_id}", response_model=FestivoOut)
-def editar_festivo(festivo_id: int, data: FestivoIn, db: Session = Depends(get_db), _=Depends(require_admin),
+def editar_festivo(festivo_id: int, data: FestivoIn, db: Session = Depends(get_db), _=Depends(require_config),
                    alc: Alcance = Depends(alcance)):
     f = _de_sede(db.get(Festivo, festivo_id), alc, "Festivo")
     for k, v in data.model_dump().items():
@@ -328,7 +328,7 @@ def editar_festivo(festivo_id: int, data: FestivoIn, db: Session = Depends(get_d
 
 
 @router.delete("/festivos/{festivo_id}", status_code=204)
-def borrar_festivo(festivo_id: int, db: Session = Depends(get_db), _=Depends(require_admin),
+def borrar_festivo(festivo_id: int, db: Session = Depends(get_db), _=Depends(require_config),
                    alc: Alcance = Depends(alcance)):
     f = _de_sede(db.get(Festivo, festivo_id), alc, "Festivo")
     db.delete(f)
@@ -350,7 +350,7 @@ def listar_reglas(db: Session = Depends(get_db), alc: Alcance = Depends(alcance)
 
 
 @router.delete("/reglas-antiguedad")
-def usar_tabla_principal(db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def usar_tabla_principal(db: Session = Depends(get_db), _=Depends(require_config), alc: Alcance = Depends(alcance)):
     """La sede deja de tener tabla propia y vuelve a usar la de la sede principal."""
     if alc.defecto == sede_principal(db).id:
         raise HTTPException(400, "La sede principal siempre tiene su propia tabla.")
@@ -361,7 +361,7 @@ def usar_tabla_principal(db: Session = Depends(get_db), _=Depends(require_admin)
 
 
 @router.put("/reglas-antiguedad")
-def reemplazar_reglas(data: list[ReglaIn], db: Session = Depends(get_db), _=Depends(require_admin),
+def reemplazar_reglas(data: list[ReglaIn], db: Session = Depends(get_db), _=Depends(require_config),
                       alc: Alcance = Depends(alcance)):
     """Reemplaza la tabla de días por antigüedad de la sede activa."""
     sede_id = alc.defecto

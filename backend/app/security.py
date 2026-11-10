@@ -194,6 +194,7 @@ def require_roles(*roles: str):
 
 
 require_admin = require_roles(*ROLES_ADMIN)
+require_config = require_roles(*ROLES_ADMIN, "administrador")  # Ajustes de la sede (incluye al Administrador)
 require_superadmin = require_roles(ROL_SUPERADMIN)
 def require_medico(user: Usuario = Depends(get_current_user)) -> Usuario:
     """Médico de planta o usuario con permiso para registrar consultas médicas."""
@@ -214,6 +215,8 @@ def permisos_de(user: Usuario) -> list[str]:
         p += ["solicitudes:aprobar", "equipo:consultar"]
     if es_admin(user):
         p += ["usuarios:administrar", "catalogos:administrar", "solicitudes:todas"]
+    elif user.rol == "administrador":
+        p += ["catalogos:administrar"]
     if user.rol == ROL_SUPERADMIN:
         p += ["config:microsoft", "usuarios:superadmin"]
     if es_medico(user):

@@ -8,7 +8,7 @@ import FormatoEquipo from '../components/FormatoEquipo'
 import TablaSalidas from '../components/TablaSalidas'
 import Modal from '../components/Modal'
 import {
-  ESTADOS, ESTADOS_INCAPACIDAD, RESULTADOS_CONSULTA, ROLES, TIPOS_INCAPACIDAD, TIPOS_NOMINA, TIPOS_PERMISO_SOLICITABLES, fmtFecha,
+  ESTADOS, ESTADOS_INCAPACIDAD, ROLES, TIPOS_INCAPACIDAD, TIPOS_NOMINA, TIPOS_PERMISO_SOLICITABLES, fmtFecha,
   SALIDAS_EQUIPO, esTI, nombreTipo, hhmm, num,
 } from '../utils'
 
@@ -149,16 +149,14 @@ export default function Solicitudes({ modo = 'jefe' }) {
       {tab === 'consultas' ? (
         <div className="tabla-wrap">
           <table className="tabla">
-            <thead><tr><th>Fecha</th><th>Paciente</th><th>Síntomas</th><th>Medicamento</th><th>Resultado</th><th>Atendió</th><th /></tr></thead>
+            <thead><tr><th>Fecha</th><th>Paciente</th><th>Medicamento</th><th>Atendió</th><th /></tr></thead>
             <tbody>
-              {filtrada.length === 0 && <tr><td colSpan={7} className="muted" style={{ textAlign: 'center' }}>Sin consultas</td></tr>}
+              {filtrada.length === 0 && <tr><td colSpan={5} className="muted" style={{ textAlign: 'center' }}>Sin consultas</td></tr>}
               {lista.filter((c) => !buscar || c.paciente_nombre?.toLowerCase().includes(buscar.toLowerCase())).map((c) => (
                 <tr key={c.id}>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtFecha(c.fecha)} · {hhmm(c.hora_inicio)}</td>
                   <td>{c.paciente_nombre}<div className="muted" style={{ fontSize: 12 }}>No. {c.paciente_numero} · {ROLES[c.paciente_rol]}</div></td>
-                  <td className="muted" style={{ maxWidth: 260 }}>{c.sintomas}</td>
                   <td>{c.medicamentos?.map((m) => m.nombre).join(', ') || '—'}</td>
-                  <td>{RESULTADOS_CONSULTA[c.resultado]}</td>
                   <td className="muted">{c.medico_nombre}</td>
                   <td><button className="icon-btn" title="Ver" onClick={() => setVerConsulta(c.id)}><Eye size={16} /></button></td>
                 </tr>

@@ -7,7 +7,7 @@ from .. import flujos as fl
 from ..database import get_db
 from ..models import FlujoAprobacion, FlujoPaso, TipoPermisoSede, Usuario
 from ..schemas import FlujoIn, FlujoOut, FlujoPasoOut
-from ..security import ahora, require_admin
+from ..security import ahora, require_config
 from ..sedes import Alcance, alcance
 
 router = APIRouter(prefix="/api/flujos", tags=["flujos de aprobación"])
@@ -49,20 +49,20 @@ def _aplicar(db: Session, f: FlujoAprobacion, data: FlujoIn, sede_id: int):
 
 
 @router.get("", response_model=list[FlujoOut])
-def listar(db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def listar(db: Session = Depends(get_db), _=Depends(require_config), alc: Alcance = Depends(alcance)):
     lista = db.scalars(select(FlujoAprobacion).where(FlujoAprobacion.sede_id == alc.defecto)
                        .order_by(FlujoAprobacion.nombre)).all()
     return [_out(db, f) for f in lista]
 
 
 @router.get("/aprobadores")
-def aprobadores(_=Depends(require_admin)):
+def aprobadores(_=Depends(require_config)):
     """Tipos de aprobador que se pueden usar en un paso."""
     return [{"clave": k, "nombre": v} for k, v in fl.APROBADORES.items()]
 
 
 @router.post("", response_model=FlujoOut, status_code=201)
-def crear(data: FlujoIn, db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def crear(data: FlujoIn, db: Session = Depends(get_db), _=Depends(require_config), alc: Alcance = Depends(alcance)):
     f = FlujoAprobacion(sede_id=alc.defecto)
     db.add(f)
     _aplicar(db, f, data, alc.defecto)
@@ -71,7 +71,7 @@ def crear(data: FlujoIn, db: Session = Depends(get_db), _=Depends(require_admin)
 
 
 @router.put("/{fid}", response_model=FlujoOut)
-def editar(fid: int, data: FlujoIn, db: Session = Depends(get_db), _=Depends(require_admin),
+def editar(fid: int, data: FlujoIn, db: Session = Depends(get_db), _=Depends(require_config),
            alc: Alcance = Depends(alcance)):
     f = _del_alcance(db, fid, alc)
     _aplicar(db, f, data, f.sede_id)
@@ -80,7 +80,7 @@ def editar(fid: int, data: FlujoIn, db: Session = Depends(get_db), _=Depends(req
 
 
 @router.delete("/{fid}", status_code=204)
-def borrar(fid: int, db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def borrar(fid: int, db: Session = Depends(get_db), _=Depends(require_config), alc: Alcance = Depends(alcance)):
     f = _del_alcance(db, fid, alc)
     usados = _out(db, f).tipos
     if usados:

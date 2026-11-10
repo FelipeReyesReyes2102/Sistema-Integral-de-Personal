@@ -71,6 +71,7 @@ function Evento({ e }) {
         <>
           <Fila k="Horario" v={`${hhmm(d.hora_inicio)}${d.hora_fin ? ` - ${hhmm(d.hora_fin)}` : ''}`} />
           <Fila k="Atendió" v={d.medico_nombre} />
+          {d.reservado && <div className="muted" style={{ fontSize: 12 }}>La información clínica solo la ven el paciente y el servicio médico.</div>}
           <Fila k="Síntomas" v={d.sintomas} />
           <Fila k="Diagnóstico" v={d.diagnostico} />
           <Fila k="Medicamento recetado" v={d.medicamentos?.length ? (

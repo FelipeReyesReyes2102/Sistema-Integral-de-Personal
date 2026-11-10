@@ -414,6 +414,7 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
             {Object.entries(ROLES).filter(([k]) => soySuper || k !== 'superadmin').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
           {form.rol === 'superadmin' && <span className="muted" style={{ fontSize: 11 }}>Acceso total, incluida la configuración de Microsoft.</span>}
+          {form.rol === 'administrador' && <span className="muted" style={{ fontSize: 11 }}>Solo Ajustes de su sede: grupos, turnos, festivos y configuración. No ve empleados ni solicitudes de otros.</span>}
         </label>
         <div className="campo emp-nota">
           <span>Contraseña</span>

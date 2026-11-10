@@ -6,10 +6,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from .cifrado import TextoCifrado
 from .database import Base
 
 # Roles
 ROL_ADMIN = "admin"
+ROL_ADMINISTRADOR = "administrador"  # solo Ajustes de su sede (grupos, turnos, festivos y configuración)
 ROL_OFICINA = "oficina"
 ROL_PLANTA = "planta"
 ROL_MEDICO = "medico"  # médico de planta: registra consultas; para vacaciones se rige como oficinas
@@ -18,13 +20,18 @@ ROL_SUPERADMIN = "superadmin"  # todo lo del administrador + configuración de M
 ROL_GERENCIA_GH = "gerencia_gh"  # Gerencia GH: mismos accesos que GH en las sedes que le asigne un super administrador
 ROL_CASETA = "caseta"  # vigilancia: ve los permisos validados del día y registra retardos; vacaciones como oficinas
 ROL_TI = "ti"  # ya no es un tipo de usuario: TI es la casilla "puede_ti" (los usuarios con este rol se convierten)
-ROLES = (ROL_SUPERADMIN, ROL_GERENCIA_GH, ROL_ADMIN, ROL_OFICINA, ROL_PLANTA, ROL_MEDICO, ROL_CASETA)
+ROLES = (ROL_SUPERADMIN, ROL_GERENCIA_GH, ROL_ADMIN, ROL_ADMINISTRADOR, ROL_OFICINA, ROL_PLANTA, ROL_MEDICO, ROL_CASETA)
 ROLES_ADMIN = (ROL_ADMIN, ROL_GERENCIA_GH, ROL_SUPERADMIN)
 
 
 def correo_contacto(usuario) -> str | None:
     """Correo para avisos personales: el corporativo y, si no tiene, el personal."""
     return (usuario.email or usuario.email_personal) if usuario is not None else None
+
+
+def es_configurador(usuario) -> bool:
+    """Puede cambiar los Ajustes de su sede: GH, Gerencia GH, super administrador y Administrador."""
+    return usuario is not None and (usuario.rol in ROLES_ADMIN or usuario.rol == ROL_ADMINISTRADOR)
 
 
 def es_admin(usuario) -> bool:
@@ -47,8 +54,9 @@ def es_ti(usuario) -> bool:
 
 
 def es_medico(usuario) -> bool:
-    """Médico de planta, usuario al que GH le permitió registrar consultas médicas o super administrador."""
-    return usuario is not None and (usuario.rol in (ROL_MEDICO, ROL_SUPERADMIN) or bool(getattr(usuario, "puede_consultas", False)))
+    """Médico de planta o usuario al que GH le permitió registrar consultas médicas. Solo ellos (y el paciente) ven la
+    información clínica; GH y el super administrador ven fecha, paciente y medicamento."""
+    return usuario is not None and (usuario.rol == ROL_MEDICO or bool(getattr(usuario, "puede_consultas", False)))
 
 # Estados de solicitudes (vacaciones y permisos)
 BORRADOR = "borrador"
@@ -673,9 +681,10 @@ class ConsultaMedica(Base):
     fecha: Mapped[date] = mapped_column(Date, index=True)
     hora_inicio: Mapped[time] = mapped_column(Time)
     hora_fin: Mapped[time | None] = mapped_column(Time)
-    sintomas: Mapped[str] = mapped_column(Text)
-    diagnostico: Mapped[str | None] = mapped_column(Text)
-    indicaciones: Mapped[str | None] = mapped_column(Text)
+    # Información clínica cifrada en la base de datos (ver app/cifrado.py)
+    sintomas: Mapped[str] = mapped_column(TextoCifrado)
+    diagnostico: Mapped[str | None] = mapped_column(TextoCifrado)
+    indicaciones: Mapped[str | None] = mapped_column(TextoCifrado)
     resultado: Mapped[str] = mapped_column(String(30), default="regresa_labores")
     creado: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     actualizado: Mapped[datetime | None] = mapped_column(DateTime, onupdate=func.now())

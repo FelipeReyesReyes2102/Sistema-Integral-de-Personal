@@ -12,7 +12,7 @@ from ..database import get_db
 from .. import tipos_permiso
 from ..models import TIPOS_PERMISO_SOLICITABLES, Sede, TipoJornada, Usuario
 from ..schemas import JornadaIn, JornadaOut, PoliticaIn
-from ..security import auditar, get_current_user, require_admin
+from ..security import auditar, get_current_user, require_config
 from ..sedes import Alcance, admin_permite, alcance
 from ..services import empleado_visible, reglas_de_sede
 
@@ -70,7 +70,7 @@ def obtener(usuario_id: int | None = None, sede_id: int | None = None, db: Sessi
 
 
 @router.put("/politica")
-def guardar(data: PoliticaIn, request: Request, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin),
+def guardar(data: PoliticaIn, request: Request, db: Session = Depends(get_db), admin: Usuario = Depends(require_config),
             alc: Alcance = Depends(alcance)):
     sede = _sede(db, alc.defecto)
     sede.meses_vigencia, sede.equivalencia_horas = data.meses_vigencia, data.equivalencia_horas
@@ -97,7 +97,7 @@ def guardar(data: PoliticaIn, request: Request, db: Session = Depends(get_db), a
 
 
 @router.post("/jornadas", response_model=JornadaOut, status_code=201)
-def crear_jornada(data: JornadaIn, request: Request, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin),
+def crear_jornada(data: JornadaIn, request: Request, db: Session = Depends(get_db), admin: Usuario = Depends(require_config),
                   alc: Alcance = Depends(alcance)):
     j = TipoJornada(**data.model_dump(), sede_id=_sede(db, alc.defecto).id)
     db.add(j)
@@ -109,7 +109,7 @@ def crear_jornada(data: JornadaIn, request: Request, db: Session = Depends(get_d
 
 @router.put("/jornadas/{jid}", response_model=JornadaOut)
 def editar_jornada(jid: int, data: JornadaIn, request: Request, db: Session = Depends(get_db),
-                   admin: Usuario = Depends(require_admin), alc: Alcance = Depends(alcance)):
+                   admin: Usuario = Depends(require_config), alc: Alcance = Depends(alcance)):
     j = db.get(TipoJornada, jid)
     if not j or not alc.permite(j.sede_id):
         raise HTTPException(404, "Tipo de jornada no encontrado")
@@ -123,7 +123,7 @@ def editar_jornada(jid: int, data: JornadaIn, request: Request, db: Session = De
 
 
 @router.delete("/jornadas/{jid}", status_code=204)
-def borrar_jornada(jid: int, db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def borrar_jornada(jid: int, db: Session = Depends(get_db), _=Depends(require_config), alc: Alcance = Depends(alcance)):
     j = db.get(TipoJornada, jid)
     if not j or not alc.permite(j.sede_id):
         raise HTTPException(404, "Tipo de jornada no encontrado")

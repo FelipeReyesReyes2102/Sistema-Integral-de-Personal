@@ -14,7 +14,7 @@ from ..database import get_db
 from ..models import TIPOS_PERMISO_SOLICITABLES, NotificacionCorreo, Sede, Usuario
 from .. import tipos_permiso
 from ..config_dinamica import cifrar
-from ..security import ahora, auditar, require_admin
+from ..security import ahora, auditar, require_config
 from ..sedes import Alcance, alcance
 
 router = APIRouter(prefix="/api/admin/correo", tags=["correo y caseta"])
@@ -67,12 +67,12 @@ def _sede(db: Session, alc: Alcance) -> Sede:
 
 
 @router.get("")
-def obtener(db: Session = Depends(get_db), user: Usuario = Depends(require_admin), alc: Alcance = Depends(alcance)):
+def obtener(db: Session = Depends(get_db), user: Usuario = Depends(require_config), alc: Alcance = Depends(alcance)):
     return _estado(db, _sede(db, alc), user)
 
 
 @router.put("")
-def guardar(data: CorreoIn, request: Request, db: Session = Depends(get_db), admin: Usuario = Depends(require_admin),
+def guardar(data: CorreoIn, request: Request, db: Session = Depends(get_db), admin: Usuario = Depends(require_config),
             alc: Alcance = Depends(alcance)):
     sede = _sede(db, alc)
     actual = correo.config_sede(db, sede)  # lo que no se envía se conserva
@@ -123,7 +123,7 @@ def guardar(data: CorreoIn, request: Request, db: Session = Depends(get_db), adm
 
 
 @router.post("/prueba")
-def prueba(data: PruebaIn, db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def prueba(data: PruebaIn, db: Session = Depends(get_db), _=Depends(require_config), alc: Alcance = Depends(alcance)):
     """Envía un correo de prueba (a la dirección indicada o a la caseta de la sede) con la configuración guardada."""
     sede = _sede(db, alc)
     cfg = correo.config_sede(db, sede)
@@ -142,7 +142,7 @@ def prueba(data: PruebaIn, db: Session = Depends(get_db), _=Depends(require_admi
 
 
 @router.get("/historial")
-def historial(limite: int = 50, db: Session = Depends(get_db), _=Depends(require_admin),
+def historial(limite: int = 50, db: Session = Depends(get_db), _=Depends(require_config),
               alc: Alcance = Depends(alcance)):
     q = (select(NotificacionCorreo).where(alc.filtro(NotificacionCorreo.sede_id))
          .order_by(NotificacionCorreo.id.desc()).limit(min(max(limite, 1), 200)))
@@ -159,7 +159,7 @@ def historial(limite: int = 50, db: Session = Depends(get_db), _=Depends(require
 
 
 @router.post("/historial/{nid}/reintentar")
-def reintentar(nid: int, db: Session = Depends(get_db), _=Depends(require_admin), alc: Alcance = Depends(alcance)):
+def reintentar(nid: int, db: Session = Depends(get_db), _=Depends(require_config), alc: Alcance = Depends(alcance)):
     n = db.get(NotificacionCorreo, nid)
     if not n or not alc.permite(n.sede_id):
         raise HTTPException(404, "Notificación no encontrada")

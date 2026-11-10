@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { useAuth } from './auth'
-import { SALIDAS_EQUIPO, esAdmin, esCaseta, esMedico, esSuperAdmin, esTI, inicioDe, sinVacaciones } from './utils'
+import { esConfig, SALIDAS_EQUIPO, esAdmin, esCaseta, esMedico, esSuperAdmin, esTI, inicioDe, sinVacaciones } from './utils'
 import Layout, { esJefe } from './components/Layout'
 import Login from './pages/Login'
 import CambioObligatorio from './pages/CambioObligatorio'
@@ -21,6 +21,11 @@ import Bitacora from './pages/Bitacora'
 import SuperAdmin from './pages/SuperAdmin'
 import CalendarioEquipo from './pages/CalendarioEquipo'
 import Consultas from './pages/Consultas'
+
+function SoloConfig({ children }) {
+  const { user } = useAuth()
+  return esConfig(user) ? children : <Navigate to="/" replace />
+}
 
 function SoloAdmin({ children }) {
   const { user } = useAuth()
@@ -92,10 +97,10 @@ export default function App() {
         <Route path="/equipo" element={<SoloJefe><CalendarioEquipo /></SoloJefe>} />
         <Route path="/empleados" element={<SoloAdmin><Empleados /></SoloAdmin>} />
         <Route path="/empleados/:id/vacaciones" element={<SoloAdmin><VacacionesEmpleado /></SoloAdmin>} />
-        <Route path="/turnos" element={<SoloAdmin><Turnos /></SoloAdmin>} />
-        <Route path="/grupos" element={<SoloAdmin><Grupos /></SoloAdmin>} />
-        <Route path="/festivos" element={<SoloAdmin><Festivos /></SoloAdmin>} />
-        <Route path="/configuracion" element={<SoloAdmin><Configuracion /></SoloAdmin>} />
+        <Route path="/turnos" element={<SoloConfig><Turnos /></SoloConfig>} />
+        <Route path="/grupos" element={<SoloConfig><Grupos /></SoloConfig>} />
+        <Route path="/festivos" element={<SoloConfig><Festivos /></SoloConfig>} />
+        <Route path="/configuracion" element={<SoloConfig><Configuracion /></SoloConfig>} />
         <Route path="/bitacora" element={<SoloAdmin><Bitacora /></SoloAdmin>} />
         <Route path="/super-admin" element={<SoloSuperAdmin><SuperAdmin /></SoloSuperAdmin>} />
         <Route path="*" element={<Navigate to="/" replace />} />

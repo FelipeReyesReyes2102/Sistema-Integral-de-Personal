@@ -13,13 +13,13 @@ from ..config import settings
 from ..database import get_db
 from ..models import (
     ROL_ADMIN, ROL_GERENCIA_GH, ROL_OFICINA, ROL_PLANTA, ROL_SUPERADMIN, AdminSede, Grupo, PeriodoVacaciones, Sede,
-    TipoJornada, Turno, Usuario,
+    TipoJornada, Turno, Usuario, es_admin,
 )
 from ..correo import EMAIL
 from ..schemas import AjustePeriodo, EmpleadoMicrosoftOut, PeriodoOut, RegistrarJefeIn, UsuarioIn, UsuarioOut
 from ..security import (
     ahora, asignar_password_temporal, auditar, get_current_user, hash_password, limpiar_sesiones_de,
-    password_inutilizable, puede_usar_password, require_admin,
+    password_inutilizable, puede_usar_password, require_admin, require_config,
 )
 from ..sedes import Alcance, admin_permite, alcance, crear_jornadas_base, jornada_por_defecto, sede_por_ubicacion
 from ..services import (
@@ -33,7 +33,7 @@ router = APIRouter(prefix="/api", tags=["usuarios"])
 
 @router.get("/usuarios", response_model=list[UsuarioOut])
 def listar(q: str | None = None, rol: str | None = None, grupo_id: int | None = None,
-           activos: bool | None = None, db: Session = Depends(get_db), _=Depends(require_admin),
+           activos: bool | None = None, db: Session = Depends(get_db), actor: Usuario = Depends(require_config),
            alc: Alcance = Depends(alcance)):
     stmt = select(Usuario).where(alc.filtro(Usuario.sede_id)).order_by(Usuario.nombre)
     if q:
@@ -46,7 +46,17 @@ def listar(q: str | None = None, rol: str | None = None, grupo_id: int | None = 
         stmt = stmt.where(Usuario.grupo_id == grupo_id)
     if activos is not None:
         stmt = stmt.where(Usuario.activo == activos)
+    if not es_admin(actor):  # Administrador: solo lo necesario para armar grupos, sin datos personales ni saldo
+        return [_basico(u) for u in db.scalars(stmt)]
     return [_con_saldo(db, u) for u in db.scalars(stmt)]
+
+
+def _basico(u: Usuario) -> UsuarioOut:
+    out = usuario_out(u)
+    for campo in ("email", "email_personal", "fecha_nacimiento", "direccion", "telefono", "contacto_nombre",
+                  "contacto_telefono"):
+        setattr(out, campo, None)
+    return out
 
 
 def _con_saldo(db: Session, u: Usuario) -> UsuarioOut:

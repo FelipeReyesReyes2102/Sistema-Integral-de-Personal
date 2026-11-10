@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-Rol = Literal["superadmin", "gerencia_gh", "admin", "oficina", "planta", "medico", "caseta"]
+Rol = Literal["superadmin", "gerencia_gh", "admin", "administrador", "oficina", "planta", "medico", "caseta"]
 TipoPermiso = Literal["llegada_tarde", "salida_temprana", "salida_intermedia", "consulta_medica", "home_office"]
 TipoNomina = Literal["con_goce", "sin_goce", "reposicion"]
 Firma = Annotated[str, Field(max_length=400_000, pattern=r"^data:image/png;base64,[A-Za-z0-9+/=]+$")]
@@ -640,13 +640,14 @@ class ConsultaOut(ConsultaResumenOut):
     paciente_numero: str | None = None
     paciente_rol: str | None = None
     paciente_departamento: str | None = None
-    sintomas: str
-    diagnostico: str | None
-    indicaciones: str | None
-    resultado: str
+    sintomas: str | None = None
+    diagnostico: str | None = None
+    indicaciones: str | None = None
+    resultado: str | None = None
     medicamentos: list[MedicamentoOut] = []
     creado: datetime | None = None
     detalle_clinico: bool = True
+    reservado: bool = False  # vista de GH / super admin: solo fecha, paciente y medicamento
 
 
 class PacienteOut(ORM):

@@ -37,6 +37,24 @@ def _completo(c: ConsultaMedica) -> ConsultaOut:
     return o
 
 
+def _administrativo(c: ConsultaMedica) -> ConsultaOut:
+    """Lo que ven GH y el super administrador: fecha, paciente y medicamento (sin información clínica)."""
+    o = _completo(c)
+    o.sintomas = o.diagnostico = o.indicaciones = o.resultado = None
+    for m in o.medicamentos:
+        m.dosis = m.frecuencia = m.duracion = None
+    o.detalle_clinico, o.reservado = False, True
+    return o
+
+
+def _vista(user: Usuario, c: ConsultaMedica):
+    if _puede_ver_detalle(user, c):
+        return _completo(c)
+    if admin_permite(user, c.paciente.sede_id if c.paciente else None):
+        return _administrativo(c)
+    return _resumen(c)
+
+
 def _resumen(c: ConsultaMedica) -> ConsultaResumenOut:
     o = ConsultaResumenOut.model_validate(c)
     o.paciente_nombre = c.paciente.nombre if c.paciente else None
@@ -46,10 +64,11 @@ def _resumen(c: ConsultaMedica) -> ConsultaResumenOut:
 
 
 def _puede_ver_detalle(user: Usuario, c: ConsultaMedica) -> bool:
+    """Información clínica completa: solo el paciente y el servicio médico de su sede."""
     if c.paciente_id == user.id:
         return True
     sede = c.paciente.sede_id if c.paciente else None
-    return (es_medico(user) and user.sede_id == sede) or admin_permite(user, sede)
+    return es_medico(user) and user.sede_id == sede
 
 
 def _sedes_atendidas(db: Session, medico: Usuario) -> set[int | None]:
@@ -107,8 +126,7 @@ def listar(usuario_id: int | None = None, desde: date | None = None, hasta: date
         stmt = stmt.where(ConsultaMedica.fecha >= desde)
     if hasta:
         stmt = stmt.where(ConsultaMedica.fecha <= hasta)
-    return [(_completo(c) if _puede_ver_detalle(user, c) else _resumen(c)).model_dump(mode="json")
-            for c in db.scalars(stmt.limit(500))]
+    return [_vista(user, c).model_dump(mode="json") for c in db.scalars(stmt.limit(500))]
 
 
 def _texto(c: ConsultaMedica) -> str:
@@ -180,13 +198,14 @@ def bitacora(desde: date | None = None, hasta: date | None = None, q: str | None
 @router.get("/{cid}", response_model=ConsultaOut)
 def detalle(cid: int, request: Request, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
     c = db.get(ConsultaMedica, cid)
-    if not c or not _puede_ver_detalle(user, c):
+    sede = c.paciente.sede_id if c and c.paciente else None
+    if not c or not (_puede_ver_detalle(user, c) or admin_permite(user, sede)):
         raise HTTPException(404, "Consulta no encontrada")
-    if es_admin(user) and c.paciente_id != user.id:
-        auditar(db, "consulta_vista_admin", usuario_id=c.paciente_id, actor_id=user.id, detalle=_texto(c),
-                request=request)
-        db.commit()
-    return _completo(c)
+    if _puede_ver_detalle(user, c):
+        return _completo(c)
+    auditar(db, "consulta_vista_admin", usuario_id=c.paciente_id, actor_id=user.id, detalle=_texto(c), request=request)
+    db.commit()
+    return _administrativo(c)
 
 
 def _validar(db: Session, data: ConsultaIn, medico: Usuario) -> Usuario:

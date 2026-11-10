@@ -104,10 +104,12 @@ def test_super_administrador_ve_todas_las_pestanas():
     from tests.test_sharepoint import super_login
     su = super_login()
     permisos = su.get("/api/auth/me").json()["permissions"]
-    assert {"consultas:registrar", "caseta:consultar", "usuarios:superadmin", "solicitudes:aprobar"} <= set(permisos)
-    for ruta in ("/api/consultas/pacientes", "/api/consultas/bitacora", "/api/consultas?todos=true", "/api/caseta/hoy",
+    assert {"caseta:consultar", "usuarios:superadmin", "solicitudes:aprobar"} <= set(permisos)
+    for ruta in ("/api/consultas/bitacora", "/api/consultas?todos=true", "/api/caseta/hoy",
                  "/api/caseta/retardos", "/api/incapacidades?todos=true", "/api/bitacora?seccion=configuracion", "/api/pendientes"):
         assert su.get(ruta).status_code == 200, ruta
+    # La información clínica es solo del servicio médico: el super administrador no registra consultas
+    assert "consultas:registrar" not in permisos and su.get("/api/consultas/pacientes").status_code == 403
 
 
 def test_busqueda_de_caseta_sin_acentos_y_con_permisos_del_dia():
