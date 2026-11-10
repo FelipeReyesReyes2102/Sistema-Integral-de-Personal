@@ -1,11 +1,8 @@
-"""Acceso a los manuales de usuario (/manuales/, servidos por el contenedor web).
+"""Manuales de usuario que corresponden a cada persona (/manuales/ se abre sin iniciar sesión).
 
-Nginx pregunta aquí (auth_request) antes de entregar cada archivo: sin sesión responde 401 (va a iniciar sesión) y
-si el manual no corresponde a la persona, 403. Las imágenes y el índice los ve cualquiera con sesión.
+El índice de manuales usa esta lista para mostrar solo los de la persona que tiene la sesión abierta.
 """
-from urllib.parse import unquote
-
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends
 
 from ..models import ROL_ADMINISTRADOR, ROL_CASETA, ROL_SUPERADMIN, ROLES_SIN_VACACIONES, Usuario, es_admin, es_medico
 from ..security import get_current_user
@@ -39,31 +36,9 @@ def permitidos(u: Usuario) -> list[str]:
     return p
 
 
-def manual_de_ruta(ruta: str) -> str | None:
-    """Qué manual protege un archivo de /manuales/ ("" = libre con sesión; None = no se publica)."""
-    r = unquote(ruta.split("?", 1)[0])
-    if not r.startswith("/manuales"):
-        return None
-    r = r[len("/manuales"):].lstrip("/")
-    if r in ("", "index.html") or (r.startswith("img/") and ".." not in r):
-        return ""
-    if r.startswith("manual-") and r.endswith(".html") and r[7:-5] in MANUALES:
-        return r[7:-5]
-    if r.startswith("presentaciones/"):
-        return next((k for k, n in PRESENTACIONES.items() if r == f"presentaciones/{n}"), None)
-    return None
-
-
 @router.get("")
 def mis_manuales(user: Usuario = Depends(get_current_user)):
     p = permitidos(user)
     return {"manuales": [f"manual-{k}.html" for k in p],
             "presentaciones": [f"presentaciones/{PRESENTACIONES[k]}" for k in p]}
 
-
-@router.get("/acceso", include_in_schema=False)
-def acceso(request: Request, user: Usuario = Depends(get_current_user)):
-    manual = manual_de_ruta(request.headers.get("x-original-uri", ""))
-    if manual is None or (manual and manual not in permitidos(user)):
-        raise HTTPException(403, "Este manual no corresponde a tu tipo de usuario.")
-    return Response(status_code=204)

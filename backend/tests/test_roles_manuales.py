@@ -51,23 +51,9 @@ def test_manuales_por_tipo_de_usuario():
     }
     _administrador()
     for (correo, pwd), esperados in casos.items():
-        c = entrar(correo, pwd)
-        d = c.get("/api/manuales").json()
+        d = entrar(correo, pwd).get("/api/manuales").json()
         assert {m[7:-5] for m in d["manuales"]} == esperados, correo
-        for m in ("empleado", "jefe", "gh", "caseta", "servicio-medico", "superadmin"):
-            r = c.get("/api/manuales/acceso", headers={"X-Original-URI": f"/manuales/manual-{m}.html"})
-            assert r.status_code == (204 if m in esperados else 403), (correo, m)
-        assert c.get("/api/manuales/acceso", headers={"X-Original-URI": "/manuales/"}).status_code == 204
-        assert c.get("/api/manuales/acceso", headers={"X-Original-URI": "/manuales/img/emp-login.jpg"}).status_code == 204
-        assert c.get("/api/manuales/acceso", headers={"X-Original-URI": "/manuales/README.md"}).status_code == 403
-    ana = entrar("ana@empresa.com")
-    pres = "/manuales/presentaciones/SIP-O%20-%20Manual%20de%20Gesti%C3%B3n%20Humana.pptx"
-    assert ana.get("/api/manuales/acceso", headers={"X-Original-URI": pres}).status_code == 403
-    gh = entrar("admin@empresa.com", "Admin123")
-    assert gh.get("/api/manuales/acceso", headers={"X-Original-URI": pres}).status_code == 204
-    from fastapi.testclient import TestClient
-    from app.main import app
-    assert TestClient(app).get("/api/manuales/acceso", headers={"X-Original-URI": "/manuales/"}).status_code == 401
+        assert len(d["presentaciones"]) == len(esperados)
 
 
 def test_cifra_consultas_anteriores():
