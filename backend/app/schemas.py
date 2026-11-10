@@ -150,6 +150,14 @@ class UsuarioBase(BaseModel):
 
 
 class UsuarioIn(UsuarioBase):
+    @field_validator("numero_empleado", "nombre")
+    @classmethod
+    def _sin_vacios(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("es obligatorio")
+        return v
+
     # Opcional: sin contraseña el usuario solo podrá entrar con Microsoft
     password: str | None = Field(None, min_length=6)
     microsoft_oid: str | None = Field(None, max_length=64)

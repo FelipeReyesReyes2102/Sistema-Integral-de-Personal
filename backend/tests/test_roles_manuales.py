@@ -78,3 +78,11 @@ def test_cifra_consultas_anteriores():
         assert c.sintomas == "Tos seca" and c.diagnostico == "Gripe"
         db.delete(c)
         db.commit()
+
+
+def test_nomina_vacia_no_se_acepta():
+    adm = entrar("admin@empresa.com", "Admin123")
+    r = adm.post("/api/usuarios", json={"numero_empleado": "  ", "nombre": "Caseta Prueba", "rol": "caseta",
+                                       "email_personal": "caseta.prueba@example.com", "fecha_ingreso": "2026-11-10"})
+    assert r.status_code == 422 and r.json()["detail"][0]["loc"][-1] == "numero_empleado"
+    assert "obligatorio" in r.json()["detail"][0]["msg"]

@@ -14,6 +14,7 @@ const CAMPOS = {
   hora_fin: 'Hora de fin', motivo: 'Motivo', rol: 'Tipo de usuario', dias_disponibles: 'Días de vacaciones disponibles',
 }
 function traducir(msg = '') {
+  msg = msg.replace(/^Value error, /, '')
   if (/required/i.test(msg)) return 'es obligatorio'
   if (/valid date|datetime/i.test(msg)) return 'no es una fecha válida'
   if (/valid time/i.test(msg)) return 'no es una hora válida'
