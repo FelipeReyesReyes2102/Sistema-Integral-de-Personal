@@ -9,8 +9,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import sharepoint
+from .. import tipos_permiso as tp
 from ..database import get_db
-from ..models import EnvioSharePoint, ListaSharePoint, Sede, Usuario
+from ..models import EnvioSharePoint, ListaSharePoint, Sede, TipoPermisoSede, Usuario
 from ..security import ahora, require_superadmin
 from ..sedes import Alcance, alcance, sede_principal
 
@@ -45,10 +46,22 @@ def _sede(db: Session, alc: Alcance) -> Sede:
     return db.get(Sede, sid)
 
 
-def _tipo(tipo: str) -> str:
-    if tipo not in sharepoint.TIPOS:
-        raise HTTPException(404, "Tipo de lista no válido")
-    return tipo
+def _tipo(db: Session, sede: Sede, tipo: str) -> str:
+    """vacaciones | permisos | equipos, o "p<id>": lista propia de un tipo de permiso de la sede."""
+    if tipo in sharepoint.TIPOS:
+        return tipo
+    if sharepoint.clase(tipo) == "permisos":
+        t = db.get(TipoPermisoSede, int(tipo[1:]))
+        if t and t.sede_id == sede.id:
+            return tipo
+    raise HTTPException(404, "Tipo de lista no válido")
+
+
+def _nombre_tipo(db: Session, tipo: str) -> str | None:
+    if tipo in sharepoint.TIPOS:
+        return None
+    t = db.get(TipoPermisoSede, int(tipo[1:]))
+    return t.nombre if t else None
 
 
 def _lista(db: Session, sede: Sede, tipo: str) -> ListaSharePoint | None:
@@ -56,26 +69,28 @@ def _lista(db: Session, sede: Sede, tipo: str) -> ListaSharePoint | None:
 
 
 def _estado(db: Session, sede: Sede, tipo: str) -> dict:
-    campos = [{"clave": k, "etiqueta": v[0], "tipo": v[1], "valores": v[2]} for k, v in sharepoint.CAMPOS[tipo].items()]
+    campos = [{"clave": k, "etiqueta": v[0], "tipo": v[1], "valores": v[2]}
+              for k, v in sharepoint.CAMPOS[sharepoint.clase(tipo)].items()]
     l = _lista(db, sede, tipo)
+    nombre = _nombre_tipo(db, tipo)
     if not l:
-        return {"tipo": tipo, "conectada": False, "campos": campos}
+        return {"tipo": tipo, "nombre": nombre, "conectada": False, "campos": campos}
     cuentas = dict(db.execute(select(EnvioSharePoint.estado, func.count()).where(EnvioSharePoint.lista_id == l.id)
                               .group_by(EnvioSharePoint.estado)).all())
     errores = db.scalars(select(EnvioSharePoint).where(EnvioSharePoint.lista_id == l.id, EnvioSharePoint.estado == "error")
                          .order_by(EnvioSharePoint.actualizado.desc()).limit(10)).all()
     return {
-        "tipo": tipo, "conectada": True, "campos": campos, "url": l.url, "sitio_nombre": l.sitio_nombre,
+        "tipo": tipo, "nombre": nombre, "conectada": True, "campos": campos, "url": l.url, "sitio_nombre": l.sitio_nombre,
         "lista_nombre": l.lista_nombre, "columnas": json.loads(l.columnas or "[]"), "mapeo": json.loads(l.mapeo or "{}"),
         "valores": json.loads(l.valores or "{}"), "activo": l.activo, "actualizado": l.actualizado,
         "cuentas": {"enviado": cuentas.get("enviado", 0), "pendiente": cuentas.get("pendiente", 0),
                     "error": cuentas.get("error", 0)},
-        "errores": [{"folio": f"{sharepoint.PREFIJOS[tipo]}-{e.registro_id}", "error": e.error,
+        "errores": [{"folio": f"{sharepoint.PREFIJOS[sharepoint.clase(tipo)]}-{e.registro_id}", "error": e.error,
                      "intentos": e.intentos, "fecha": e.actualizado} for e in errores],
         "teams": {"activo": l.aprobacion_teams, "col_decision": l.col_decision,
                   "val_aprobado": l.val_aprobado or sharepoint.APROBADO_DEF, "val_rechazado": l.val_rechazado or sharepoint.RECHAZADO_DEF,
                   "col_comentario": l.col_comentario, "col_respondio": l.col_respondio, "cuenta_flujo": l.cuenta_flujo},
-        "notas_teams": [{"folio": f"{sharepoint.PREFIJOS[tipo]}-{e.registro_id}", "nota": e.decision_nota}
+        "notas_teams": [{"folio": f"{sharepoint.PREFIJOS[sharepoint.clase(tipo)]}-{e.registro_id}", "nota": e.decision_nota}
                         for e in db.scalars(select(EnvioSharePoint).where(EnvioSharePoint.lista_id == l.id,
                                                                           EnvioSharePoint.decision_nota.is_not(None))
                                             .order_by(EnvioSharePoint.id.desc()).limit(10))],
@@ -90,14 +105,23 @@ def _procesar(lista_id: int):
 @router.get("")
 def obtener(db: Session = Depends(get_db), _=Depends(require_superadmin), alc: Alcance = Depends(alcance)):
     sede = _sede(db, alc)
-    return {"sede_nombre": sede.nombre, "listas": {t: _estado(db, sede, t) for t in sharepoint.TIPOS}}
+    listas = {t: _estado(db, sede, t) for t in sharepoint.TIPOS}
+    # Listas propias de tipos de permiso (opcionales): sus permisos ya no van a la lista de permisos
+    for t in db.scalars(select(ListaSharePoint.tipo).where(ListaSharePoint.sede_id == sede.id)):
+        if t not in sharepoint.TIPOS and _nombre_tipo(db, t):
+            listas[t] = _estado(db, sede, t)
+    de_sede = tp.de_sede(db, sede.id)  # crea los tipos base si la sede aún no los tiene
+    db.commit()
+    tipos = [{"tipo": sharepoint.tipo_de_lista(t.id), "nombre": t.nombre, "activo": t.activo} for t in de_sede]
+    return {"sede_nombre": sede.nombre, "listas": listas, "tipos_permiso": tipos}
 
 
 @router.put("/{tipo}/conectar")
 def conectar(tipo: str, data: ConectarIn, db: Session = Depends(get_db), admin: Usuario = Depends(require_superadmin),
              alc: Alcance = Depends(alcance)):
     """Lee el sitio, la lista y sus columnas; sugiere el mapeo si la lista es nueva o cambió."""
-    tipo, sede = _tipo(tipo), _sede(db, alc)
+    sede = _sede(db, alc)
+    tipo = _tipo(db, sede, tipo)
     try:
         info = sharepoint.conectar(data.url)
     except sharepoint.ErrorSharePoint as e:
@@ -127,14 +151,15 @@ def conectar(tipo: str, data: ConectarIn, db: Session = Depends(get_db), admin: 
 @router.put("/{tipo}")
 def guardar(tipo: str, data: GuardarIn, db: Session = Depends(get_db), admin: Usuario = Depends(require_superadmin),
             alc: Alcance = Depends(alcance)):
-    tipo, sede = _tipo(tipo), _sede(db, alc)
+    sede = _sede(db, alc)
+    tipo = _tipo(db, sede, tipo)
     l = _lista(db, sede, tipo)
     if not l:
         raise HTTPException(404, "Primero conecta la lista con su URL.")
     columnas = {c["nombre"]: c for c in json.loads(l.columnas or "[]")}
     mapeo = {k: v for k, v in data.mapeo.items() if v}
     for col, campo in mapeo.items():
-        if col not in columnas or campo not in sharepoint.CAMPOS[tipo]:
+        if col not in columnas or campo not in sharepoint.CAMPOS[sharepoint.clase(tipo)]:
             raise HTTPException(422, f"Columna o dato no válido: {col}")
         if not columnas[col]["compatible"]:
             raise HTTPException(422, f"La columna «{columnas[col]['titulo']}» es de tipo {columnas[col]['tipo']} y no se "
@@ -187,7 +212,8 @@ def _validar_teams(data: GuardarIn, columnas: dict, mapeo: dict):
 def enviar_existentes(tipo: str, data: ExistentesIn, db: Session = Depends(get_db), _=Depends(require_superadmin),
                       alc: Alcance = Depends(alcance)):
     """Envía también las solicitudes que ya existían (desde una fecha); las ya enviadas no se duplican."""
-    tipo, sede = _tipo(tipo), _sede(db, alc)
+    sede = _sede(db, alc)
+    tipo = _tipo(db, sede, tipo)
     l = _lista(db, sede, tipo)
     if not l or not l.activo:
         raise HTTPException(422, "Activa primero el envío a la lista.")
@@ -199,7 +225,8 @@ def enviar_existentes(tipo: str, data: ExistentesIn, db: Session = Depends(get_d
 
 @router.post("/{tipo}/reintentar")
 def reintentar(tipo: str, db: Session = Depends(get_db), _=Depends(require_superadmin), alc: Alcance = Depends(alcance)):
-    tipo, sede = _tipo(tipo), _sede(db, alc)
+    sede = _sede(db, alc)
+    tipo = _tipo(db, sede, tipo)
     l = _lista(db, sede, tipo)
     if not l:
         raise HTTPException(404, "Lista no conectada")
@@ -213,7 +240,8 @@ def reintentar(tipo: str, db: Session = Depends(get_db), _=Depends(require_super
 @router.delete("/{tipo}")
 def desconectar(tipo: str, db: Session = Depends(get_db), _=Depends(require_superadmin), alc: Alcance = Depends(alcance)):
     """Deja de enviar a la lista. No borra nada en SharePoint."""
-    tipo, sede = _tipo(tipo), _sede(db, alc)
+    sede = _sede(db, alc)
+    tipo = _tipo(db, sede, tipo)
     l = _lista(db, sede, tipo)
     if l:
         db.query(EnvioSharePoint).filter(EnvioSharePoint.lista_id == l.id).delete()

@@ -48,8 +48,8 @@ def _persona(u: Usuario) -> dict:
 
 def _teams(db: Session, p: Permiso) -> dict | None:
     """Estado del envío a Teams (lista de SharePoint con aprobación en Teams de la sede), si está configurado."""
-    lista = db.scalar(select(ListaSharePoint).where(ListaSharePoint.sede_id == p.usuario.sede_id, ListaSharePoint.tipo == "permisos",
-                                                    ListaSharePoint.activo.is_(True), ListaSharePoint.aprobacion_teams.is_(True)))
+    from ..sharepoint import lista_de_permiso
+    lista = lista_de_permiso(db, p, solo_teams=True)
     if lista is None:
         return None
     env = db.scalar(select(EnvioSharePoint).where(EnvioSharePoint.lista_id == lista.id, EnvioSharePoint.registro_id == p.id))

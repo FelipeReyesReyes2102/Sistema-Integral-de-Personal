@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { CalendarCheck, Laptop, Clock, ExternalLink, Link2, MessageSquareMore, RefreshCw, Save, Send, Share2, Unlink } from 'lucide-react'
+import { CalendarCheck, Laptop, Clock, ExternalLink, Link2, ListPlus, MessageSquareMore, Plus, RefreshCw, Save, Send, Share2, Unlink } from 'lucide-react'
 import { api } from '../api'
 import { SALIDAS_EQUIPO, fmtFecha } from '../utils'
 
 const TITULOS = { vacaciones: { t: 'Vacaciones', i: CalendarCheck }, permisos: { t: 'Permisos y home office', i: Clock }, equipos: { t: 'Salida de equipos', i: Laptop } }
+const esPorTipo = (t) => /^p\d+$/.test(t)  // lista propia de un tipo de permiso
 const TIPOS_COL = { text: 'Texto', number: 'Número', currency: 'Moneda', dateTime: 'Fecha', choice: 'Opción', boolean: 'Sí/No',
   personOrGroup: 'Persona', lookup: 'Búsqueda', calculated: 'Calculada', hyperlinkOrPicture: 'Hipervínculo', term: 'Metadatos' }
 
@@ -54,7 +55,7 @@ function Lista({ datos, onCambio, sedeId }) {
   }
 
   const usados = new Set(Object.values(mapeo).filter(Boolean))
-  const T = TITULOS[tipo]
+  const T = TITULOS[tipo] || { t: `Permiso: ${datos.nombre || ''}`, i: Clock }
   return (
     <div className="sp-lista">
       <div className="fila" style={{ gap: 8 }}>
@@ -170,7 +171,7 @@ function AprobacionTeams({ datos, teams, setTeams, mapeo, valores }) {
       {libres.map((c) => <option key={c.nombre} value={c.nombre}>{c.titulo}</option>)}
     </select>
   )
-  const nombre = { vacaciones: 'Vacaciones', permisos: 'Permiso', equipos: 'Salida de equipo' }[datos.tipo]
+  const nombre = { vacaciones: 'Vacaciones', permisos: 'Permiso', equipos: 'Salida de equipo' }[datos.tipo] || datos.nombre || 'Permiso'
   return (
     <div className="sp-teams">
       <label className="checkbox"><input type="checkbox" checked={!!teams.activo} onChange={set('activo')} />
@@ -222,7 +223,7 @@ function AprobacionTeams({ datos, teams, setTeams, mapeo, valores }) {
                 {teams.col_comentario && <>; <b>{titulo(teams.col_comentario)}</b> = <i>Respuestas Comentarios</i></>}
                 {teams.col_respondio && <>; <b>{titulo(teams.col_respondio)}</b> = <i>Respuestas Correo electrónico del aprobador</i></>}.
                 Si pide Título, usa el Título del disparador. Power Automate puede envolverlo en «Aplicar a cada uno»: es normal.</li>
-              {datos.tipo === 'permisos' && (
+              {(datos.tipo === 'permisos' || esPorTipo(datos.tipo)) && (
                 <li><b>Si la sede usa cadenas de aprobación</b> (Configuración → Flujos de aprobación): usa el disparador
                   <b> «Cuando se crea o modifica un elemento»</b> y agrega a la condición que <b>{teams.col_decision ? titulo(teams.col_decision) : 'Decisión'}</b>
                   {' '}esté vacía. Al pasar a otro paso que va a Teams, SIP-O vacía esa columna y pone en
@@ -244,9 +245,18 @@ function AprobacionTeams({ datos, teams, setTeams, mapeo, valores }) {
 export default function ConfigSharePoint({ sedeId }) {
   const [d, setD] = useState(null)
   const [error, setError] = useState('')
+  const [nuevo, setNuevo] = useState('')
   useEffect(() => { api('/sharepoint', { sede: sedeId }).then(setD).catch((e) => setError(e.message)) }, [sedeId])
   if (!d) return <div className="card">{error ? <div className="alerta error">{error}</div> : 'Cargando…'}</div>
   const cambiar = (tipo, r) => setD({ ...d, listas: { ...d.listas, [tipo]: r } })
+  const porTipo = Object.keys(d.listas).filter(esPorTipo)
+  const sinLista = (d.tipos_permiso || []).filter((t) => !d.listas[t.tipo])
+  const agregar = () => {
+    const t = sinLista.find((x) => x.tipo === nuevo)
+    if (!t) return
+    setD({ ...d, listas: { ...d.listas, [t.tipo]: { tipo: t.tipo, nombre: t.nombre, conectada: false, campos: d.listas.permisos.campos } } })
+    setNuevo('')
+  }
   return (
     <div className="card">
       <h3 className="fila" style={{ gap: 8, marginBottom: 6 }}><Share2 size={18} /> Listas de SharePoint · {d.sede_nombre}</h3>
@@ -256,6 +266,23 @@ export default function ConfigSharePoint({ sedeId }) {
         aplicación <b>Sites.ReadWrite.All</b> (o Sites.Selected con acceso al sitio) en la app de Microsoft.
       </p>
       {Object.keys(TITULOS).filter((t) => SALIDAS_EQUIPO || t !== 'equipos').map((t) => <Lista key={t} datos={d.listas[t]} onCambio={cambiar} sedeId={sedeId} />)}
+
+      <h4 className="fila" style={{ gap: 8, margin: '22px 0 4px' }}><ListPlus size={17} /> Listas por tipo de permiso</h4>
+      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+        Opcional. Si un tipo de permiso tiene su propia lista, sus solicitudes se envían a esa lista en lugar de a
+        «Permisos y home office» (y, si activas la aprobación en Teams, el flujo de esa lista pide la aprobación). Los tipos sin
+        lista propia siguen yendo a la lista de permisos.
+      </p>
+      {porTipo.map((t) => <Lista key={t} datos={d.listas[t]} onCambio={cambiar} sedeId={sedeId} />)}
+      {sinLista.length > 0 ? (
+        <div className="fila" style={{ gap: 8, marginTop: 8 }}>
+          <select style={{ maxWidth: 320 }} value={nuevo} onChange={(e) => setNuevo(e.target.value)}>
+            <option value="">— Elige un tipo de permiso —</option>
+            {sinLista.map((t) => <option key={t.tipo} value={t.tipo}>{t.nombre}{t.activo ? '' : ' (inactivo)'}</option>)}
+          </select>
+          <button className="btn btn-sm" onClick={agregar} disabled={!nuevo}><Plus size={14} /> Agregar lista</button>
+        </div>
+      ) : <p className="muted" style={{ fontSize: 12 }}>Todos los tipos de permiso de la sede ya tienen su lista.</p>}
     </div>
   )
 }

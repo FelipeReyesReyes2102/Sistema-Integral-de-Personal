@@ -27,11 +27,20 @@ from .config import settings
 from .security import ahora as _ahora
 from .models import (
     BORRADOR, PERMISO_CONSULTA_MEDICA, EnvioSharePoint, ListaSharePoint, Permiso, SalidaEquipo, Sede,
-    SolicitudVacaciones, Usuario,
+    SolicitudVacaciones, TipoPermisoSede, Usuario,
 )
 
 log = logging.getLogger("sip.sharepoint")
 TIPOS = ("vacaciones", "permisos", "equipos")
+
+
+def clase(tipo: str) -> str:
+    """Una lista propia de un tipo de permiso ("p<id del tipo>") funciona igual que la lista de permisos."""
+    return "permisos" if tipo and tipo[0] == "p" and tipo[1:].isdigit() else tipo
+
+
+def tipo_de_lista(tipo_permiso_id: int) -> str:
+    return f"p{tipo_permiso_id}"
 MODELOS = {"vacaciones": SolicitudVacaciones, "permisos": Permiso, "equipos": SalidaEquipo}
 PREFIJOS = {"vacaciones": "VAC", "permisos": "PER", "equipos": "EQ"}
 SEGUNDO_PLANO = True  # las pruebas lo apagan y llaman a procesar_pendientes() directamente
@@ -230,7 +239,7 @@ def columnas_de(valores: list[dict]) -> list[dict]:
 
 
 def sugerir_mapeo(tipo: str, columnas: list[dict]) -> dict:
-    campos = CAMPOS[tipo]
+    campos = CAMPOS[clase(tipo)]
     mapeo, usados = {}, set()
     for c in columnas:
         if not c["compatible"]:
@@ -251,7 +260,7 @@ def sugerir_valores(tipo: str, columnas: list[dict], mapeo: dict) -> dict:
     res = {}
     for c in columnas:
         campo = mapeo.get(c["nombre"])
-        posibles = CAMPOS[tipo].get(campo, (None, None, None))[2] if campo else None
+        posibles = CAMPOS[clase(tipo)].get(campo, (None, None, None))[2] if campo else None
         if c["tipo"] != "choice" or not posibles:
             continue
         opciones = {normalizar(o): o for o in c["opciones"]}
@@ -278,6 +287,7 @@ def _sesion(reg):
 
 
 def datos_registro(tipo: str, reg) -> dict:
+    tipo = clase(tipo)
     u: Usuario = reg.usuario
     comunes = {
         "empleado": u.nombre, "numero_empleado": u.numero_empleado, "correo": u.email or u.email_personal,
@@ -339,7 +349,7 @@ def _convertir(valor, columna: dict, campo: str, tipo: str, valores: dict, tz: Z
     if valor is None or valor == "":
         return None
     t = columna["tipo"]
-    posibles = CAMPOS[tipo][campo][2]
+    posibles = CAMPOS[clase(tipo)][campo][2]
     if posibles and t in ("choice", "text"):
         elegido = (valores.get(columna["nombre"]) or {}).get(valor)
         return elegido or posibles.get(valor, valor)
@@ -377,14 +387,14 @@ def campos_lista(lista: ListaSharePoint, reg, eliminado: bool = False) -> dict:
     datos = datos_registro(lista.tipo, reg)
     res = {}
     for nombre, campo in mapeo.items():
-        if nombre in columnas and campo in CAMPOS[lista.tipo]:
+        if nombre in columnas and campo in CAMPOS[clase(lista.tipo)]:
             res[nombre] = _convertir(datos.get(campo), columnas[nombre], campo, lista.tipo, valores, tz)
     return res
 
 
 # ---------------- Cola ----------------
 def _modelo(tipo: str):
-    return MODELOS[tipo]
+    return MODELOS[clase(tipo)]
 
 
 def _encolar(session: Session, _ctx):
@@ -401,7 +411,7 @@ def _encolar(session: Session, _ctx):
     if not objs:
         return
     con = session.connection()
-    L, E, U = ListaSharePoint.__table__, EnvioSharePoint.__table__, Usuario.__table__
+    L, E, U, TP = ListaSharePoint.__table__, EnvioSharePoint.__table__, Usuario.__table__, TipoPermisoSede.__table__
     activas = {(r.sede_id, r.tipo): r.id for r in con.execute(select(L.c.id, L.c.sede_id, L.c.tipo).where(L.c.activo))}
     if not activas:
         return
@@ -410,7 +420,11 @@ def _encolar(session: Session, _ctx):
         if o in session.dirty and not session.is_modified(o, include_collections=False):
             continue
         sede = con.execute(select(U.c.sede_id).where(U.c.id == o.usuario_id)).scalar()
-        lid = activas.get((sede, tipo))
+        lid = None
+        if tipo == "permisos":  # el tipo de permiso puede tener su propia lista; si no, va a la de permisos
+            tid = con.execute(select(TP.c.id).where(TP.c.sede_id == sede, TP.c.clave == o.tipo)).scalar()
+            lid = activas.get((sede, tipo_de_lista(tid))) if tid else None
+        lid = lid or activas.get((sede, tipo))
         if not lid:
             continue
         previo = con.execute(select(E.c.id).where(E.c.lista_id == lid, E.c.registro_id == o.id)).scalar()
@@ -511,9 +525,7 @@ def reencolar(db: Session, permiso: Permiso):
     from . import lotes
     if lotes.es_secundario(permiso):
         return
-    sede = permiso.usuario.sede_id if permiso.usuario else None
-    lista = db.scalar(select(ListaSharePoint).where(ListaSharePoint.sede_id == sede, ListaSharePoint.tipo == "permisos",
-                                                    ListaSharePoint.activo, ListaSharePoint.aprobacion_teams))
+    lista = lista_de_permiso(db, permiso, solo_teams=True)
     env = db.scalar(select(EnvioSharePoint).where(EnvioSharePoint.lista_id == lista.id,
                                                   EnvioSharePoint.registro_id == permiso.id)) if lista else None
     if env is None:
@@ -522,14 +534,41 @@ def reencolar(db: Session, permiso: Permiso):
     db.info["sharepoint_cola"] = True
 
 
+def lista_de_permiso(db: Session, permiso: Permiso, solo_teams: bool = False) -> ListaSharePoint | None:
+    """Lista activa a la que va un permiso: la propia de su tipo o, si no tiene, la de permisos de la sede."""
+    sede = permiso.usuario.sede_id if permiso.usuario else None
+    tid = db.scalar(select(TipoPermisoSede.id).where(TipoPermisoSede.sede_id == sede, TipoPermisoSede.clave == permiso.tipo))
+    for tipo in ([tipo_de_lista(tid)] if tid else []) + ["permisos"]:
+        lista = db.scalar(select(ListaSharePoint).where(ListaSharePoint.sede_id == sede, ListaSharePoint.tipo == tipo,
+                                                        ListaSharePoint.activo))
+        if lista:
+            return lista if lista.aprobacion_teams or not solo_teams else None
+    return None
+
+
+def claves_con_lista_propia(db: Session, sede_id: int) -> set[str]:
+    """Claves de los tipos de permiso de la sede que tienen una lista propia activa."""
+    ids = [int(t[1:]) for t in db.scalars(select(ListaSharePoint.tipo).where(ListaSharePoint.sede_id == sede_id,
+                                                                            ListaSharePoint.activo)) if t[0] == "p" and t[1:].isdigit()]
+    return set(db.scalars(select(TipoPermisoSede.clave).where(TipoPermisoSede.id.in_(ids)))) if ids else set()
+
+
 def encolar_existentes(db: Session, lista: ListaSharePoint, desde: date) -> int:
     """Pone en cola las solicitudes (no borrador) de la sede desde una fecha, para enviar el historial."""
     M = _modelo(lista.tipo)
-    fecha = M.fecha if lista.tipo == "permisos" else M.fecha_inicio
+    es_permiso = clase(lista.tipo) == "permisos"
+    fecha = M.fecha if es_permiso else M.fecha_inicio
     q = select(M.id).join(Usuario, M.usuario_id == Usuario.id).where(
         Usuario.sede_id == lista.sede_id, M.estado != BORRADOR, fecha >= desde)
-    if lista.tipo == "permisos":
+    if es_permiso:
         q = q.where(M.tipo != PERMISO_CONSULTA_MEDICA)
+        if lista.tipo == TIPOS[1]:  # la lista general de permisos: sin los tipos que tienen su propia lista
+            propias = claves_con_lista_propia(db, lista.sede_id)
+            if propias:
+                q = q.where(M.tipo.not_in(propias))
+        else:
+            t = db.get(TipoPermisoSede, int(lista.tipo[1:]))
+            q = q.where(M.tipo == (t.clave if t else "-"))
     ya = set(db.scalars(select(EnvioSharePoint.registro_id).where(EnvioSharePoint.lista_id == lista.id)))
     n = 0
     for rid in db.scalars(q):
@@ -603,7 +642,7 @@ def revisar_decisiones() -> int:
             pendientes += [(lista, env, reg) for env, reg in filas]
         from . import flujos
         from .aprobacion_flujo import canal_activo
-        pendientes = [p for p in pendientes if not canal_activo(db, p[0].sede_id, p[0].tipo)
+        pendientes = [p for p in pendientes if not canal_activo(db, p[0].sede_id, clase(p[0].tipo))
                       and getattr(p[2], "aprobado_jefe_id", None) is None and flujos.acepta_teams(p[2])]
         for lista, env, reg in pendientes:
             sel = ",".join(c for c in (lista.col_decision, lista.col_comentario, lista.col_respondio) if c)
@@ -641,25 +680,25 @@ def revisar_decisiones() -> int:
             from .services import aplicar_rechazo_teams, aprobar
             asignar_actor(db, revisor, "Teams (Power Automate)")
             final, pide_motivo, otros = True, False, []
-            antes = lotes.punto(reg) if lista.tipo == "permisos" else None
+            antes = lotes.punto(reg) if clase(lista.tipo) == "permisos" else None
             if nuevo == RECHAZADO:
-                if lista.tipo == "permisos":
+                if clase(lista.tipo) == "permisos":
                     flujos.rechazar(reg, revisor, "teams", comentario)
                 reg.estado, reg.revisado_por_id, reg.fecha_revision = nuevo, revisor.id, datetime.now()
                 pide_motivo = aplicar_rechazo_teams(reg, comentario)
-                if lista.tipo == "permisos":
+                if clase(lista.tipo) == "permisos":
                     lotes.rechazar(reg, antes, revisor, "teams", comentario)
             else:
                 final = aprobar(reg, revisor, "teams", comentario)
-                if comentario and lista.tipo == "permisos":
+                if comentario and clase(lista.tipo) == "permisos":
                     reg.observaciones = comentario
-                if lista.tipo == "permisos":
+                if clase(lista.tipo) == "permisos":
                     otros = lotes.aprobar(reg, antes, revisor, "teams", comentario, comentario)
             env.decision_nota = None
             db.commit()
             db.info.pop("bitacora_actor", None)
             aplicadas += 1
-            if lista.tipo == "permisos" and nuevo == VALIDADO and final:
+            if clase(lista.tipo) == "permisos" and nuevo == VALIDADO and final:
                 correo.notificar_permiso(reg.id, "permiso_autorizado")
             for pid in otros:
                 correo.notificar_permiso(pid, "permiso_autorizado")
