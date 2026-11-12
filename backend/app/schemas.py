@@ -3,6 +3,18 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .departamentos import DEPARTAMENTOS, normalizar as normalizar_departamento
+
+
+def _departamento_valido(v: str | None) -> str | None:
+    """Acepta solo departamentos del catálogo (corrige mayúsculas, acentos y nombres anteriores)."""
+    if v is None or not v.strip():
+        return None
+    d = normalizar_departamento(v)
+    if d is None:
+        raise ValueError(f"no es válido; elige uno de: {', '.join(DEPARTAMENTOS)}")
+    return d
+
 Rol = Literal["superadmin", "gerencia_gh", "admin", "administrador", "oficina", "planta", "medico", "caseta"]
 TipoPermiso = Literal["llegada_tarde", "salida_temprana", "salida_intermedia", "consulta_medica", "home_office"]
 TipoNomina = Literal["con_goce", "sin_goce", "reposicion"]
@@ -157,6 +169,11 @@ class UsuarioIn(UsuarioBase):
         if not v:
             raise ValueError("es obligatorio")
         return v
+
+    @field_validator("departamento")
+    @classmethod
+    def _depto(cls, v: str | None) -> str | None:
+        return _departamento_valido(v)
 
     # Opcional: sin contraseña el usuario solo podrá entrar con Microsoft
     password: str | None = Field(None, min_length=6)
@@ -505,6 +522,11 @@ class PermisoIn(BaseModel):
     enviar: bool = False
     aprobador_id: int | None = None
     usuario_id: int | None = None
+
+    @field_validator("departamento")
+    @classmethod
+    def _depto(cls, v: str | None) -> str | None:
+        return _departamento_valido(v)
 
 
 class PasoOut(ORM):

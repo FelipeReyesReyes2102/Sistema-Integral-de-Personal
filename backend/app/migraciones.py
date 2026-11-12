@@ -51,7 +51,20 @@ def actualizar_esquema(engine: Engine) -> list[str]:
         _migrar_datos(conn, agregadas, insp)
         _ajustes_idempotentes(conn)
         _cifrar_consultas(conn)
+        _normalizar_departamentos(conn)
     return agregadas
+
+
+def _normalizar_departamentos(conn: Connection):
+    """Pasa los departamentos de empleados y permisos al catálogo fijo (idempotente).
+    Los valores que no tienen equivalencia se dejan como están para revisarlos a mano."""
+    from .departamentos import DEPARTAMENTOS, normalizar
+    for tabla in ("usuarios", "permisos"):
+        for (valor,) in conn.execute(text(f"SELECT DISTINCT departamento FROM {tabla} WHERE departamento IS NOT NULL")).all():
+            nuevo = None if not valor.strip() else normalizar(valor)
+            if valor in DEPARTAMENTOS or (valor.strip() and nuevo is None):
+                continue
+            conn.execute(text(f"UPDATE {tabla} SET departamento = :n WHERE departamento = :v"), {"n": nuevo, "v": valor})
 
 
 def _cifrar_consultas(conn: Connection):

@@ -45,7 +45,11 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
   const { user } = useAuth()
 
   useEffect(() => {
-    api('/departamentos').then(setDepartamentos).catch(() => {})
+    api('/departamentos').then((l) => {
+      setDepartamentos(l)
+      // Un departamento que ya no está en el catálogo se vuelve a elegir
+      setForm((f) => (f.departamento && !l.includes(f.departamento) ? { ...f, departamento: '' } : f))
+    }).catch(() => {})
   }, [usuario?.id])
 
   // Tipos de permiso de la sede (los base y los agregados por GH)
@@ -119,8 +123,6 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
   }
 
   const etiquetas = HORARIO[form.tipo] || ['Hora inicio', 'Hora fin']
-  const deptos = form.departamento && !departamentos.includes(form.departamento)
-    ? [form.departamento, ...departamentos] : departamentos
 
   const paraOtro = usuario && user && usuario.id !== user.id
   const titulo = TITULOS[form.tipo] || (cfg.nombre ? `PERMISO: ${cfg.nombre.toUpperCase()}` : 'PERMISO DE SALIDA O INGRESO')
@@ -168,7 +170,7 @@ export default function PermisoModal({ tipoInicial = '', fechaInicial, fechaFinI
       <Campo label="Departamento" requerido full={!pideNomina}>
         <select value={form.departamento} onChange={set('departamento')}>
           <option value="">Selecciona…</option>
-          {deptos.map((d) => <option key={d} value={d}>{d}</option>)}
+          {departamentos.map((d) => <option key={d} value={d}>{d}</option>)}
         </select>
       </Campo>
       {pideNomina && (

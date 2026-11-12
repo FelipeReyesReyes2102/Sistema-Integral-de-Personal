@@ -192,6 +192,8 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
     api('/politica', { query: { sede_id: sedeId } }).then((p) => setJornadas(p.jornadas.filter((j) => j.activo || j.id === Number(form.tipo_jornada_id)))).catch(() => {})
   }, [sedeId])
   const [error, setError] = useState('')
+  const [departamentos, setDepartamentos] = useState([])
+  useEffect(() => { api('/departamentos').then(setDepartamentos).catch(() => {}) }, [])
   const [jefes, setJefes] = useState([])
   const [foto, setFoto] = useState(null)            // nueva foto (data URL) traída de Microsoft
   const [quitarFoto, setQuitarFoto] = useState(false)
@@ -468,7 +470,12 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
         </label>
         <label className="campo">Fecha de ingreso<input type="date" value={form.fecha_ingreso || ''} onChange={set('fecha_ingreso')} /></label>
         <label className="campo">Puesto<input value={form.puesto || ''} onChange={set('puesto')} /></label>
-        <label className="campo">Departamento<input value={form.departamento || ''} onChange={set('departamento')} /></label>
+        <label className="campo">Departamento
+          <select value={departamentos.includes(form.departamento) ? form.departamento : ''} onChange={set('departamento')}>
+            <option value="">{form.departamento && !departamentos.includes(form.departamento) ? `Elige (antes: ${form.departamento})` : 'Selecciona…'}</option>
+            {departamentos.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </label>
         <label className="campo">Jefe directo (aprueba sus solicitudes)
           <select value={form.jefe_id} onChange={set('jefe_id')}>
             <option value="">Sin jefe</option>

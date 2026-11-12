@@ -19,6 +19,7 @@ from urllib.parse import quote, urlencode
 import httpx
 import jwt
 
+from .departamentos import normalizar as normalizar_departamento
 from .config import settings
 
 log = logging.getLogger("sip.microsoft")
@@ -249,7 +250,7 @@ def buscar_empleado(email: str) -> dict:
         "nombre": u.get("displayName"),
         "email": (u.get("mail") or u.get("userPrincipalName") or email).lower(),
         "puesto": u.get("jobTitle"),
-        "departamento": u.get("department"),
+        "departamento": normalizar_departamento(u.get("department")),
         "numero_empleado": u.get("employeeId"),
         "fecha_ingreso": contratacion,
         "cuenta_habilitada": u.get("accountEnabled", True),

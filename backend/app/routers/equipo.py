@@ -5,12 +5,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from ..departamentos import DEPARTAMENTOS
 from ..database import get_db
 from ..models import ROL_ADMIN, SOLICITADO, VALIDADO, AdminSede, Permiso, SolicitudVacaciones, Usuario
 from ..models import ROLES_ADMIN, es_admin  # noqa: F401
 from ..schemas import JefeOut, MiembroEquipoOut
 from ..security import get_current_user
-from ..sedes import Alcance, admin_permite, alcance
+from ..sedes import admin_permite
 from ..services import del_grupo, saldo_periodo, sincronizar_periodos, usuario_out
 
 router = APIRouter(prefix="/api", tags=["jefes y equipo"])
@@ -32,11 +33,9 @@ def jefes(sede_id: int | None = None, db: Session = Depends(get_db), user: Usuar
 
 
 @router.get("/departamentos", response_model=list[str])
-def departamentos(db: Session = Depends(get_db), alc: Alcance = Depends(alcance)):
-    """Departamentos capturados en los empleados de la sede (para el formulario de permisos)."""
-    q = select(Usuario.departamento).where(Usuario.departamento.is_not(None), Usuario.departamento != "",
-                                           alc.filtro(Usuario.sede_id)).distinct()
-    return sorted(db.scalars(q).all())
+def departamentos(user: Usuario = Depends(get_current_user)):
+    """Catálogo de departamentos (formularios de empleados y permisos)."""
+    return DEPARTAMENTOS
 
 
 @router.get("/equipo", response_model=list[MiembroEquipoOut])

@@ -85,7 +85,7 @@ def main(solo_catalogos: bool = False):
             usuarios = [
                 Usuario(numero_empleado="0001", nombre="Administrador RH", email="admin@empresa.com",
                         password_hash=hash_password("Admin123"), rol="admin", fecha_ingreso=date(2018, 3, 1),
-                        puesto="Recursos Humanos", departamento="RH", turno_id=turnos["Oficina"].id),
+                        puesto="Recursos Humanos", departamento="GH", turno_id=turnos["Oficina"].id),
                 Usuario(numero_empleado="1001", nombre="Ana López", email="ana@empresa.com", password_hash=pwd,
                         rol="oficina", fecha_ingreso=date(anio - 3, 2, 15), puesto="Analista",
                         departamento="Finanzas", turno_id=turnos["Oficina"].id),
@@ -95,7 +95,7 @@ def main(solo_catalogos: bool = False):
                         grupo_id=grupos["Grupo A"].id),
                 Usuario(numero_empleado="2002", nombre="María Gómez", email_personal="maria@empresa.com",
                         password_hash=pwd, rol="planta", fecha_ingreso=date(anio - 6, 6, 1),
-                        puesto="Técnico", departamento="Mantenimiento", turno_id=turnos["Noche"].id,
+                        puesto="Técnico", departamento="Producción", turno_id=turnos["Noche"].id,
                         grupo_id=grupos["Grupo B"].id),
             ]
             for u in usuarios:
@@ -131,7 +131,7 @@ def main(solo_catalogos: bool = False):
         if not db.scalar(select(Usuario.id).where(Usuario.email == "medico@empresa.com")):
             medico = Usuario(numero_empleado="0700", nombre="Dra. Patricia Ruiz", email="medico@empresa.com",
                              password_hash=hash_password("Cambiar123"), rol="medico", fecha_ingreso=date(anio - 4, 9, 1),
-                             puesto="Médico de planta", departamento="Servicio médico")
+                             puesto="Médico de planta", departamento="GH")
             admin = db.scalar(select(Usuario).where(Usuario.email == "admin@empresa.com"))
             medico.jefe_id = admin.id if admin else None
             db.add(medico)

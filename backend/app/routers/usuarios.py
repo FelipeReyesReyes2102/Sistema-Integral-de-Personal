@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from ..departamentos import normalizar as normalizar_departamento
 from .. import microsoft
 from ..config import settings
 from ..database import get_db
@@ -157,7 +158,7 @@ def registrar_jefe(data: RegistrarJefeIn, request: Request, db: Session = Depend
     jefe_de_jefe = _jefe_local(db, datos.get("jefe"))
     u = Usuario(sede_id=sede_id, tipo_jornada_id=jornada_por_defecto(db, sede_id, ROL_OFICINA), numero_empleado=nomina, nombre=datos.get("nombre") or email, email=datos["email"], rol=ROL_OFICINA,
                 fecha_ingreso=datos.get("fecha_ingreso") or date.today(), puesto=datos.get("puesto"),
-                departamento=datos.get("departamento"), es_jefe=True, activo=True, microsoft_oid=datos["oid"],
+                departamento=normalizar_departamento(datos.get("departamento")), es_jefe=True, activo=True, microsoft_oid=datos["oid"],
                 jefe_id=jefe_de_jefe.id if jefe_de_jefe and puede_aprobar_a(jefe_de_jefe, sede_id) else None,
                 turno_id=_turno_oficina(db, sede_id), password_hash=password_inutilizable())
     if datos.get("foto"):
