@@ -2,7 +2,7 @@
 import unicodedata
 
 DEPARTAMENTOS = [
-    "AMP", "APT", "Comercial", "Compras", "Finanzas", "Gerencia", "GH", "Ingeniería",
+    "AMP", "APT", "Calidad", "Comercial", "Compras", "Finanzas", "Gerencia", "GH", "Ingeniería",
     "Logística", "Producción", "Proyectos", "SGC", "Sistemas",
 ]
 
