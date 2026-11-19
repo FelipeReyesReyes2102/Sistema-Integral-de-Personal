@@ -152,7 +152,8 @@ def historial(limite: int = 50, db: Session = Depends(get_db), _=Depends(require
         res.append({
             "id": n.id, "fecha": n.fecha, "evento": n.evento, "asunto": n.asunto, "destinatarios": n.destinatarios,
             "estado": n.estado, "error": n.error, "intentos": n.intentos,
-            "empleado": p.usuario.nombre if p and p.usuario else None,
+            "empleado": (p.usuario.nombre if p and p.usuario else
+                         n.vacaciones.usuario.nombre if n.vacaciones and n.vacaciones.usuario else None),
             "tipo": tipos_permiso.nombre(db, p.usuario.sede_id if p.usuario else None, p.tipo) if p else None,
         })
     return res

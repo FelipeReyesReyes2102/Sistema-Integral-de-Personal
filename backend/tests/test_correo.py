@@ -237,3 +237,41 @@ def test_cada_sede_tiene_su_correo():
     assert cfg_m["CORREO_SMTP_HOST"] == "smtp.o-tek.com" and cfg_m["CORREO_REMITENTE"] == "avisos@o-tek.com"
     e = su.get("/api/bitacora", params={"seccion": "configuracion", "entidad": "Sede", "q": "Sede correo prueba"}).json()["items"][0]
     assert {"campo": "Contraseña SMTP", "antes": None, "despues": "(valor oculto)"} in e["cambios"]
+
+
+def _vacaciones_validadas(email, inicio):
+    """Solicitud de vacaciones ya validada (creada directo en la base)."""
+    from app.models import SolicitudVacaciones
+    from app.services import sincronizar_periodos
+    with SessionLocal() as db:
+        u = db.query(Usuario).filter(Usuario.email == email).one()
+        p = max(sincronizar_periodos(db, u), key=lambda x: x.numero)
+        jefe = u.jefe or db.query(Usuario).filter(Usuario.email == "admin@empresa.com").one()
+        s = SolicitudVacaciones(usuario_id=u.id, periodo_id=p.id, fecha_inicio=inicio, fecha_fin=inicio, dias_habiles=1,
+                                horas=p.horas_por_dia, estado="validado", aprobador_id=jefe.id, aprobado_jefe_id=jefe.id,
+                                revisado_por_id=jefe.id)
+        db.add(s)
+        db.commit()
+        return s.id, jefe.email
+
+
+def test_empleado_cancela_vacaciones_aprobadas_y_avisa_a_jefe_y_gh():
+    superadmin().put("/api/admin/correo", json=CONFIG)
+    ana = entrar("ana@empresa.com")
+    sid, correo_jefe = _vacaciones_validadas("ana@empresa.com", date.today() + timedelta(days=10))
+    r = ana.post(f"/api/vacaciones/{sid}/cancelar")
+    assert r.status_code == 200 and r.json()["estado"] == "cancelado"
+    assert len(ENVIADOS) == 1
+    msg = ENVIADOS[0]
+    assert "Vacaciones canceladas" in msg["Subject"] and "Ana López" in msg["Subject"]
+    destinatarios = msg["To"].lower()
+    assert correo_jefe.lower() in destinatarios and "admin@empresa.com" in destinatarios
+    assert "ana@empresa.com" not in destinatarios
+    hist = superadmin().get("/api/admin/correo/historial").json()
+    assert hist[0]["evento"] == "vacaciones_canceladas" and hist[0]["empleado"] == "Ana López"
+
+    # Si ya empezaron, el empleado ya no puede cancelarlas
+    sid2, _ = _vacaciones_validadas("ana@empresa.com", date.today())
+    r = ana.post(f"/api/vacaciones/{sid2}/cancelar")
+    assert r.status_code == 400 and "ya empezaron" in r.text
+    assert len(ENVIADOS) == 1

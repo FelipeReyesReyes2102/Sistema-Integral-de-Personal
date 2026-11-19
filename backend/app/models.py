@@ -822,6 +822,7 @@ class NotificacionCorreo(Base):
     permiso_id: Mapped[int | None] = mapped_column(ForeignKey("permisos.id", ondelete="SET NULL"), index=True)
     incapacidad_id: Mapped[int | None] = mapped_column(ForeignKey("incapacidades.id", ondelete="SET NULL"), index=True)
     salida_equipo_id: Mapped[int | None] = mapped_column(ForeignKey("salidas_equipo.id", ondelete="SET NULL"), index=True)
+    vacaciones_id: Mapped[int | None] = mapped_column(ForeignKey("solicitudes_vacaciones.id", ondelete="SET NULL"), index=True)
     destinatarios: Mapped[str] = mapped_column(Text)
     asunto: Mapped[str] = mapped_column(String(255))
     estado: Mapped[str] = mapped_column(String(20), default="pendiente")  # pendiente | enviado | error
@@ -829,6 +830,7 @@ class NotificacionCorreo(Base):
     intentos: Mapped[int] = mapped_column(Integer, default=0)
 
     permiso: Mapped["Permiso | None"] = relationship()
+    vacaciones: Mapped["SolicitudVacaciones | None"] = relationship()
 
 
 class RotacionTurnos(Base):

@@ -782,9 +782,15 @@ function Acciones({ item, esAdmin, soloLectura, onVer, onEditar, accion }) {
             onClick={() => accion(base, 'DELETE', '¿Eliminar este borrador?')}><Trash2 size={16} /></button>
         </>
       )}
-      {(item.estado === 'solicitado' || (esAdmin && item.estado === 'validado')) && (
+      {(item.estado === 'solicitado' || (esAdmin && item.estado === 'validado')) ? (
         <button className="icon-btn rojo" title="Cancelar solicitud"
-          onClick={() => accion(`${base}/cancelar`, 'POST', '¿Cancelar esta solicitud?')}><Ban size={16} /></button>
+          onClick={() => accion(`${base}/cancelar`, 'POST', item.cat === 'vacaciones' && (item.estado === 'validado' || item.aprobado_jefe_nombre)
+            ? '¿Cancelar estas vacaciones? Ya estaban aprobadas: se avisará a tu jefe y a GH, y los días regresarán a tu saldo.'
+            : '¿Cancelar esta solicitud?')}><Ban size={16} /></button>
+      ) : item.cat === 'vacaciones' && item.estado === 'validado' && item.fecha_inicio > hoyISO() && (
+        <button className="icon-btn rojo" title="Cancelar vacaciones (se avisa a tu jefe y a GH)"
+          onClick={() => accion(`${base}/cancelar`, 'POST',
+            '¿Cancelar estas vacaciones? Ya estaban aprobadas: se avisará a tu jefe y a GH, y los días regresarán a tu saldo.')}><Ban size={16} /></button>
       )}
     </>
   )

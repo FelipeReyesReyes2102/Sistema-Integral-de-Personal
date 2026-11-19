@@ -1,10 +1,10 @@
 from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from .. import reglas
+from .. import reglas, vacaciones_avisos
 from ..database import get_db
 from ..models import (
     BORRADOR, CANCELADO, RECHAZADO, ROL_ADMIN, SOLICITADO, VALIDADO, PeriodoVacaciones, SolicitudVacaciones,
@@ -393,18 +393,28 @@ def firma(sid: int, db: Session = Depends(get_db), user: Usuario = Depends(get_c
 
 
 @router.post("/{sid}/cancelar", response_model=VacacionesOut)
-def cancelar(sid: int, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
+def cancelar(sid: int, tareas: BackgroundTasks, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
     s = _obtener(db, sid, user)
-    if s.usuario_id == user.id or es_admin(user):
-        permitido = {BORRADOR, SOLICITADO} | ({VALIDADO} if es_admin(user) else set())
+    propia = s.usuario_id == user.id
+    if propia or es_admin(user):
+        permitido = {BORRADOR, SOLICITADO}
+        # GH cancela aprobadas; el empleado también, mientras todavía no empiecen
+        if es_admin(user) or (propia and s.fecha_inicio > hoy_de(s.usuario)):
+            permitido.add(VALIDADO)
     elif puede_revisar(user, s):
         permitido = {VALIDADO}  # el jefe puede revertir una aprobación suya
     else:
         raise HTTPException(403, "No autorizado")
     if s.estado not in permitido:
+        if propia and s.estado == VALIDADO:
+            raise HTTPException(400, "Estas vacaciones ya empezaron; para cancelarlas contacta a tu jefe o a GH")
         raise HTTPException(400, "Esta solicitud ya no se puede cancelar; contacta a tu jefe o al administrador")
+    # Si ya la había aprobado el jefe (o GH), se les avisa que el empleado la canceló
+    avisar = propia and (s.estado == VALIDADO or s.aprobado_jefe_id is not None)
     s.estado = CANCELADO
     db.commit()
+    if avisar:
+        tareas.add_task(vacaciones_avisos.notificar_cancelacion, s.id)
     return _out(s)
 
 
