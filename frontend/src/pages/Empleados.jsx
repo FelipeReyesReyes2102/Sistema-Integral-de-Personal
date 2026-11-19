@@ -153,10 +153,8 @@ export default function Empleados() {
                   {(soySuper || u.rol !== 'superadmin') && u.activo && (
                     <><button className="icon-btn" title="Restablecer contraseña (temporal de 6 dígitos)" onClick={() => restablecer(u)}><KeyRound size={16} /></button>{' '}</>
                   )}
-                  {(soySuper || u.rol !== 'superadmin') && <>
                   <button className="icon-btn" title="Editar" onClick={() => setEditar({ ...u, password: '', email: u.email ?? '', email_personal: u.email_personal ?? '', turno_id: u.turno_id ?? '', grupo_id: u.grupo_id ?? '', jefe_id: u.jefe_id ?? '', dias_disponibles: '', sede_id: u.sede_id ?? '', sedes_admin: u.sedes_admin || [], tipo_jornada_id: u.tipo_jornada_id ?? '' })}><Pencil size={16} /></button>{' '}
-                  {u.activo && <button className="icon-btn rojo" title="Desactivar" onClick={() => desactivar(u)}><UserX size={16} /></button>}
-                  </>}
+                  {(soySuper || u.rol !== 'superadmin') && u.activo && <button className="icon-btn rojo" title="Desactivar" onClick={() => desactivar(u)}><UserX size={16} /></button>}
                 </td>
               </tr>
             ))}
@@ -181,6 +179,8 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
   const turnos = todosTurnos.filter((t) => t.sede_id === sedeId)
   const grupos = todosGrupos.filter((g) => g.sede_id === sedeId)
   const puedeCambiarSede = !inicial.id || soySuper
+  // GH edita los datos laborales y de vacaciones de un super administrador, pero no su acceso
+  const accesoProtegido = !!inicial.id && inicial.rol === 'superadmin' && !soySuper
   function cambiarSede(e) {
     const nueva = Number(e.target.value) || ''
     setForm((f) => ({ ...f, sede_id: nueva, turno_id: '', grupo_id: '', jefe_id: '', tipo_jornada_id: '' }))
@@ -344,19 +344,24 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
           {fotoActual
             ? <button type="button" className="btn btn-sm" onClick={() => { setFoto(null); setQuitarFoto(true) }}>Quitar foto</button>
             : <span className="muted" style={{ fontSize: 11 }}>La foto se carga desde Microsoft</span>}
-          <label className="checkbox"><input type="checkbox" checked={form.activo} onChange={set('activo')} /> Activo</label>
+          <label className="checkbox"><input type="checkbox" checked={form.activo} onChange={set('activo')} disabled={accesoProtegido} /> Activo</label>
         </div>
       </div>
 
       <section className="emp-seccion">
         <h4><KeyRound size={15} /> Cuenta y acceso</h4>
+        {accesoProtegido && (
+          <div className="alerta" style={{ marginBottom: 10 }}>
+            Es un super administrador: puedes cambiar sus datos laborales y de vacaciones, pero su acceso (tipo de usuario, correos y si está activo) solo lo cambia otro super administrador.
+          </div>
+        )}
         <div className="form-grid">
         <div className="campo full">
           <span>Correo corporativo {['planta', 'caseta'].includes(form.rol) && <span className="muted">(opcional; p. ej. supervisores)</span>}</span>
           <div className="ms-buscar">
-            <input type="email" value={form.email} onChange={set('email')} placeholder="nombre@o-tek.com"
+            <input type="email" value={form.email} onChange={set('email')} placeholder="nombre@o-tek.com" disabled={accesoProtegido}
               onKeyDown={(e) => { if (e.key === 'Enter' && graph) { e.preventDefault(); buscarMicrosoft() } }} />
-            {graph && (
+            {graph && !accesoProtegido && (
               <button className="btn" onClick={buscarMicrosoft} disabled={ms.buscando} type="button">
                 <Search size={15} /> {ms.buscando ? 'Buscando…' : 'Buscar en Microsoft'}
               </button>
@@ -369,7 +374,7 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
           )}
         </div>
         <label className="campo">Correo personal (opcional)
-          <input type="email" value={form.email_personal || ''} onChange={set('email_personal')} placeholder="nombre@gmail.com" />
+          <input type="email" value={form.email_personal || ''} onChange={set('email_personal')} placeholder="nombre@gmail.com" disabled={accesoProtegido} />
           <span className="muted" style={{ fontSize: 11 }}>
             También sirve para iniciar sesión. Los avisos van al correo corporativo; si no tiene, a este.
           </span>
@@ -418,8 +423,8 @@ function FormEmpleado({ inicial, turnos: todosTurnos, grupos: todosGrupos, estad
           </div>
         )}
         <label className="campo">Tipo de usuario
-          <select value={form.rol} onChange={set('rol')}>
-            {Object.entries(ROLES).filter(([k]) => soySuper || k !== 'superadmin').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          <select value={form.rol} onChange={set('rol')} disabled={accesoProtegido}>
+            {Object.entries(ROLES).filter(([k]) => soySuper || accesoProtegido || k !== 'superadmin').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
           {form.rol === 'superadmin' && <span className="muted" style={{ fontSize: 11 }}>Acceso total, incluida la configuración de Microsoft.</span>}
           {form.rol === 'administrador' && <span className="muted" style={{ fontSize: 11 }}>Solo Ajustes de su sede: grupos, turnos, festivos y configuración. No ve empleados ni solicitudes de otros.</span>}

@@ -69,6 +69,17 @@ def test_super_admin_acceso_total_y_proteccion_del_rol():
     assert admin.put(f"/api/usuarios/{sa['id']}", json={**nuevo("superadmin", "SA-100", "root@empresa.com"), "nombre": "X"}).status_code == 403
     assert admin.delete(f"/api/usuarios/{sa['id']}").status_code == 403
 
+    # GH sí edita sus datos laborales y de vacaciones (fecha de ingreso, días disponibles), pero no su acceso
+    laboral = {"numero_empleado": "SA-100", "nombre": "Root", "email": "root@empresa.com", "rol": "superadmin",
+               "fecha_ingreso": "2019-03-01", "activo": True, "dias_disponibles": 7}
+    r = admin.put(f"/api/usuarios/{sa['id']}", json=laboral)
+    assert r.status_code == 200, r.text
+    assert r.json()["fecha_ingreso"] == "2019-03-01"
+    for cambio, texto in (({"email": "otro@empresa.com"}, "correo corporativo"), ({"rol": "admin"}, "tipo de usuario"),
+                          ({"activo": False}, "activo"), ({"password": "Clave12345"}, "contraseña")):
+        r = admin.put(f"/api/usuarios/{sa['id']}", json={**laboral, **cambio})
+        assert r.status_code == 403 and texto in r.text, (cambio, r.text)
+
     # Un super administrador sí puede crear a otro
     r = root.post("/api/usuarios", json=nuevo("superadmin", "SA-300", "sa300@empresa.com"))
     assert r.status_code == 201, r.text

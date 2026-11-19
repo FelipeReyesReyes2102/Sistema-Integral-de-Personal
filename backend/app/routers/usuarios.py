@@ -378,10 +378,27 @@ def ajustar_periodo(periodo_id: int, data: AjustePeriodo, db: Session = Depends(
 
 def _proteger_superadmin(db: Session, actor: Usuario, objetivo: Usuario | None, data: UsuarioIn | None = None,
                          desactivar: bool = False):
-    """Solo un super administrador crea o modifica super administradores; siempre debe quedar uno activo."""
+    """Solo un super administrador crea super administradores o cambia su acceso; siempre debe quedar uno activo.
+
+    GH sí puede editar los datos laborales y de vacaciones de un super administrador de su sede (fecha de ingreso,
+    jefe, turno, días disponibles…), pero no su tipo de usuario, correos, contraseña, cuenta de Microsoft ni si está activo.
+    """
     toca_super = (objetivo is not None and objetivo.rol == ROL_SUPERADMIN) or (data is not None and data.rol == ROL_SUPERADMIN)
     if toca_super and actor.rol != ROL_SUPERADMIN:
-        raise HTTPException(403, "Solo un super administrador puede crear o modificar a otro super administrador.")
+        if objetivo is None or objetivo.rol != ROL_SUPERADMIN or data is None or desactivar:
+            raise HTTPException(403, "Solo un super administrador puede crear, desactivar o modificar el acceso de otro super administrador.")
+        mismo = lambda a, b: (a or "").strip().lower() == (b or "").strip().lower()  # noqa: E731
+        protegidos = [nombre for nombre, cambia in (
+            ("el tipo de usuario", data.rol != ROL_SUPERADMIN),
+            ("si está activo", not data.activo),
+            ("el correo corporativo", not mismo(data.email, objetivo.email)),
+            ("el correo personal", not mismo(data.email_personal, objetivo.email_personal)),
+            ("la contraseña", bool(data.password)),
+            ("la cuenta de Microsoft", bool(data.microsoft_oid) and data.microsoft_oid != objetivo.microsoft_oid),
+        ) if cambia]
+        if protegidos:
+            raise HTTPException(403, f"Solo un super administrador puede cambiar {', '.join(protegidos)} de un super administrador.")
+        return
     if objetivo is not None and objetivo.rol == ROL_SUPERADMIN and objetivo.activo:
         pierde = desactivar or (data is not None and (data.rol != ROL_SUPERADMIN or not data.activo))
         if pierde:
