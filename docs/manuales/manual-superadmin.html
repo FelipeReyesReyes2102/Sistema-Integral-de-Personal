@@ -130,7 +130,7 @@ a { color: var(--primary); }
 <div class="marco">
   <nav class="indice" aria-label="Contenido">
     <b>Contenido</b>
-    <ol><li><a href="#alcance">Qué puede hacer</a></li><li><a href="#sedes">Sedes</a></li><li><a href="#microsoft">Conexión con Microsoft</a></li><li><a href="#sharepoint">Listas de SharePoint por sede</a></li><li><a href="#teams">Aprobación en Teams</a></li><li><a href="#problemas">Solución de problemas</a></li></ol>
+    <ol><li><a href="#alcance">Qué puede hacer</a></li><li><a href="#sedes">Sedes</a></li><li><a href="#microsoft">Conexión con Microsoft</a></li><li><a href="#sharepoint">Listas de SharePoint por sede</a></li><li><a href="#teams">Aprobación en Teams</a></li><li><a href="#flujos">Crear los flujos de Power Automate</a></li><li><a href="#problemas">Solución de problemas</a></li></ol>
   </nav>
   <main>
     <section id="alcance">
@@ -151,11 +151,56 @@ a { color: var(--primary); }
     </section>
     <section id="teams">
       <h2><span class="n">05</span>Aprobación en Teams</h2>
-      <p>Hay dos formas, ambas con Power Automate:</p><figure class="captura"><img src="img/sa-teams.jpg" alt="Aprobación en Teams por sede." loading="lazy"><figcaption>Aprobación en Teams por sede.</figcaption></figure><ul><li><b>Por lista</b> (la que usa O-tek México): un flujo se dispara al crearse el elemento en la lista, pide la aprobación al correo del jefe y escribe la decisión en columnas de la lista. Se configura en la sección <i>El jefe aprueba o rechaza desde Teams</i> de cada lista, que incluye la guía del flujo. Sirve para vacaciones, permisos, <b>accesos a planta por retardo</b> (la salida de equipo ahora es un permiso común y va en la lista de permisos).</li><li><b>Por flujo HTTP</b> (tarjeta <i>Aprobación en Teams</i>): un solo flujo para vacaciones, permisos y salidas de equipo (marca cuáles en <i>Qué se aprueba en Teams</i>). Requiere licencia <b>Power Automate Premium</b> en la cuenta del flujo.</li></ul><p>SIP-O revisa las decisiones cada minuto; si hay personas esperando en caseta, cada 15 segundos. Si un jefe niega un acceso en Teams sin comentario, SIP-O le pide el motivo por correo y en <i>Por aprobar</i>.</p><div class="nota "><strong>Seguridad</strong><p>SIP-O solo acepta decisiones escritas por la <b>cuenta del flujo</b> configurada y de alguien que pueda aprobar esa solicitud. Da permiso de edición de las listas solo a esa cuenta y a GH. Si la solicitud ya se resolvió en SIP-O, la respuesta de Teams se ignora.</p></div>
+      <p>Hay dos formas, ambas con Power Automate:</p><figure class="captura"><img src="img/sa-teams.jpg" alt="Aprobación en Teams por sede." loading="lazy"><figcaption>Aprobación en Teams por sede.</figcaption></figure><ul><li><b>Por lista</b> (la que usa O-tek México): un flujo se dispara al crearse el elemento en la lista, pide la aprobación al correo del jefe y escribe la decisión en columnas de la lista. Se configura en la sección <i>El jefe aprueba o rechaza desde Teams</i> de cada lista; cómo crear el flujo está en <a href="#flujos">Crear los flujos de Power Automate</a>. Sirve para vacaciones, permisos, <b>accesos a planta por retardo</b> (la salida de equipo ahora es un permiso común y va en la lista de permisos).</li><li><b>Por flujo HTTP</b> (tarjeta <i>Aprobación en Teams</i>): un solo flujo para vacaciones, permisos y salidas de equipo (marca cuáles en <i>Qué se aprueba en Teams</i>). Requiere licencia <b>Power Automate Premium</b> en la cuenta del flujo.</li></ul><p>SIP-O revisa las decisiones cada minuto; si hay personas esperando en caseta, cada 15 segundos. Si un jefe niega un acceso en Teams sin comentario, SIP-O le pide el motivo por correo y en <i>Por aprobar</i>.</p><div class="nota "><strong>Seguridad</strong><p>SIP-O solo acepta decisiones escritas por la <b>cuenta del flujo</b> configurada y de alguien que pueda aprobar esa solicitud. Da permiso de edición de las listas solo a esa cuenta y a GH. Si la solicitud ya se resolvió en SIP-O, la respuesta de Teams se ignora.</p></div>
+    </section>
+    <section id="flujos">
+      <h2><span class="n">06</span>Crear los flujos de Power Automate</h2>
+      <p>Cada lista con aprobación en Teams necesita su propio flujo. En O-tek hay uno por lista: <i>SIP-O · Aprobación de vacaciones en Teams</i>, <i>SIP-O · Aprobación de permisos en Teams</i> y <i>SIP-O · Aprobación de salidas de equipo en Teams</i>. Para una sede o lista nueva, repite estos pasos.</p>
+      <div class="nota aviso"><strong>Licencia</strong><p>La cuenta de los flujos de O-tek tiene <b>Power Automate para Office 365</b>, que solo incluye conectores estándar. Usa siempre la forma <b>por lista</b>: SharePoint, Aprobaciones y Teams son estándar. La forma <b>por flujo HTTP</b> (disparador «Cuando se recibe una solicitud HTTP») es prémium y no funciona con esa licencia. Puedes revisar la licencia en Power Automate, en ⚙ → <span class="ui">Ver mis licencias</span>.</p></div>
+      <h3>Antes de empezar</h3>
+      <ol class="pasos">
+        <li><span>Entra a <b>make.powerautomate.com</b> con la <b>cuenta del flujo</b>, la misma que pones en SIP-O como <i>Cuenta con la que corre el flujo</i>. Revisa que el entorno de arriba sea <b>O-Tek Argentina S.A. (predeterminado)</b>.</span></li>
+        <li><span>En la lista de SharePoint, crea tres columnas de <i>una línea de texto</i>: <b>Decisión Teams</b>, <b>Comentario Teams</b> y <b>Respondió</b>.</span></li>
+        <li><span>En SIP-O, en <b>Integraciones por sede → Listas de SharePoint</b>, revisa que la lista envíe <b>Correo del jefe / aprobador</b> y <b>Estado</b> a alguna columna.</span></li>
+        <li><span>En la misma tarjeta, activa <b>El jefe aprueba o rechaza desde Teams</b>. Elige las tres columnas del paso 2, deja los valores <i>Approve</i> y <i>Reject</i>, escribe la cuenta del flujo y guarda.</span></li>
+      </ol>
+      <h3>Crear el flujo</h3>
+      <ol class="pasos">
+        <li><span>Ve a <span class="ui">Crear</span> → <span class="ui">Flujo de nube automatizado</span>. Ponle un nombre como <i>SIP-O · Aprobación de vacaciones en Teams</i>.</span></li>
+        <li><span>Elige el disparador de SharePoint <b>«Cuando se crea un elemento»</b> y luego el <b>sitio</b> y la <b>lista</b>.</span></li>
+        <li><span>Agrega una <b>Condición</b>: <i>Estado</i> es igual a <b>Solicitado</b>, o a la opción que corresponda en tu lista. Así no se piden aprobaciones del historial ya resuelto. Los pasos siguientes van en la rama <i>Sí</i>.</span></li>
+        <li><span>Agrega la acción <b>Aprobaciones → «Iniciar y esperar una aprobación»</b> con estos datos:
+          <ul>
+            <li><b>Tipo:</b> <i>Aprobar/Rechazar: primero en responder</i>.</li>
+            <li><b>Título:</b> tipo · Empleado · Folio.</li>
+            <li><b>Asignado a:</b> la columna <b>Correo del jefe</b>.</li>
+            <li><b>Detalles:</b> las fechas y los días.</li>
+            <li><b>Vínculo del elemento:</b> <i>https://sip-o.otek.internal/</i>, con el texto «Abrir SIP-O».</li>
+          </ul></span></li>
+        <li><span>Agrega la acción <b>SharePoint → «Actualizar elemento»</b>, con el mismo sitio y la misma lista, y el <i>Id</i> del disparador. Llena así:
+          <ul>
+            <li><b>Decisión Teams</b> = <i>Resultado</i> (Outcome).</li>
+            <li><b>Comentario Teams</b> = <i>Respuestas Comentarios</i>.</li>
+            <li><b>Respondió</b> = <i>Respuestas Correo electrónico del aprobador</i>.</li>
+            <li>Si pide Título, usa el Título del disparador.</li>
+          </ul>
+          Si Power Automate lo mete en un bloque «Aplicar a cada uno», es normal.</span></li>
+        <li><span>Pulsa <span class="ui">Guardar</span> y prueba con una solicitud real. Al jefe le debe llegar la tarjeta en Teams y en Outlook, y en menos de un minuto SIP-O muestra la solicitud aprobada o rechazada.</span></li>
+      </ol>
+      <p>La tarjeta de cada lista en SIP-O tiene la misma guía, con los nombres reales de tus columnas, en <span class="ui">Cómo crear el flujo en Power Automate (paso a paso)</span>.</p>
+      <div class="nota "><strong>Cadenas de aprobación (permisos)</strong><p>Si la sede usa cadenas de aprobación, usa el disparador <b>«Cuando se crea o modifica un elemento»</b> y agrega a la condición que <b>Decisión Teams</b> esté vacía. Cuando la solicitud pasa al siguiente paso, SIP-O vacía esa columna y pone en <i>Correo del jefe</i> los correos de quienes aprueban ese paso. Así el flujo vuelve a pedir la aprobación.</p></div>
+      <h3>Revisar que funcione</h3>
+      <ul>
+        <li><b>Historial del flujo:</b> en <span class="ui">Mis flujos</span>, abre el flujo y revisa el <b>Historial de ejecuciones de 28 días</b>. Si una ejecución falló, ábrela: el paso en rojo dice qué pasó.</li>
+        <li><b>Decisiones no aplicadas:</b> en SIP-O aparecen en la tarjeta de la lista, en <i>Decisiones de Teams no aplicadas</i>. Por ejemplo, si la escribió otra cuenta o si quien respondió no puede aprobar.</li>
+        <li><b>Tiempo de espera:</b> una aprobación de Power Automate espera hasta 30 días. Si vence, la solicitud sigue pendiente en SIP-O y se puede aprobar ahí.</li>
+        <li><b>Conexiones:</b> si cambias la contraseña de la cuenta del flujo, Power Automate puede pedir reparar las conexiones de SharePoint y Aprobaciones. Mientras no se reparen, no llegan tarjetas.</li>
+      </ul>
+      <div class="nota ok"><strong>Aviso al empleado</strong><p>Cuando unas vacaciones quedan validadas, sin importar si se aprobaron en SIP-O o en Teams, SIP-O le avisa al empleado <b>por correo</b> y no necesita ningún flujo. El campo <i>URL del flujo de avisos al empleado</i> de la tarjeta <i>Aprobación en Teams</i> requiere licencia prémium; déjalo vacío.</p></div>
     </section>
     <section id="problemas">
-      <h2><span class="n">06</span>Solución de problemas</h2>
-      <details><summary>Microsoft niega el acceso a la lista.</summary><p>La app necesita Sites.Selected con escritura otorgada a ese sitio (o Sites.ReadWrite.All) con consentimiento de administrador. El mensaje indica los permisos que tiene la app.</p></details><details><summary>Una decisión de Teams no se aplicó.</summary><p>Revisa los avisos de la lista en la integración: indican si la escribió otra cuenta o si quien respondió no puede aprobar.</p></details><details><summary>Al aprobador no le llega nada a Teams.</summary><p>La solicitud necesita un aprobador con correo. Revisa el jefe del empleado y que la lista de la sede tenga la aprobación en Teams activa.</p></details><details><summary>No funciona la búsqueda en Microsoft.</summary><p>Revisa el Client ID, el inquilino y el secreto, y que User.Read.All tenga consentimiento de administrador.</p></details>
+      <h2><span class="n">07</span>Solución de problemas</h2>
+      <details><summary>Microsoft niega el acceso a la lista.</summary><p>La app necesita Sites.Selected con escritura otorgada a ese sitio (o Sites.ReadWrite.All) con consentimiento de administrador. El mensaje indica los permisos que tiene la app.</p></details><details><summary>Una decisión de Teams no se aplicó.</summary><p>Revisa los avisos de la lista en la integración: indican si la escribió otra cuenta o si quien respondió no puede aprobar.</p></details><details><summary>Al aprobador no le llega nada a Teams.</summary><p>La solicitud necesita un aprobador con correo. Revisa el jefe del empleado y que la lista de la sede tenga la aprobación en Teams activa.</p></details><details><summary>Power Automate dice que el flujo usa un conector prémium.</summary><p>La cuenta no tiene licencia prémium. Rehaz el flujo con los disparadores de SharePoint (<i>Cuando se crea un elemento</i>) en lugar de <i>Cuando se recibe una solicitud HTTP</i>.</p></details><details><summary>No funciona la búsqueda en Microsoft.</summary><p>Revisa el Client ID, el inquilino y el secreto, y que User.Read.All tenga consentimiento de administrador.</p></details>
     </section>
   </main>
 </div>
