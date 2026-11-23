@@ -352,6 +352,9 @@ def aplicar(db: Session, s: SolicitudAprobacion, canal: CanalAprobacion, reg, it
     db.info.pop("bitacora_actor", None)
     if s.tipo == "permisos" and nuevo == VALIDADO and final:
         correo.notificar_permiso(reg.id, "permiso_autorizado")
+    if s.tipo == "vacaciones" and nuevo == VALIDADO and final:
+        from . import vacaciones_avisos
+        vacaciones_avisos.notificar_validacion(reg.id)
     for pid in otros:
         correo.notificar_permiso(pid, "permiso_autorizado")
     if pide_motivo:
@@ -372,11 +375,42 @@ def conectar_lista(url: str) -> dict:
     return info
 
 
-def guardar_url(canal: CanalAprobacion, url: str):
+def _url_valida(url: str) -> str:
     u = url.strip()
     if not u.startswith("https://") or ".logic.azure.com" not in u and "powerplatform.com" not in u and "powerautomate" not in u:
         raise ValueError("Pega la URL HTTP del disparador «Cuando se recibe una solicitud HTTP» del flujo.")
-    canal.flujo_url = cifrar(u)
+    return u
+
+
+def guardar_url(canal: CanalAprobacion, url: str):
+    canal.flujo_url = cifrar(_url_valida(url))
+
+
+def guardar_aviso_url(canal: CanalAprobacion, url: str):
+    canal.aviso_url = cifrar(_url_valida(url))
+
+
+SIN_FLUJO_AVISOS = "La sede no tiene configurado el flujo de avisos de Teams."
+
+
+def enviar_aviso(db: Session, sede_id: int | None, para: str, titulo: str, mensaje_html: str, texto: str) -> str | None:
+    """Mensaje de Teams a una persona por el flujo de avisos de la sede. Devuelve None si se envió o el motivo si no."""
+    canal = db.scalar(select(CanalAprobacion).where(CanalAprobacion.sede_id == sede_id))
+    if not canal or not canal.aviso_url:
+        return SIN_FLUJO_AVISOS
+    if not para:
+        return "La persona no tiene correo."
+    from .config import settings
+    enlace = (settings.microsoft_frontend_url or "https://sip-o.otek.internal").rstrip("/")
+    try:
+        with microsoft._cliente() as c:
+            r = c.post(descifrar(canal.aviso_url) or "", json={"para": para, "titulo": titulo, "mensaje": mensaje_html,
+                                                               "texto": texto, "enlace": enlace})
+    except httpx.HTTPError as e:
+        return f"No se pudo contactar al flujo de avisos ({type(e).__name__})."
+    if r.status_code not in (200, 201, 202):
+        return f"El flujo de avisos respondió HTTP {r.status_code}."
+    return None
 
 
 def tick():

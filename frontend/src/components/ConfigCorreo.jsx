@@ -11,7 +11,7 @@ function Campo({ etiqueta, ayuda, children, full }) {
   )
 }
 
-const EVENTOS = { permiso_autorizado: 'Autorizado', permiso_cancelado: 'Cancelado', prueba: 'Prueba' }
+const EVENTOS = { permiso_autorizado: 'Autorizado', permiso_cancelado: 'Cancelado', vacaciones_validadas: 'Vacaciones validadas', vacaciones_canceladas: 'Vacaciones canceladas', prueba: 'Prueba' }
 
 /** Configuración del correo y de los avisos a caseta cuando se autoriza un permiso. */
 export default function ConfigCorreo() {

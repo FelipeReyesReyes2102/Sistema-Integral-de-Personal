@@ -700,6 +700,9 @@ def revisar_decisiones() -> int:
             aplicadas += 1
             if clase(lista.tipo) == "permisos" and nuevo == VALIDADO and final:
                 correo.notificar_permiso(reg.id, "permiso_autorizado")
+            if clase(lista.tipo) == "vacaciones" and nuevo == VALIDADO and final:
+                from . import vacaciones_avisos
+                vacaciones_avisos.notificar_validacion(reg.id)
             for pid in otros:
                 correo.notificar_permiso(pid, "permiso_autorizado")
             if pide_motivo:

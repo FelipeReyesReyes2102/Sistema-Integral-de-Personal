@@ -136,3 +136,46 @@ def test_flujo_http_completo(entorno):
 
     adm.put(f"/api/periodos/{p['id']}/ajuste", json={"ajuste_horas": 0, "nota_ajuste": None})
     adm.put("/api/aprobacion-flujo", json={"activo": False})
+
+
+AVISOS = "https://prod-13.westus.logic.azure.com:443/workflows/avisos/triggers/manual/paths/invoke?api-version=1&sig=OTRO"
+
+
+def test_aviso_de_vacaciones_validadas_por_teams(entorno):
+    from app.database import SessionLocal
+    from app.models import NotificacionCorreo
+    adm, ana = super_login(), login("ana@empresa.com", "Cambiar123")
+    assert adm.put("/api/aprobacion-flujo", json={"activo": False, "aviso_url": "https://evil.example.com/x"}).status_code == 422
+    r = adm.put("/api/aprobacion-flujo", json={"activo": True, "tipos": ["vacaciones"], "flujo_url": FLUJO,
+                                               "aviso_url": AVISOS, "lista_url": LISTA, "cuenta_flujo": "flujos@o-tek.com"})
+    assert r.status_code == 200 and r.json()["aviso_configurado"] and "OTRO" not in r.text
+    avisos = lambda: [x for x in entorno["enviados"] if "para" in x]  # noqa: E731
+
+    # Validada en SIP-O por GH: aviso de Teams y correo al empleado
+    sol, _ = _solicitar(adm, ana, 9)
+    assert adm.post(f"/api/vacaciones/{sol['id']}/validar").json()["estado"] == "validado"
+    a = avisos()[-1]
+    assert a["para"] == "ana@empresa.com" and a["titulo"] == "Tus vacaciones fueron validadas" and "Fechas" in a["mensaje"]
+    with SessionLocal() as db:
+        n = db.query(NotificacionCorreo).filter(NotificacionCorreo.vacaciones_id == sol["id"]).one()
+        assert n.evento == "vacaciones_validadas" and n.destinatarios == "ana@empresa.com"
+    adm.post(f"/api/vacaciones/{sol['id']}/cancelar")
+
+    # Validada desde Teams (respuesta del flujo de aprobación): también avisa
+    antes = len(avisos())
+    sol2, _ = _solicitar(adm, ana, 11)
+    af.enviar_pendientes()
+    env = [x for x in entorno["enviados"] if "token" in x][-1]
+    jefe = adm.get(f"/api/usuarios/{sol2['aprobador_id']}").json()
+    entorno["decisiones"].append({"Token": env["token"], "Decision": "Approve", "Respondio": jefe["email"]})
+    assert af.revisar_decisiones() == 1
+    assert len(avisos()) == antes + 1 and avisos()[-1]["para"] == "ana@empresa.com"
+    adm.post(f"/api/vacaciones/{sol2['id']}/cancelar")
+
+    # Rechazada: no hay aviso de validación
+    sol3, _ = _solicitar(adm, ana, 13)
+    adm.post(f"/api/vacaciones/{sol3['id']}/rechazar", json={"motivo": "Cierre"})
+    assert len(avisos()) == antes + 1
+
+    # Se puede quitar el flujo de avisos
+    assert not adm.put("/api/aprobacion-flujo", json={"activo": False, "quitar_aviso": True}).json()["aviso_configurado"]

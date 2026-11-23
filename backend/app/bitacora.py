@@ -69,7 +69,7 @@ CAMPOS = {
     "regreso_registrado": "Regreso", "max_dias_solicitud": "Máximo de días por solicitud", "descuento": "Saldo en", "minimo_horas": "Mínimo de horas", "tipo": "Tipo", "url": "URL", "sitio_nombre": "Sitio", "lista_nombre": "Lista",
     "mapeo": "Columnas y datos", "valores": "Equivalencia de opciones", "aprobacion_teams": "Aprobación en Teams",
     "col_decision": "Columna de decisión", "val_aprobado": "Valor de aprobado", "val_rechazado": "Valor de rechazado",
-    "col_comentario": "Columna de comentarios", "col_respondio": "Columna de quién respondió", "cuenta_flujo": "Cuenta del flujo", "flujo_url": "URL del flujo", "tipos": "Tipos de solicitud",
+    "col_comentario": "Columna de comentarios", "col_respondio": "Columna de quién respondió", "cuenta_flujo": "Cuenta del flujo", "flujo_url": "URL del flujo", "aviso_url": "URL del flujo de avisos", "tipos": "Tipos de solicitud",
     "lista_url": "Lista de decisiones", "correo_metodo": "Método de envío de correo",
     "correo_remitente": "Correo remitente", "correo_remitente_nombre": "Nombre del remitente", "smtp_host": "Servidor SMTP",
     "smtp_puerto": "Puerto SMTP", "smtp_seguridad": "Seguridad SMTP", "smtp_usuario": "Usuario SMTP", "smtp_password": "Contraseña SMTP",
@@ -161,7 +161,7 @@ def _valor(ctx: _Ctx, obj, col, v):
         return ", ".join(PERMISOS.get(x, x) for x in v.split(",") if x) or None
     if col.key == "turnos_orden":
         return " → ".join(ctx.nombre("turnos", int(x)) for x in v.split(",") if x.strip().isdigit()) or None
-    if col.key in ("flujo_url", "smtp_password"):
+    if col.key in ("flujo_url", "aviso_url", "smtp_password"):
         return "(valor oculto)"
     if col.key in ("mapeo", "valores"):
         try:

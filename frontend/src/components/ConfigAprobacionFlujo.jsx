@@ -14,7 +14,7 @@ export default function ConfigAprobacionFlujo({ sedeId }) {
 
   const aplicar = (r) => {
     setD(r)
-    setForm({ activo: r.activo, tipos: r.tipos, flujo_url: '', lista_url: r.lista_url || '', cuenta_flujo: r.cuenta_flujo || '' })
+    setForm({ activo: r.activo, tipos: r.tipos, flujo_url: '', aviso_url: '', quitar_aviso: false, lista_url: r.lista_url || '', cuenta_flujo: r.cuenta_flujo || '' })
   }
   useEffect(() => { api('/aprobacion-flujo', { sede: sedeId }).then(aplicar).catch((e) => setMsg({ ok: false, t: e.message })) }, [sedeId])
   if (!d || !form) return <div className="card">{msg ? <div className="alerta error">{msg.t}</div> : 'Cargando…'}</div>
@@ -34,7 +34,7 @@ export default function ConfigAprobacionFlujo({ sedeId }) {
       setOcupado(false)
     }
   }
-  const guardar = () => correr(() => api('/aprobacion-flujo', { sede: sedeId, method: 'PUT', body: { ...form, flujo_url: form.flujo_url || null } }),
+  const guardar = () => correr(() => api('/aprobacion-flujo', { sede: sedeId, method: 'PUT', body: { ...form, flujo_url: form.flujo_url || null, aviso_url: form.aviso_url || null } }),
     form.activo ? 'Guardado. Las solicitudes nuevas se enviarán a Teams para su aprobación.' : 'Guardado (aprobación en Teams desactivada).')
 
   return (
@@ -50,6 +50,15 @@ export default function ConfigAprobacionFlujo({ sedeId }) {
           <input type="password" autoComplete="off" value={form.flujo_url} onChange={set('flujo_url')}
             placeholder={d.configurado ? 'Configurada · pega otra solo para reemplazarla' : 'https://…logic.azure.com/workflows/…/invoke?…&sig=…'} />
           <span className="muted" style={{ fontSize: 11 }}>Se guarda cifrada y no se vuelve a mostrar: quien la tenga puede iniciar aprobaciones.</span>
+        </label>
+        <label className="campo full">URL del flujo de avisos al empleado (opcional)
+          <input type="password" autoComplete="off" value={form.aviso_url} onChange={set('aviso_url')} disabled={form.quitar_aviso}
+            placeholder={d.aviso_configurado ? 'Configurada · pega otra solo para reemplazarla' : 'https://…logic.azure.com/workflows/…/invoke?…&sig=…'} />
+          <span className="muted" style={{ fontSize: 11 }}>
+            Otro flujo con disparador HTTP que publica un mensaje de Teams a <b>para</b> (p. ej. «vacaciones validadas»).
+            Recibe <code>para</code>, <code>titulo</code>, <code>mensaje</code> (HTML), <code>texto</code> y <code>enlace</code>. El aviso por correo se envía aunque no esté configurado.
+          </span>
+          {d.aviso_configurado && <label className="checkbox"><input type="checkbox" checked={form.quitar_aviso} onChange={set('quitar_aviso')} /> Quitar el flujo de avisos</label>}
         </label>
         <label className="campo full">Lista de decisiones (SharePoint)
           <input value={form.lista_url} onChange={set('lista_url')} placeholder="https://<empresa>.sharepoint.com/sites/<sitio>/Lists/Decisiones SIP-O" />

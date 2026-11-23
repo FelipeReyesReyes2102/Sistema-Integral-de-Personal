@@ -438,10 +438,12 @@ def _revisable(db: Session, sid: int, user: Usuario) -> SolicitudVacaciones:
 
 
 @router.post("/{sid}/validar", response_model=VacacionesOut)
-def validar(sid: int, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
+def validar(sid: int, tareas: BackgroundTasks, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
     s = _revisable(db, sid, user)
-    aprobar(s, user)
+    final = aprobar(s, user)
     db.commit()
+    if final:  # quedó validada (no solo aprobada por el jefe en espera de GH): se avisa al empleado
+        tareas.add_task(vacaciones_avisos.notificar_validacion, s.id)
     return _out(s)
 
 

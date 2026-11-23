@@ -625,6 +625,8 @@ class CanalAprobacion(Base):
     activo: Mapped[bool] = mapped_column(Boolean, default=False)
     tipos: Mapped[str] = mapped_column(String(40), default="vacaciones,permisos")
     flujo_url: Mapped[str | None] = mapped_column(Text)  # cifrada: quien la tenga puede iniciar aprobaciones
+    # Flujo de avisos (otro disparador HTTP): manda un mensaje de Teams al empleado, p. ej. vacaciones validadas
+    aviso_url: Mapped[str | None] = mapped_column(Text)  # cifrada
     lista_url: Mapped[str | None] = mapped_column(Text)  # lista "Decisiones SIP-O" donde el flujo deja la respuesta
     sitio_id: Mapped[str | None] = mapped_column(String(300))
     lista_id: Mapped[str | None] = mapped_column(String(80))

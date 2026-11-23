@@ -305,14 +305,18 @@ def reintentar(db: Session, notif: NotificacionCorreo):
         notif.asunto = asunto[:255]
         _registrar_y_enviar(db, notif, cfg, html_, texto)
         return
-    if notif.vacaciones_id and notif.evento == "vacaciones_canceladas":
+    if notif.vacaciones_id and notif.evento in ("vacaciones_canceladas", "vacaciones_validadas"):
         from . import vacaciones_avisos
         from .models import SolicitudVacaciones
         s = db.get(SolicitudVacaciones, notif.vacaciones_id)
         if s is None:
             return
-        asunto, html_, texto = vacaciones_avisos.mensaje(s)
-        notif.destinatarios = ", ".join(vacaciones_avisos.destinatarios(db, s)) or notif.destinatarios
+        if notif.evento == vacaciones_avisos.EVENTO_VALIDADAS:
+            asunto, html_, texto = vacaciones_avisos.mensaje_validadas(s)
+            notif.destinatarios = vacaciones_avisos._correo_de(s.usuario) or notif.destinatarios
+        else:
+            asunto, html_, texto = vacaciones_avisos.mensaje(s)
+            notif.destinatarios = ", ".join(vacaciones_avisos.destinatarios(db, s)) or notif.destinatarios
         notif.asunto = asunto[:255]
         _registrar_y_enviar(db, notif, cfg, html_, texto)
         return

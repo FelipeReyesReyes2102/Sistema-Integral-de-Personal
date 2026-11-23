@@ -18,6 +18,8 @@ class CanalIn(BaseModel):
     activo: bool
     tipos: list[str] = ["vacaciones", "permisos"]
     flujo_url: str | None = None  # solo si se cambia
+    aviso_url: str | None = None  # flujo de avisos de Teams al empleado; solo si se cambia
+    quitar_aviso: bool = False
     lista_url: str | None = None
     cuenta_flujo: str | None = None
 
@@ -37,7 +39,8 @@ def _estado(db: Session, sede: Sede) -> dict:
         (SolicitudAprobacion.error.is_not(None)) | (SolicitudAprobacion.decision_nota.is_not(None)))
         .order_by(SolicitudAprobacion.id.desc()).limit(10)).all()
     return {
-        "sede_nombre": sede.nombre, "configurado": bool(c and c.flujo_url), "activo": bool(c and c.activo),
+        "sede_nombre": sede.nombre, "configurado": bool(c and c.flujo_url),
+        "aviso_configurado": bool(c and c.aviso_url), "activo": bool(c and c.activo),
         "tipos": sorted(af.tipos_de(c)) if c else ["permisos", "vacaciones"],
         "lista_url": c.lista_url if c else None, "lista_nombre": c.lista_nombre if c else None,
         "cuenta_flujo": c.cuenta_flujo if c else None,
@@ -63,6 +66,13 @@ def guardar(data: CanalIn, db: Session = Depends(get_db), admin: Usuario = Depen
     if data.flujo_url:
         try:
             af.guardar_url(c, data.flujo_url)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+    if data.quitar_aviso:
+        c.aviso_url = None
+    elif data.aviso_url:
+        try:
+            af.guardar_aviso_url(c, data.aviso_url)
         except ValueError as e:
             raise HTTPException(422, str(e))
     if data.lista_url and data.lista_url.strip() != (c.lista_url or ""):
