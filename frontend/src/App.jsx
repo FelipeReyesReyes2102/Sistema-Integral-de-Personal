@@ -2,6 +2,8 @@ import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { useAuth } from './auth'
 import { esConfig, SALIDAS_EQUIPO, esAdmin, esCaseta, esMedico, esSuperAdmin, esTI, inicioDe, sinVacaciones } from './utils'
 import Layout, { esJefe } from './components/Layout'
+import LayoutCaseta, { SinAccesoCaseta } from './components/LayoutCaseta'
+import { MODO_CASETA } from './appCaseta'
 import Login from './pages/Login'
 import CambioObligatorio from './pages/CambioObligatorio'
 import ConfirmarDatos from './pages/ConfirmarDatos'
@@ -87,6 +89,18 @@ export default function App() {
   if (user.debe_cambiar_password && user.auth_method !== 'microsoft') return <CambioObligatorio />
   // Cada 6 meses desde el registro o el último cambio: confirmar o actualizar datos personales
   if (user.debe_confirmar_datos) return <ConfirmarDatos />
+  // App de Caseta instalada en Android: solo la pantalla de Caseta
+  if (MODO_CASETA) {
+    if (!esCaseta(user)) return <SinAccesoCaseta />
+    return (
+      <Routes>
+        <Route element={<LayoutCaseta />}>
+          <Route path="/caseta" element={<Caseta />} />
+          <Route path="*" element={<Navigate to="/caseta" replace />} />
+        </Route>
+      </Routes>
+    )
+  }
   return (
     <Routes>
       <Route element={<Layout />}>

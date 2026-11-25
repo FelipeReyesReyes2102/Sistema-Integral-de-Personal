@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
+import { MODO_CASETA } from '../appCaseta'
 
 const TEXTOS = {
   es: {
@@ -117,9 +118,9 @@ export default function Login() {
       </svg>
 
       <div className="login-card">
-        <div className="login-avatar login-avatar-sip"><img src="/icono-sip.png" alt="" /></div>
-        <h1>{config.app_nombre}</h1>
-        <p className="login-sub">{config.app_descripcion}</p>
+        <div className="login-avatar login-avatar-sip"><img src={MODO_CASETA ? '/caseta-192.png' : '/icono-sip.png'} alt="" /></div>
+        <h1>{MODO_CASETA ? `${config.app_nombre} Caseta` : config.app_nombre}</h1>
+        <p className="login-sub">{MODO_CASETA ? 'Acceso para el personal de caseta' : config.app_descripcion}</p>
 
         {/* Por defecto: usuario y contraseña; Microsoft como opción debajo */}
         {config.password_login && (
@@ -136,10 +137,16 @@ export default function Login() {
         )}
         {mensaje && <div className="login-error" role="alert">{mensaje}</div>}
 
-        {config.password_login && <div className="login-o"><span>{t.o}</span></div>}
-        <button className="login-ms" onClick={entrarMicrosoft} disabled={enviando} type="button">
-          <MicrosoftIcon /> {enviando && !email ? t.redirigiendo : t.microsoft}
-        </button>
+        {/* La app de Caseta entra solo con usuario y contraseña */}
+        {MODO_CASETA && !config.password_login && (
+          <div className="login-error" role="alert">El acceso con usuario y contraseña está desactivado; pide al administrador que lo active para la app de Caseta.</div>
+        )}
+        {!MODO_CASETA && config.password_login && <div className="login-o"><span>{t.o}</span></div>}
+        {!MODO_CASETA && (
+          <button className="login-ms" onClick={entrarMicrosoft} disabled={enviando} type="button">
+            <MicrosoftIcon /> {enviando && !email ? t.redirigiendo : t.microsoft}
+          </button>
+        )}
         <p className="login-nota">{t.soloRegistrados}</p>
       </div>
 

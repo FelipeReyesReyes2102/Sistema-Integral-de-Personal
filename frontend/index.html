@@ -9,6 +9,16 @@
     <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png?v=4" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=4" />
     <title>SIP-O · Sistema Integral de Personal</title>
+    <script>
+      // App instalable de Caseta (Android): el manifiesto solo se ofrece en /caseta, así SIP-O completo no se instala como app.
+      var enAppCaseta = false
+      try { enAppCaseta = sessionStorage.getItem('sip-app-caseta') === '1' || matchMedia('(display-mode: standalone)').matches } catch (e) {}
+      if (location.pathname.indexOf('/caseta') === 0 || enAppCaseta) {
+        var m = document.createElement('link'); m.rel = 'manifest'; m.href = '/caseta.webmanifest?v=1'; document.head.appendChild(m)
+        var t = document.createElement('meta'); t.name = 'theme-color'; t.content = '#1f4a86'; document.head.appendChild(t)
+        document.title = 'SIP-O Caseta'
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

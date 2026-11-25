@@ -4,6 +4,9 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App.jsx'
 import { AuthProvider } from './auth.jsx'
 import './styles.css'
+import { registrarAppCaseta } from './appCaseta'
+
+registrarAppCaseta()
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

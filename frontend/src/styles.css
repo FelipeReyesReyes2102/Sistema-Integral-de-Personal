@@ -972,3 +972,24 @@ button.ley-especial.oculto { background: #f1f3f6; color: var(--muted); text-deco
 .caseta-dia table { table-layout: fixed; width: 100%; }
 .caseta-dia td:nth-child(2) { width: 30%; } .caseta-dia td:nth-child(3) { width: 18%; } .caseta-dia td:nth-child(4) { width: 30%; }
 @media (max-width: 720px) { .caseta-dia table { table-layout: auto; } .caseta-dia td:nth-child(5) { display: none; } }
+
+/* ---------- App de Caseta (Android, instalada desde Chrome) ---------- */
+.app-caseta { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
+.app-caseta-barra { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top)); background: var(--primary); color: #fff; }
+.app-caseta-icono { width: 36px; height: 36px; border-radius: 9px; box-shadow: 0 0 0 1px rgba(255, 255, 255, .35); }
+.app-caseta-titulo { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.app-caseta-titulo strong { font-family: Poppins, Inter, sans-serif; font-size: 17px; }
+.app-caseta-titulo span { font-size: 12px; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-caseta-titulo select { margin-top: 2px; max-width: 100%; font-size: 12px; padding: 2px 4px; border-radius: 6px; border: 0; }
+.app-caseta-accion { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 10px;
+  border: 0; background: rgba(255, 255, 255, .12); color: #fff; cursor: pointer; }
+.app-caseta-accion:active { background: rgba(255, 255, 255, .25); }
+.app-caseta-contenido { flex: 1; padding: 12px 12px 24px; }
+.app-caseta-pie { padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); text-align: center; font-size: 12px; color: var(--muted); }
+.app-caseta-aviso { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--bg); }
+.app-caseta-aviso .card { max-width: 380px; text-align: center; }
+.app-caseta-aviso img { border-radius: 14px; }
+.app-caseta-aviso h2 { margin: 12px 0 8px; font-size: 19px; }
+.app-caseta-aviso p { margin: 0 0 16px; line-height: 1.45; color: var(--muted); }
+@media (min-width: 900px) { .app-caseta-contenido { max-width: 1100px; width: 100%; margin: 0 auto; padding: 20px; } }

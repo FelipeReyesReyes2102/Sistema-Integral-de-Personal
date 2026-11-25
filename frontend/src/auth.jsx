@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { api } from './api'
+import { INICIO_CASETA, MODO_CASETA } from './appCaseta'
 
 const AuthContext = createContext(null)
 
@@ -39,7 +40,7 @@ export function AuthProvider({ children }) {
     } catch { /* la sesión ya no existía */ }
     setUser(null)
     // Si se entró con Microsoft, también se cierra la sesión de Microsoft
-    window.location.href = url || '/login'
+    window.location.href = url || (MODO_CASETA ? INICIO_CASETA : '/login')
   }, [])
 
   return (

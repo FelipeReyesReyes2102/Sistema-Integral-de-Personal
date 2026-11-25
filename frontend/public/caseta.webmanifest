@@ -1,0 +1,18 @@
+{
+  "id": "/caseta?app=caseta",
+  "name": "SIP-O Caseta",
+  "short_name": "Caseta",
+  "description": "Permisos de salida y retardos del día para el personal de caseta de O-tek.",
+  "lang": "es-MX",
+  "start_url": "/caseta?app=caseta",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f6fa",
+  "theme_color": "#1f4a86",
+  "icons": [
+    { "src": "/caseta-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/caseta-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/caseta-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
