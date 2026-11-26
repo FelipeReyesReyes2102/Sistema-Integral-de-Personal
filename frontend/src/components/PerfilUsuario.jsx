@@ -106,11 +106,10 @@ export default function PerfilUsuario({ onClose, onPassword }) {
       <Dato icono={Cake} etiqueta="Cumpleaños">{user.fecha_nacimiento && diaMes(user.fecha_nacimiento)}</Dato>
 
       {user.rol !== 'caseta' && (
-        <>
+        <QrEmpleado encabezado={<>
           <div className="perfil-seccion">Mi QR para caseta</div>
           <p className="muted" style={{ fontSize: 12, margin: '0 0 8px' }}>Muéstralo en caseta al salir o entrar con un permiso: registra tu movimiento y revisa que tu permiso esté aprobado.</p>
-          <QrEmpleado />
-        </>
+        </>} />
       )}
 
       <div className="perfil-seccion">Cuenta</div>

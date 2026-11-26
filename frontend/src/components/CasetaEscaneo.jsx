@@ -200,7 +200,7 @@ function BuscarPersona({ valor, onElegir }) {
   )
 }
 
-function Equipos({ onCambio }) {
+function Equipos({ onCambio, qr }) {
   const [codigo, setCodigo] = useState('')
   const [info, setInfo] = useState(null)
   const [tipo, setTipo] = useState('salida')
@@ -272,7 +272,7 @@ function Equipos({ onCambio }) {
             <button className={tipo === 'entrada' ? 'activo' : ''} onClick={() => setTipo('entrada')}><ArrowDownLeft size={14} /> Entra</button>
           </div>
           <BuscarPersona valor={persona} onElegir={setPersona} />
-          {!persona && esNativo() && (
+          {!persona && qr && esNativo() && (
             <button className="btn btn-sm" style={{ marginTop: 8 }} onClick={async () => { try { const c = await escanearNativo('qr'); if (c) personaPorQr(c) } catch (e) { setError(e.message) } }}>
               <QrCode size={14} /> Escanear QR de la persona
             </button>
@@ -317,17 +317,18 @@ function MovimientosHoy({ version }) {
 }
 
 /** Pestaña Escanear de Caseta: personas por QR y equipos de cómputo por código de barras. */
-export default function CasetaEscaneo({ onSolicitar }) {
-  const [modo, setModo] = useState('personas')
+export default function CasetaEscaneo({ onSolicitar, qr = true }) {
+  const [elegido, setModo] = useState('personas')
+  const modo = qr ? elegido : 'equipos'  // sin QR de empleados solo se escanean equipos
   const [version, setVersion] = useState(0)
   const cambio = () => setVersion((v) => v + 1)
   return (
     <>
-      <div className="segmentado" role="tablist" style={{ marginBottom: 10 }}>
+      {qr && <div className="segmentado" role="tablist" style={{ marginBottom: 10 }}>
         <button role="tab" aria-selected={modo === 'personas'} className={modo === 'personas' ? 'activo' : ''} onClick={() => setModo('personas')}><QrCode size={14} /> Personas</button>
         <button role="tab" aria-selected={modo === 'equipos'} className={modo === 'equipos' ? 'activo' : ''} onClick={() => setModo('equipos')}><Laptop size={14} /> Equipos</button>
-      </div>
-      {modo === 'personas' ? <Personas onSolicitar={onSolicitar} onCambio={cambio} /> : <Equipos onCambio={cambio} />}
+      </div>}
+      {modo === 'personas' ? <Personas onSolicitar={onSolicitar} onCambio={cambio} /> : <Equipos onCambio={cambio} qr={qr} />}
       <MovimientosHoy version={version} />
     </>
   )

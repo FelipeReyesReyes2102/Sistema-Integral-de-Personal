@@ -37,7 +37,7 @@ def _politica(db: Session, sede: Sede) -> dict:
         "generacion_dias": sede.generacion_dias or "aniversario",
         "aprobacion_gh_vacaciones": sede.aprobacion_gh_vacaciones, "aprobacion_gh_permisos": sede.aprobacion_gh_permisos,
         "caseta_activo": sede.caseta_activo,
-        "tol_salida_antes": sede.tol_salida_antes, "tol_llegada_despues": sede.tol_llegada_despues,
+        "caseta_qr": sede.caseta_qr, "tol_salida_antes": sede.tol_salida_antes, "tol_llegada_despues": sede.tol_llegada_despues,
         "tol_regreso_despues": sede.tol_regreso_despues,
         "jornadas": jornadas,
         "tabla_propia": propia, "tabla": [{"anios_desde": r.anios_desde, "anios_hasta": r.anios_hasta, "dias": r.dias}
@@ -90,14 +90,14 @@ def guardar(data: PoliticaIn, request: Request, db: Session = Depends(get_db), a
     sede.modulo_consultas, sede.modulo_cumpleanos = data.modulo_consultas, data.modulo_cumpleanos
     sede.generacion_dias = data.generacion_dias
     sede.aprobacion_gh_vacaciones, sede.aprobacion_gh_permisos = data.aprobacion_gh_vacaciones, data.aprobacion_gh_permisos
-    for campo in ("tol_salida_antes", "tol_llegada_despues", "tol_regreso_despues"):
+    for campo in ("caseta_qr", "tol_salida_antes", "tol_llegada_despues", "tol_regreso_despues"):
         if getattr(data, campo) is not None:
             setattr(sede, campo, getattr(data, campo))
     auditar(db, "politica_sede", actor_id=admin.id,
             detalle=f"{sede.nombre}: vigencia {data.meses_vigencia} meses · anticipación {data.dias_anticipacion} d · "
                     f"permisos {sede.tipos_permiso or 'ninguno'} · "
                     f"{'equivalencia en horas' if data.equivalencia_horas else 'días completos'} · "
-                    f"tolerancias caseta: salida {sede.tol_salida_antes} min antes, llegada {sede.tol_llegada_despues} min, "
+                    f"QR en caseta {'activo' if sede.caseta_qr else 'desactivado'} · tolerancias caseta: salida {sede.tol_salida_antes} min antes, llegada {sede.tol_llegada_despues} min, "
                     f"regreso {sede.tol_regreso_despues} min", request=request)
     db.commit()
     return _politica(db, sede)

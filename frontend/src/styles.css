@@ -1025,3 +1025,4 @@ button.ley-especial.oculto { background: #f1f3f6; color: var(--muted); text-deco
 .motivos-rapidos { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip-btn { border: 1px solid #c3cad6; background: #fff; color: #1f2a44; border-radius: 16px; padding: 6px 12px; font-size: 13px; cursor: pointer; min-height: 36px; }
 .chip-btn.activo { background: var(--primary); border-color: var(--primary); color: #fff; }
+.uso-permiso { display: grid; gap: 4px; justify-items: end; margin-top: 6px; }

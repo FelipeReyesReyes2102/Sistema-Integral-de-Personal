@@ -27,6 +27,8 @@ export default function Empleados() {
   const [editar, setEditar] = useState(null)
   const [saldos, setSaldos] = useState(null)
   const [qr, setQr] = useState(null)  // gafete con QR para caseta
+  const [qrSede, setQrSede] = useState(false)  // la sede usa el QR en caseta
+  useEffect(() => { api('/politica').then((p) => setQrSede(!!p.caseta_qr)).catch(() => {}) }, [])
   const [temporal, setTemporal] = useState(null) // usuario con contraseña temporal recién generada
   const [importar, setImportar] = useState(false)
   const [sel, setSel] = useState(() => new Set())  // empleados elegidos para restablecer su contraseña
@@ -152,7 +154,7 @@ export default function Empleados() {
                 <td style={{ whiteSpace: 'nowrap' }}>
                   <button className="icon-btn" title="Vacaciones y permisos" onClick={() => navigate(`/empleados/${u.id}/vacaciones`)}><CalendarDays size={16} /></button>{' '}
                   <button className="icon-btn" title="Saldos y ajustes" onClick={() => setSaldos(u)}><Scale size={16} /></button>{' '}
-                  {u.activo && <><button className="icon-btn" title="QR para caseta (gafete)" onClick={() => setQr(u)}><QrCode size={16} /></button>{' '}</>}
+                  {u.activo && qrSede && <><button className="icon-btn" title="QR para caseta (gafete)" onClick={() => setQr(u)}><QrCode size={16} /></button>{' '}</>}
                   {(soySuper || u.rol !== 'superadmin') && u.activo && (
                     <><button className="icon-btn" title="Restablecer contraseña (temporal de 6 dígitos)" onClick={() => restablecer(u)}><KeyRound size={16} /></button>{' '}</>
                   )}

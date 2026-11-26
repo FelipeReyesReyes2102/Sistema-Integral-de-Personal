@@ -4,7 +4,7 @@ import { Printer } from 'lucide-react'
 import { api } from '../api'
 
 /** QR del empleado para registrar sus entradas y salidas en caseta (propio, o el de otro empleado para GH). */
-export default function QrEmpleado({ usuarioId, tam = 180 }) {
+export default function QrEmpleado({ usuarioId, tam = 180, encabezado = null }) {
   const [datos, setDatos] = useState(null)
   const [img, setImg] = useState('')
   const [error, setError] = useState('')
@@ -12,6 +12,7 @@ export default function QrEmpleado({ usuarioId, tam = 180 }) {
     api(usuarioId ? `/caseta/qr/${usuarioId}` : '/caseta/qr/mio')
       .then(async (d) => {
         setDatos(d)
+        if (d.activo === false) return
         setImg(await QRCode.toDataURL(d.codigo, { width: 480, margin: 1, errorCorrectionLevel: 'M' }))
       })
       .catch((e) => setError(e.message))
@@ -29,12 +30,17 @@ export default function QrEmpleado({ usuarioId, tam = 180 }) {
     w.document.close()
   }
 
-  if (error) return <div className="muted" style={{ fontSize: 12 }}>{error}</div>
-  if (!img) return <div className="muted" style={{ fontSize: 12 }}>Cargando QR…</div>
+  // La sede no usa el QR en caseta: en el perfil no se muestra nada; en Empleados se explica
+  if (datos?.activo === false) return encabezado ? null : <div className="muted">El registro con QR en caseta está desactivado en la sede de esta persona (se activa en Configuración → Política).</div>
+  if (error) return encabezado ? null : <div className="muted" style={{ fontSize: 12 }}>{error}</div>
+  if (!img) return null
   return (
-    <div className="qr-empleado">
-      <img src={img} alt={`QR de ${datos.nombre} para caseta`} width={tam} height={tam} />
-      <button type="button" className="btn btn-sm" onClick={imprimir}><Printer size={14} /> Imprimir gafete</button>
-    </div>
+    <>
+      {encabezado}
+      <div className="qr-empleado">
+        <img src={img} alt={`QR de ${datos.nombre} para caseta`} width={tam} height={tam} />
+        <button type="button" className="btn btn-sm" onClick={imprimir}><Printer size={14} /> Imprimir gafete</button>
+      </div>
+    </>
   )
 }

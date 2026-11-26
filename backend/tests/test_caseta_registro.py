@@ -9,6 +9,25 @@ from tests.test_caseta import _caseta
 from tests.test_consultas import entrar
 
 
+import pytest
+
+
+def _qr(activo):
+    from app.models import Sede
+    with SessionLocal() as db:
+        for sd in db.query(Sede).all():
+            sd.caseta_qr = activo
+        db.commit()
+
+
+@pytest.fixture(autouse=True)
+def qr_activo():
+    """Las pruebas de escaneo necesitan el QR activo en la sede (viene apagado por defecto)."""
+    _qr(True)
+    yield
+    _qr(False)
+
+
 def _usuario(email):
     with SessionLocal() as db:
         return db.query(Usuario).filter((Usuario.email == email) | (Usuario.email_personal == email)).one().id
@@ -234,3 +253,34 @@ def test_tolerancias_configurables_por_sede():
                 s.tol_salida_antes = s.tol_llegada_despues = s.tol_regreso_despues = 15
             db.commit()
         _limpiar(uid, salida)
+
+
+def test_qr_desactivado_y_uso_del_permiso_con_un_clic():
+    _qr(False)
+    cas = _caseta()
+    uid = _usuario("carlos@empresa.com")
+    carlos = entrar("carlos@empresa.com")
+    assert carlos.get("/api/caseta/qr/mio").json() == {"activo": False}
+    assert cas.post("/api/caseta/escanear", json={"codigo": codigo_qr(uid)}).status_code == 422
+    salida = _permiso(uid, "salida_intermedia", -5, 60)   # sale ahora y regresa en una hora
+    tarde = _permiso(uid, "llegada_tarde", -60, 0)
+    try:
+        hoy = cas.get("/api/caseta/hoy").json()
+        assert hoy["qr_activo"] is False
+        fila = next(f for f in hoy["por_horas"] if f["id"] == salida)
+        assert fila["uso"]["siguiente"] == "salida" and fila["uso"]["regreso"]
+        r = cas.post(f"/api/caseta/permisos/{salida}/usar")
+        assert r.status_code == 201, r.text
+        assert r.json()["tipo"] == "salida" and r.json()["uso"]["siguiente"] == "entrada"
+        # Deshacer un toque equivocado y volver a registrar
+        assert cas.delete(f"/api/caseta/movimientos/{r.json()['id']}").status_code == 204
+        cas.post(f"/api/caseta/permisos/{salida}/usar")
+        e = cas.post(f"/api/caseta/permisos/{salida}/usar").json()
+        assert e["tipo"] == "entrada" and e["uso"]["siguiente"] is None and "Regreso" in e["mensaje"]
+        assert cas.post(f"/api/caseta/permisos/{salida}/usar").status_code == 409   # ya usado
+        t = cas.post(f"/api/caseta/permisos/{tarde}/usar").json()
+        assert t["tipo"] == "entrada" and t["con_permiso"]
+        # Otro usuario de caseta no puede deshacer lo ajeno
+        assert carlos.delete(f"/api/caseta/movimientos/{t['id']}").status_code == 403
+    finally:
+        _limpiar(uid, salida, tarde)

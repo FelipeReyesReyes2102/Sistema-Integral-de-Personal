@@ -24,9 +24,9 @@ export default function ConfigPolitica({ seccion = 'politica' }) {
   const aplicar = (p) => {
     setPol(p)
     const { meses_vigencia, equivalencia_horas, dias_anticipacion, modulo_consultas, modulo_cumpleanos,
-      generacion_dias, aprobacion_gh_vacaciones, aprobacion_gh_permisos, tol_salida_antes, tol_llegada_despues, tol_regreso_despues } = p
+      generacion_dias, aprobacion_gh_vacaciones, aprobacion_gh_permisos, caseta_qr, tol_salida_antes, tol_llegada_despues, tol_regreso_despues } = p
     setForm({ meses_vigencia, equivalencia_horas, dias_anticipacion, modulo_consultas, modulo_cumpleanos,
-      generacion_dias, aprobacion_gh_vacaciones, aprobacion_gh_permisos, tol_salida_antes, tol_llegada_despues, tol_regreso_despues })
+      generacion_dias, aprobacion_gh_vacaciones, aprobacion_gh_permisos, caseta_qr, tol_salida_antes, tol_llegada_despues, tol_regreso_despues })
   }
   const cargar = () => api('/politica').then(aplicar).catch((e) => setMsg({ ok: false, t: e.message }))
   useEffect(() => {
@@ -119,7 +119,12 @@ export default function ConfigPolitica({ seccion = 'politica' }) {
           <label className="checkbox"><input type="checkbox" checked={form.modulo_cumpleanos} onChange={set('modulo_cumpleanos')} /> Cumpleaños en el calendario</label>
         </div>
         <div className="campo full">
-          <span>Tolerancias de caseta al escanear el QR (minutos)</span>
+          <span>Caseta</span>
+          <label className="checkbox"><input type="checkbox" checked={!!form.caseta_qr} onChange={set('caseta_qr')} /> Registrar entradas y salidas con el QR del empleado</label>
+          <span className="muted" style={{ fontSize: 11, marginBottom: 6 }}>
+            Desactivado: caseta toca el permiso en su lista para registrar que la persona lo usó (salida, regreso o entrada) y no se muestran los QR.
+          </span>
+          <span>Tolerancias de caseta (minutos)</span>
           <div className="pol-grid">
             <label className="campo">Salir antes de la hora autorizada
               <input type="number" min={0} max={240} value={form.tol_salida_antes} onChange={set('tol_salida_antes')} />
@@ -214,7 +219,7 @@ export default function ConfigPolitica({ seccion = 'politica' }) {
         <li>Los días se generan {pol.generacion_dias === 'calendario' ? 'cada 1 de enero (el primer año, proporcional a los meses trabajados)'
           : pol.generacion_dias === 'mensual' ? 'mes a mes durante cada año de servicio' : 'al cumplir cada año de servicio'} según la tabla de antigüedad{pol.tabla_propia ? ' de la sede' : ' (heredada de la sede principal)'} y se pierden a los <b>{pol.meses_vigencia} meses</b>.</li>
         <li>Mientras no se haya solicitado el bloque obligatorio, no se pueden pedir días sueltos que dejen el saldo por debajo de él.</li>
-        <li>Caseta (QR): puede salir hasta <b>{pol.tol_salida_antes} min</b> antes de la hora autorizada; la llegada tarde vale hasta <b>{pol.tol_llegada_despues} min</b> después y el regreso se marca tarde pasados <b>{pol.tol_regreso_despues} min</b>.</li>
+        <li>Caseta: {pol.caseta_qr ? 'registra entradas y salidas con el QR del empleado' : 'registra el uso del permiso con un toque (QR desactivado)'}. Puede salir hasta <b>{pol.tol_salida_antes} min</b> antes de la hora autorizada; la llegada tarde vale hasta <b>{pol.tol_llegada_despues} min</b> después y el regreso se marca tarde pasados <b>{pol.tol_regreso_despues} min</b>.</li>
         {pol.dias_anticipacion > 0 && <li>Las vacaciones se piden con al menos <b>{pol.dias_anticipacion} día(s)</b> de anticipación.</li>}
         <li>Permisos habilitados: {pol.permisos_tipos?.length ? pol.permisos_tipos.map((t) => `${t.nombre}${t.limite_cantidad ? ` (${textoLimite(t)})` : ''}`).join(', ') : 'ninguno'}.</li>
         <li>Estados: Borrador → Solicitado → {pol.aprobacion_gh_vacaciones ? 'Aprobado por el jefe → ' : ''}Validado / Rechazado. Borrador y Solicitado ya apartan saldo.</li>

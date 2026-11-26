@@ -221,10 +221,54 @@ function PermisosAutorizados(props) {
   )
 }
 
+const textoBoton = (p) => (p.uso.siguiente === 'salida' ? 'Registrar salida' : p.tipo === 'llegada_tarde' ? 'Registrar entrada' : 'Registrar regreso')
+
+/** Uso del permiso en caseta: lo ya registrado (hora y quién) y el botón del siguiente movimiento. */
+function UsoPermiso({ p, ocupado, onUsar }) {
+  const { movimientos, siguiente } = p.uso
+  return (
+    <div className="uso-permiso">
+      {movimientos.map((m) => (
+        <div key={m.id} className="muted" style={{ fontSize: 12 }}>
+          <CheckCircle2 size={12} color="#2e7d32" /> {m.tipo === 'salida' ? 'Salió' : p.tipo === 'llegada_tarde' ? 'Entró' : 'Regresó'} {m.hora}{m.registrado_por ? ` · ${m.registrado_por}` : ''}
+        </div>
+      ))}
+      {siguiente
+        ? <button className="btn btn-sm btn-primary" disabled={ocupado} onClick={() => onUsar(p)}>{textoBoton(p)}</button>
+        : <span className="pill validado" style={{ marginTop: 4 }}>Permiso usado</span>}
+    </div>
+  )
+}
+
 function PermisosHoy({ onSolicitar, pendientesIds = [] }) {
   const [datos, setDatos] = useState(null)
   const [buscar, setBuscar] = useState('')
   const [error, setError] = useState('')
+  const [ocupado, setOcupado] = useState(false)
+  const [ultimo, setUltimo] = useState(null)  // último registro, para deshacer un toque equivocado
+  async function usar(p) {
+    setOcupado(true)
+    setError('')
+    try {
+      const r = await api(`/caseta/permisos/${p.id}/usar`, { method: 'POST' })
+      setUltimo({ id: r.id, texto: `${p.nombre}: ${r.mensaje}`, aviso: /antes de la hora|después de la hora/.test(r.mensaje) })
+      if (navigator.vibrate) navigator.vibrate(60)
+      cargar()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setOcupado(false)
+    }
+  }
+  async function deshacer() {
+    try {
+      await api(`/caseta/movimientos/${ultimo.id}`, { method: 'DELETE' })
+      setUltimo(null)
+      cargar()
+    } catch (e) {
+      setError(e.message)
+    }
+  }
   const cargar = () => api('/caseta/hoy').then((d) => { setDatos(d); setError('') }).catch((e) => setError(e.message))
   useEffect(() => {
     cargar()
@@ -264,6 +308,13 @@ function PermisosHoy({ onSolicitar, pendientesIds = [] }) {
         <button className="btn btn-sm" onClick={cargar}><RefreshCw size={14} /> Actualizar</button>
       </div>
       {error && <div className="alerta error">{error}</div>}
+      {ultimo && (
+        <div className={`alerta ${ultimo.aviso ? 'warn' : 'ok'} fila`} role="status">
+          <span style={{ flex: 1 }}>{ultimo.texto}</span>
+          <button className="btn btn-sm" onClick={deshacer}>Deshacer</button>
+          <button className="icon-btn plain" title="Cerrar" onClick={() => setUltimo(null)}><X size={14} /></button>
+        </div>
+      )}
       {enBusqueda && (
         <div className="caseta-lista">
           {buscando && !personas && <div className="muted" style={{ padding: 16, textAlign: 'center' }}>Buscando…</div>}
@@ -318,6 +369,7 @@ function PermisosHoy({ onSolicitar, pendientesIds = [] }) {
               <span className="pill validado">{p.tipo_nombre}</span>
               <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Autorizó: {p.autorizo || '—'}</div>
               {p.registrado_por && <div className="muted" style={{ fontSize: 11 }}>Retardo de caseta</div>}
+              {p.uso && datos && !datos.qr_activo && <UsoPermiso p={p} ocupado={ocupado} onUsar={usar} />}
             </div>
           </div>
         ))}
@@ -509,6 +561,8 @@ function Retardos({ lista, inicial, onRegistrado }) {
 /** Caseta: permisos validados del día y solicitudes de ingreso por retardo. */
 export default function Caseta() {
   const [tab, setTab] = useState('hoy')
+  const [qr, setQr] = useState(false)
+  useEffect(() => { api('/politica').then((p) => setQr(!!p.caseta_qr)).catch(() => {}) }, [])
   const [seleccion, setSeleccion] = useState(null)
   const [lista, setLista] = useState([])
   const [aviso, setAviso] = useState(null)
@@ -558,7 +612,7 @@ export default function Caseta() {
         </div>
       )}
       <Pendientes lista={lista} onCancelar={cancelar} />
-      {tab === 'escanear' ? <Escaneo onSolicitar={solicitar} /> : tab === 'hoy'
+      {tab === 'escanear' ? <Escaneo onSolicitar={solicitar} qr={qr} /> : tab === 'hoy'
         ? <>{SALIDAS_EQUIPO && <EquiposHoy />}<PermisosAutorizados onSolicitar={solicitar} pendientesIds={lista.filter((r) => ['solicitado', 'validado'].includes(r.estado)).map((r) => r.usuario_id)} /></>
         : <Retardos lista={lista} inicial={seleccion} onRegistrado={cargar} />}
     </>

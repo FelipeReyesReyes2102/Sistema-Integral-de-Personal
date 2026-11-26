@@ -46,6 +46,7 @@ CAMPOS = {
     "caseta_tipos": "Permisos que avisan a caseta", "meses_vigencia": "Vigencia de los días (meses)",
     "equivalencia_horas": "Equivalencia en horas", "dias_anticipacion": "Anticipación (días)",
     "tipos_permiso": "Permisos habilitados", "home_office_max_dias": "Home office: máximo de días",
+    "caseta_qr": "Caseta: registro con QR del empleado",
     "tol_salida_antes": "Caseta: tolerancia para salir antes (min)",
     "tol_llegada_despues": "Caseta: tolerancia de llegada tarde (min)",
     "tol_regreso_despues": "Caseta: tolerancia de regreso (min)",

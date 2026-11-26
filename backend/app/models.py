@@ -142,6 +142,8 @@ class Sede(Base):
     aprobacion_gh_permisos: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # Tolerancias de caseta al escanear el QR (minutos): salir antes de la hora autorizada, entrar después de la
     # hora autorizada en una llegada tarde y regresar después de la hora autorizada en una salida durante la jornada
+    # Registro de entradas y salidas con el QR del empleado. Apagado: caseta registra el uso del permiso con un clic
+    caseta_qr: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     tol_salida_antes: Mapped[int] = mapped_column(Integer, default=15, server_default="15")
     tol_llegada_despues: Mapped[int] = mapped_column(Integer, default=15, server_default="15")
     tol_regreso_despues: Mapped[int] = mapped_column(Integer, default=15, server_default="15")

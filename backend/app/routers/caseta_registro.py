@@ -25,13 +25,15 @@ from ..database import get_db
 from ..models import TIPO_RETARDO, VALIDADO, MovimientoCaseta, Permiso, Usuario, es_admin
 from ..security import auditar, get_current_user
 from ..sedes import ahora_en
-from .caseta import _persona, _sedes, permisos_proximos, require_caseta
+from .caseta import _persona, _sedes, pasos_permiso, movimientos_permiso, permisos_proximos, require_caseta, uso_permiso
 
 router = APIRouter(prefix="/api/caseta", tags=["caseta"])
 
 PREFIJO_QR = "SIPO-E1"
 TOLERANCIA_DEFECTO = 15  # minutos; cada sede configura las suyas en su política (GH)
 DOBLE_ESCANEO = timedelta(seconds=60)
+DESHACER = timedelta(minutes=10)     # caseta puede deshacer su propio registro por un toque equivocado
+QR_APAGADO = "El registro con QR está desactivado en esta sede: registra el permiso desde la lista de Permisos."
 
 
 # ---------------- QR del empleado ----------------
@@ -53,10 +55,16 @@ def leer_qr(codigo: str) -> int | None:
     return uid if hmac.compare_digest(partes[2], _firma(uid)) else None
 
 
+def qr_activo(u: Usuario | None) -> bool:
+    return bool(u and u.sede and u.sede.caseta_qr)
+
+
 @router.get("/qr/mio")
 def mi_qr(user: Usuario = Depends(get_current_user)):
-    """QR personal para registrar entradas y salidas en caseta."""
-    return {"codigo": codigo_qr(user.id), "nombre": user.nombre, "numero_empleado": user.numero_empleado}
+    """QR personal para registrar entradas y salidas en caseta (si la sede lo tiene activo)."""
+    if not qr_activo(user):
+        return {"activo": False}
+    return {"activo": True, "codigo": codigo_qr(user.id), "nombre": user.nombre, "numero_empleado": user.numero_empleado}
 
 
 @router.get("/qr/{usuario_id}")
@@ -67,7 +75,9 @@ def qr_de(usuario_id: int, db: Session = Depends(get_db), user: Usuario = Depend
     u = db.get(Usuario, usuario_id)
     if not u or u.sede_id not in _sedes(db, user):
         raise HTTPException(404, "Empleado no encontrado")
-    return {"codigo": codigo_qr(u.id), "nombre": u.nombre, "numero_empleado": u.numero_empleado}
+    if not qr_activo(u):
+        return {"activo": False}
+    return {"activo": True, "codigo": codigo_qr(u.id), "nombre": u.nombre, "numero_empleado": u.numero_empleado}
 
 
 # ---------------- Utilidades ----------------
@@ -139,7 +149,10 @@ def persona_qr(codigo: str, db: Session = Depends(get_db), user: Usuario = Depen
     uid = leer_qr(codigo)
     if uid is None:
         raise HTTPException(422, "El código no es un QR de empleado de SIP-O.")
-    return _persona(_empleado_visible(db, user, uid))
+    u = _empleado_visible(db, user, uid)
+    if not qr_activo(u):
+        raise HTTPException(422, QR_APAGADO)
+    return _persona(u)
 
 
 class EscaneoIn(BaseModel):
@@ -206,6 +219,8 @@ def escanear(data: EscaneoIn, db: Session = Depends(get_db), user: Usuario = Dep
     if uid is None:
         raise HTTPException(422, "El código no es un QR de empleado de SIP-O.")
     u = _empleado_visible(db, user, uid)
+    if not qr_activo(u):
+        raise HTTPException(422, QR_APAGADO)
     ahora_local = ahora_en(u.sede).replace(second=0, microsecond=0)
     # Doble escaneo seguido: se devuelve el mismo registro
     previo = db.scalar(select(MovimientoCaseta).where(
@@ -218,6 +233,73 @@ def escanear(data: EscaneoIn, db: Session = Depends(get_db), user: Usuario = Dep
                  permiso_id=permiso.id if permiso else None, con_permiso=valido, detalle=texto,
                  fecha=ahora_local.date(), hora=ahora_local.time())
     return {**_fila_mov(db, m), "mensaje": texto, "repetido": False}
+
+
+# ---------------- Uso del permiso con un clic (sin QR) ----------------
+
+def _tolerancia(u: Usuario, campo: str) -> timedelta:
+    v = getattr(u.sede, campo, None) if u.sede else None
+    return timedelta(minutes=TOLERANCIA_DEFECTO if v is None else v)
+
+
+@router.post("/permisos/{pid}/usar", status_code=201)
+def usar_permiso(pid: int, db: Session = Depends(get_db), user: Usuario = Depends(require_caseta)):
+    """Caseta registra que la persona usó su permiso por horas: su salida, su regreso o su entrada (llegada tarde).
+
+    Toma la hora actual del servidor. Si es antes o después de lo autorizado (con las tolerancias de la sede), se
+    registra igual y queda la nota."""
+    p = db.get(Permiso, pid)
+    if not p or p.usuario.sede_id not in _sedes(db, user):
+        raise HTTPException(404, "Permiso no encontrado en tu sede.")
+    u = p.usuario
+    ahora_local = ahora_en(u.sede).replace(second=0, microsecond=0, tzinfo=None)
+    dia = ahora_local.date()
+    if p.estado != VALIDADO:
+        raise HTTPException(422, "El permiso no está autorizado.")
+    if tipos_permiso.por_dias(db, u.sede_id, p.tipo) or not (p.fecha <= dia <= (p.fecha_fin or p.fecha)):
+        raise HTTPException(422, "Solo se registran permisos por horas de hoy.")
+    movs = movimientos_permiso(db, p, dia)
+    pasos = pasos_permiso(p)
+    if len(movs) >= len(pasos):
+        raise HTTPException(409, f"El permiso de {u.nombre} ya se registró como usado.")
+    tipo = pasos[len(movs)]
+    hora = _hhmm
+    if tipo == "salida":
+        ini = datetime.combine(dia, p.hora_inicio)
+        if ahora_local < ini - _tolerancia(u, "tol_salida_antes"):
+            texto = f"Salió a las {hora(ahora_local.time())}, antes de la hora autorizada ({hora(p.hora_inicio)})."
+        elif len(pasos) == 2:
+            texto = f"Salida registrada. Debe regresar a las {hora(p.hora_fin)}."
+        else:
+            texto = "Salida registrada."
+    else:
+        fin = datetime.combine(dia, p.hora_fin)
+        campo = "tol_llegada_despues" if p.tipo == TIPO_RETARDO else "tol_regreso_despues"
+        tarde = ahora_local > fin + _tolerancia(u, campo)
+        if p.tipo == TIPO_RETARDO:
+            texto = (f"Entró a las {hora(ahora_local.time())}, después de la hora autorizada ({hora(p.hora_fin)})." if tarde
+                     else "Entrada registrada (llegada tarde autorizada).")
+        else:
+            texto = (f"Regresó a las {hora(ahora_local.time())}, después de la hora autorizada ({hora(p.hora_fin)})." if tarde
+                     else "Regreso registrado.")
+    m = _guardar(db, user, sede_id=u.sede_id, clase="persona", tipo=tipo, usuario_id=u.id, permiso_id=p.id,
+                 con_permiso=True, detalle=texto, fecha=dia, hora=ahora_local.time())
+    return {**_fila_mov(db, m), "mensaje": texto, "uso": uso_permiso(db, p, dia)}
+
+
+@router.delete("/movimientos/{mid}", status_code=204)
+def deshacer_movimiento(mid: int, db: Session = Depends(get_db), user: Usuario = Depends(require_caseta)):
+    """Deshace un registro equivocado: solo el propio y en los primeros 10 minutos."""
+    m = db.get(MovimientoCaseta, mid)
+    if not m or m.sede_id not in _sedes(db, user):
+        raise HTTPException(404, "Registro no encontrado")
+    ahora_local = ahora_en(m.usuario.sede if m.usuario else user.sede).replace(tzinfo=None)
+    if m.registrado_por_id != user.id or ahora_local - datetime.combine(m.fecha, m.hora) > DESHACER:
+        raise HTTPException(403, "Solo puedes deshacer tus propios registros en los primeros 10 minutos.")
+    auditar(db, "caseta_registro_deshecho", usuario_id=m.usuario_id, actor_id=user.id,
+            detalle=f"{m.clase} {m.tipo} {m.fecha:%d/%m/%Y} {m.hora:%H:%M}" + (f" · permiso {m.permiso_id}" if m.permiso_id else ""))
+    db.delete(m)
+    db.commit()
 
 
 # ---------------- Equipos de cómputo ----------------

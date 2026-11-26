@@ -21,7 +21,7 @@ from ..busqueda import buscar_usuarios
 from ..database import SessionLocal, get_db
 from ..incapacidades import gh_de_sede
 from ..models import (
-    ROL_ADMIN, ROLES_ADMIN, EnvioSharePoint, ListaSharePoint, ROLES_SIN_VACACIONES, CANCELADO, ESTADOS_ACTIVOS, ROL_CASETA, SOLICITADO, TIPO_RETARDO, VALIDADO, NotificacionCorreo, Permiso, Usuario, es_admin,
+    ROL_ADMIN, ROLES_ADMIN, EnvioSharePoint, MovimientoCaseta, ListaSharePoint, ROLES_SIN_VACACIONES, CANCELADO, ESTADOS_ACTIVOS, ROL_CASETA, SOLICITADO, TIPO_RETARDO, VALIDADO, NotificacionCorreo, Permiso, Usuario, es_admin,
 )
 from ..security import ahora, auditar, get_current_user
 from ..sedes import ahora_en, sedes_visibles
@@ -78,6 +78,32 @@ def _fila(db: Session, p: Permiso) -> dict:
             "teams": _teams(db, p) if p.registrado_por_id else None}
 
 
+def pasos_permiso(p: Permiso) -> list[str]:
+    """Movimientos que caseta registra con un permiso por horas: entrar (llegada tarde), salir (salida temprana)
+    o salir y regresar (salida durante la jornada y los demás)."""
+    if p.tipo == TIPO_RETARDO:
+        return ["entrada"]
+    if p.tipo == "salida_temprana":
+        return ["salida"]
+    return ["salida", "entrada"]
+
+
+def movimientos_permiso(db: Session, p: Permiso, dia: date) -> list[MovimientoCaseta]:
+    return list(db.scalars(select(MovimientoCaseta).where(
+        MovimientoCaseta.clase == "persona", MovimientoCaseta.permiso_id == p.id, MovimientoCaseta.fecha == dia)
+        .order_by(MovimientoCaseta.id)))
+
+
+def uso_permiso(db: Session, p: Permiso, dia: date) -> dict:
+    """Qué se ha registrado en caseta con el permiso hoy y cuál es el siguiente movimiento (None si ya se usó)."""
+    movs = movimientos_permiso(db, p, dia)
+    pasos = pasos_permiso(p)
+    return {"movimientos": [{"id": m.id, "tipo": m.tipo, "hora": m.hora.strftime("%H:%M"), "detalle": m.detalle,
+                             "registrado_por": m.registrado_por.nombre if m.registrado_por else None} for m in movs],
+            "siguiente": pasos[len(movs)] if len(movs) < len(pasos) else None,
+            "regreso": len(pasos) == 2}
+
+
 @router.get("/hoy")
 def hoy(fecha: date | None = None, db: Session = Depends(get_db), user: Usuario = Depends(require_caseta)):
     """Permisos validados del día en la sede: por horas (con su horario) y por días (fuera de planta todo el día)."""
@@ -85,13 +111,18 @@ def hoy(fecha: date | None = None, db: Session = Depends(get_db), user: Usuario 
     usuarios = select(Usuario.id).where(Usuario.sede_id.in_([x for x in _sedes(db, user) if x is not None] or [-1]))
     q = select(Permiso).where(Permiso.estado == VALIDADO, Permiso.usuario_id.in_(usuarios), Permiso.fecha <= dia,
                               func.coalesce(Permiso.fecha_fin, Permiso.fecha) >= dia)
-    filas = [_fila(db, p) for p in db.scalars(q)]
+    filas = []
+    for p in db.scalars(q):
+        f = _fila(db, p)
+        if not f["por_dias"]:
+            f["uso"] = uso_permiso(db, p, dia)
+        filas.append(f)
     # Por la hora del movimiento en la puerta: la entrada en una llegada tarde, la salida en los demás
     por_horas = sorted([f for f in filas if not f["por_dias"]],
                        key=lambda f: ((f["hora_fin"] if f["tipo"] == TIPO_RETARDO else f["hora_inicio"]) or "", f["nombre"]))
     por_dias = sorted([f for f in filas if f["por_dias"]], key=lambda f: f["nombre"])
     return {"fecha": dia.isoformat(), "hora_local": ahora_en(user.sede).strftime("%H:%M"),
-            "por_horas": por_horas, "por_dias": por_dias}
+            "qr_activo": bool(user.sede and user.sede.caseta_qr), "por_horas": por_horas, "por_dias": por_dias}
 
 
 VENTANA_PROXIMOS = timedelta(hours=48)
