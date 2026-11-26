@@ -140,6 +140,11 @@ class Sede(Base):
     # Aprobación en dos niveles: primero el jefe y después GH
     aprobacion_gh_vacaciones: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     aprobacion_gh_permisos: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Tolerancias de caseta al escanear el QR (minutos): salir antes de la hora autorizada, entrar después de la
+    # hora autorizada en una llegada tarde y regresar después de la hora autorizada en una salida durante la jornada
+    tol_salida_antes: Mapped[int] = mapped_column(Integer, default=15, server_default="15")
+    tol_llegada_despues: Mapped[int] = mapped_column(Integer, default=15, server_default="15")
+    tol_regreso_despues: Mapped[int] = mapped_column(Integer, default=15, server_default="15")
 
 
 class TipoJornada(Base):

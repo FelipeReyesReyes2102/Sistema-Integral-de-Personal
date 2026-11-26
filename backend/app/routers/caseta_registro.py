@@ -30,7 +30,7 @@ from .caseta import _persona, _sedes, permisos_proximos, require_caseta
 router = APIRouter(prefix="/api/caseta", tags=["caseta"])
 
 PREFIJO_QR = "SIPO-E1"
-TOLERANCIA = timedelta(minutes=15)   # margen antes de la salida autorizada y después de la entrada autorizada
+TOLERANCIA_DEFECTO = 15  # minutos; cada sede configura las suyas en su política (GH)
 DOBLE_ESCANEO = timedelta(seconds=60)
 
 
@@ -170,12 +170,16 @@ def _decidir(db: Session, u: Usuario, ahora_local: datetime, tipo: str | None) -
     def dt(t: time) -> datetime:
         return datetime.combine(dia, t)
 
+    def tol(campo: str) -> timedelta:
+        v = getattr(u.sede, campo, None) if u.sede else None
+        return timedelta(minutes=TOLERANCIA_DEFECTO if v is None else v)
+
     if tipo == "salida":
         if not salidas:
             return tipo, None, False, "No tiene un permiso de salida aprobado para hoy."
         # El permiso cuya hora de salida está más cerca de ahora
         p = min(salidas, key=lambda x: abs(dt(x.hora_inicio) - ahora_local))
-        if ahora_local < dt(p.hora_inicio) - TOLERANCIA:
+        if ahora_local < dt(p.hora_inicio) - tol("tol_salida_antes"):
             return tipo, p, False, f"Su permiso es para salir a las {_hhmm(p.hora_inicio)}; todavía no es hora."
         if p.tipo == "salida_intermedia":
             return tipo, p, True, f"Salida autorizada. Debe regresar a las {_hhmm(p.hora_fin)}."
@@ -184,12 +188,12 @@ def _decidir(db: Session, u: Usuario, ahora_local: datetime, tipo: str | None) -
     # Entrada: regreso de una salida durante la jornada o llegada tarde con permiso
     if ultimo and ultimo.tipo == "salida" and ultimo.permiso_id:
         p = ultimo.permiso
-        tarde = p and p.tipo == "salida_intermedia" and ahora_local > dt(p.hora_fin) + TOLERANCIA
+        tarde = p and p.tipo == "salida_intermedia" and ahora_local > dt(p.hora_fin) + tol("tol_regreso_despues")
         return tipo, p, True, (f"Regreso registrado, después de la hora autorizada ({_hhmm(p.hora_fin)})." if tarde
                                else "Regreso registrado.")
     if entradas:
         p = entradas[0]
-        if ahora_local > dt(p.hora_fin) + TOLERANCIA:
+        if ahora_local > dt(p.hora_fin) + tol("tol_llegada_despues"):
             return tipo, p, False, (f"Su llegada tarde estaba autorizada hasta las {_hhmm(p.hora_fin)}; "
                                     "llegó después. Solicita su ingreso por retardo.")
         return tipo, p, True, f"Llegada tarde autorizada (entrada a las {_hhmm(p.hora_fin)})."

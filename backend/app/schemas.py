@@ -724,6 +724,10 @@ class PoliticaIn(BaseModel):
     generacion_dias: Literal["aniversario", "calendario", "mensual"] = "aniversario"
     aprobacion_gh_vacaciones: bool = False
     aprobacion_gh_permisos: bool = False
+    # Tolerancias de caseta (minutos); sin enviar, no cambian
+    tol_salida_antes: int | None = Field(None, ge=0, le=240)
+    tol_llegada_despues: int | None = Field(None, ge=0, le=240)
+    tol_regreso_despues: int | None = Field(None, ge=0, le=240)
 
 
 class JornadaIn(BaseModel):

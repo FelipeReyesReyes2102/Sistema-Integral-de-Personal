@@ -201,3 +201,36 @@ def test_retardo_con_hora_automatica(monkeypatch):
         with SessionLocal() as db:
             db.query(Permiso).filter(Permiso.id == r.json().get("id")).delete()
             db.commit()
+
+
+def test_tolerancias_configurables_por_sede():
+    from app.models import Sede
+    adm = entrar("admin@empresa.com", "Admin123")
+    pol = adm.get("/api/politica").json()
+    assert pol["tol_salida_antes"] == 15 and pol["tol_llegada_despues"] == 15 and pol["tol_regreso_despues"] == 15
+    cas = _caseta()
+    uid = _usuario("carlos@empresa.com")
+    salida = _permiso(uid, "salida_temprana", 10, 90)   # su salida es en 10 min
+    try:
+        # Con 5 min de tolerancia todavía no puede salir
+        r = adm.put("/api/politica", json={**{k: pol[k] for k in ("meses_vigencia", "equivalencia_horas", "dias_anticipacion",
+                                                                  "modulo_consultas", "modulo_cumpleanos", "generacion_dias",
+                                                                  "aprobacion_gh_vacaciones", "aprobacion_gh_permisos")},
+                                           "tol_salida_antes": 5})
+        assert r.status_code == 200 and r.json()["tol_salida_antes"] == 5
+        m = cas.post("/api/caseta/escanear", json={"codigo": codigo_qr(uid), "tipo": "salida"}).json()
+        assert not m["con_permiso"] and "todavía no es hora" in m["mensaje"]
+        # Con 15 min sí (un segundo escaneo como entrada intermedia no aplica: se limpia antes)
+        _limpiar(uid)
+        with SessionLocal() as db:
+            db.get(Usuario, uid).sede.tol_salida_antes = 15
+            db.commit()
+        m = cas.post("/api/caseta/escanear", json={"codigo": codigo_qr(uid), "tipo": "salida"}).json()
+        assert m["con_permiso"]
+        assert adm.put("/api/politica", json={"tol_salida_antes": 500}).status_code == 422
+    finally:
+        with SessionLocal() as db:
+            for s in db.query(Sede).all():
+                s.tol_salida_antes = s.tol_llegada_despues = s.tol_regreso_despues = 15
+            db.commit()
+        _limpiar(uid, salida)

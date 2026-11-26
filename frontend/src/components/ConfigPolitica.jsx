@@ -24,9 +24,9 @@ export default function ConfigPolitica({ seccion = 'politica' }) {
   const aplicar = (p) => {
     setPol(p)
     const { meses_vigencia, equivalencia_horas, dias_anticipacion, modulo_consultas, modulo_cumpleanos,
-      generacion_dias, aprobacion_gh_vacaciones, aprobacion_gh_permisos } = p
+      generacion_dias, aprobacion_gh_vacaciones, aprobacion_gh_permisos, tol_salida_antes, tol_llegada_despues, tol_regreso_despues } = p
     setForm({ meses_vigencia, equivalencia_horas, dias_anticipacion, modulo_consultas, modulo_cumpleanos,
-      generacion_dias, aprobacion_gh_vacaciones, aprobacion_gh_permisos })
+      generacion_dias, aprobacion_gh_vacaciones, aprobacion_gh_permisos, tol_salida_antes, tol_llegada_despues, tol_regreso_despues })
   }
   const cargar = () => api('/politica').then(aplicar).catch((e) => setMsg({ ok: false, t: e.message }))
   useEffect(() => {
@@ -41,7 +41,11 @@ export default function ConfigPolitica({ seccion = 'politica' }) {
   async function guardar() {
     setMsg(null)
     try {
-      aplicar(await api('/politica', { method: 'PUT', body: { ...form, meses_vigencia: Number(form.meses_vigencia), dias_anticipacion: Number(form.dias_anticipacion) } }))
+      aplicar(await api('/politica', { method: 'PUT', body: {
+        ...form, meses_vigencia: Number(form.meses_vigencia), dias_anticipacion: Number(form.dias_anticipacion),
+        tol_salida_antes: Number(form.tol_salida_antes), tol_llegada_despues: Number(form.tol_llegada_despues),
+        tol_regreso_despues: Number(form.tol_regreso_despues),
+      } }))
       setMsg({ ok: true, t: `Política de ${pol.sede_nombre} guardada. Los saldos se recalculan automáticamente.` })
     } catch (e) {
       setMsg({ ok: false, t: e.message })
@@ -113,6 +117,23 @@ export default function ConfigPolitica({ seccion = 'politica' }) {
           <span>Módulos</span>
           <label className="checkbox"><input type="checkbox" checked={form.modulo_consultas} onChange={set('modulo_consultas')} /> Servicio médico (consultas)</label>
           <label className="checkbox"><input type="checkbox" checked={form.modulo_cumpleanos} onChange={set('modulo_cumpleanos')} /> Cumpleaños en el calendario</label>
+        </div>
+        <div className="campo full">
+          <span>Tolerancias de caseta al escanear el QR (minutos)</span>
+          <div className="pol-grid">
+            <label className="campo">Salir antes de la hora autorizada
+              <input type="number" min={0} max={240} value={form.tol_salida_antes} onChange={set('tol_salida_antes')} />
+              <span className="muted" style={{ fontSize: 11 }}>Salida temprana o durante la jornada.</span>
+            </label>
+            <label className="campo">Entrar después de la hora autorizada
+              <input type="number" min={0} max={240} value={form.tol_llegada_despues} onChange={set('tol_llegada_despues')} />
+              <span className="muted" style={{ fontSize: 11 }}>Llegada tarde; después se pide ingreso por retardo.</span>
+            </label>
+            <label className="campo">Regresar después de la hora autorizada
+              <input type="number" min={0} max={240} value={form.tol_regreso_despues} onChange={set('tol_regreso_despues')} />
+              <span className="muted" style={{ fontSize: 11 }}>Salida durante la jornada; después queda marcado como regreso tarde.</span>
+            </label>
+          </div>
         </div>
       </div>
       <div className="fila" style={{ marginTop: 10 }}>
@@ -193,6 +214,7 @@ export default function ConfigPolitica({ seccion = 'politica' }) {
         <li>Los días se generan {pol.generacion_dias === 'calendario' ? 'cada 1 de enero (el primer año, proporcional a los meses trabajados)'
           : pol.generacion_dias === 'mensual' ? 'mes a mes durante cada año de servicio' : 'al cumplir cada año de servicio'} según la tabla de antigüedad{pol.tabla_propia ? ' de la sede' : ' (heredada de la sede principal)'} y se pierden a los <b>{pol.meses_vigencia} meses</b>.</li>
         <li>Mientras no se haya solicitado el bloque obligatorio, no se pueden pedir días sueltos que dejen el saldo por debajo de él.</li>
+        <li>Caseta (QR): puede salir hasta <b>{pol.tol_salida_antes} min</b> antes de la hora autorizada; la llegada tarde vale hasta <b>{pol.tol_llegada_despues} min</b> después y el regreso se marca tarde pasados <b>{pol.tol_regreso_despues} min</b>.</li>
         {pol.dias_anticipacion > 0 && <li>Las vacaciones se piden con al menos <b>{pol.dias_anticipacion} día(s)</b> de anticipación.</li>}
         <li>Permisos habilitados: {pol.permisos_tipos?.length ? pol.permisos_tipos.map((t) => `${t.nombre}${t.limite_cantidad ? ` (${textoLimite(t)})` : ''}`).join(', ') : 'ninguno'}.</li>
         <li>Estados: Borrador → Solicitado → {pol.aprobacion_gh_vacaciones ? 'Aprobado por el jefe → ' : ''}Validado / Rechazado. Borrador y Solicitado ya apartan saldo.</li>
