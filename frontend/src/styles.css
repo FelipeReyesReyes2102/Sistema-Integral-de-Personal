@@ -1026,3 +1026,13 @@ button.ley-especial.oculto { background: #f1f3f6; color: var(--muted); text-deco
 .chip-btn { border: 1px solid #c3cad6; background: #fff; color: #1f2a44; border-radius: 16px; padding: 6px 12px; font-size: 13px; cursor: pointer; min-height: 36px; }
 .chip-btn.activo { background: var(--primary); border-color: var(--primary); color: #fff; }
 .uso-permiso { display: grid; gap: 4px; justify-items: end; margin-top: 6px; }
+
+/* Barra de desplazamiento del menú lateral: delgada, discreta y acorde al fondo oscuro */
+.sidebar nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.18) transparent; scrollbar-gutter: stable; }
+.sidebar nav:hover { scrollbar-color: rgba(255,255,255,.32) transparent; }
+.sidebar nav::-webkit-scrollbar { width: 6px; }
+.sidebar nav::-webkit-scrollbar-track { background: transparent; }
+.sidebar nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 999px; }
+.sidebar nav:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,.32); }
+.sidebar nav::-webkit-scrollbar-thumb:active { background: rgba(255,255,255,.45); }
+.sidebar nav::-webkit-scrollbar-button { display: none; height: 0; }
