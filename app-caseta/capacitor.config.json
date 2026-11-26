@@ -1,0 +1,16 @@
+{
+  "appId": "com.otek.sipo.caseta",
+  "appName": "SIP-O Caseta",
+  "webDir": "www",
+  "server": {
+    "url": "https://sip-o.otek.internal/caseta?app=caseta",
+    "cleartext": false,
+    "allowNavigation": ["sip-o.otek.internal"],
+    "errorPath": "sin-conexion.html"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  }
+}

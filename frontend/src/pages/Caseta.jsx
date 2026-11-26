@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { AlarmClock, Ban, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, DoorOpen, Footprints, Hourglass, Laptop, MessageSquare, RefreshCw, Search, Send, X, XCircle } from 'lucide-react'
 import { api } from '../api'
+import { MODO_CASETA } from '../appCaseta'
+import Escaneo from '../components/CasetaEscaneo'
 import Avatar from '../components/Avatar'
 import BuscadorPaciente from '../components/BuscadorPaciente'
 import { CATEGORIAS, MESES, SALIDAS_EQUIPO, fmtFecha } from '../utils'
@@ -105,7 +107,7 @@ function PermisosMes() {
   }
   const norm = (t) => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   const palabras = norm(buscar).split(/\s+/).filter(Boolean)
-  const coincide = (p) => palabras.every((w) => norm(`${p.nombre} ${p.numero_empleado} ${p.tipo_nombre}`).includes(w))
+  const coincide = (p) => (!MODO_CASETA || !p.por_dias) && palabras.every((w) => norm(`${p.nombre} ${p.numero_empleado} ${p.tipo_nombre}`).includes(w))
   const dias = (datos?.dias || []).map((d) => ({ ...d, permisos: d.permisos.filter(coincide) })).filter((d) => d.permisos.length)
 
   return (
@@ -191,7 +193,8 @@ function PermisosHoy({ onSolicitar, pendientesIds = [] }) {
   }, [buscar])
   const enBusqueda = buscar.trim().length > 0
   const horas = enBusqueda ? [] : datos?.por_horas || []
-  const dias = enBusqueda ? [] : datos?.por_dias || []
+  // En la app de Caseta solo interesan los permisos por horas (quién sale o entra y a qué hora)
+  const dias = enBusqueda || MODO_CASETA ? [] : datos?.por_dias || []
 
   return (
     <div className="card">
@@ -479,6 +482,7 @@ export default function Caseta() {
     <>
       <div className="pestanas" role="tablist">
         <button className={tab === 'hoy' ? 'activo' : ''} onClick={() => setTab('hoy')}>Permisos</button>
+        <button className={tab === 'escanear' ? 'activo' : ''} onClick={() => setTab('escanear')}>Escanear</button>
         <button className={tab === 'retardos' ? 'activo' : ''} onClick={() => setTab('retardos')}>
           Ingreso por retardo{pendientes > 0 && <span className="badge tab-badge" title={`${pendientes} esperando autorización`}>{pendientes}</span>}
         </button>
@@ -489,7 +493,7 @@ export default function Caseta() {
         </div>
       )}
       <Pendientes lista={lista} onCancelar={cancelar} />
-      {tab === 'hoy'
+      {tab === 'escanear' ? <Escaneo onSolicitar={solicitar} /> : tab === 'hoy'
         ? <>{SALIDAS_EQUIPO && <EquiposHoy />}<PermisosAutorizados onSolicitar={solicitar} pendientesIds={lista.filter((r) => ['solicitado', 'validado'].includes(r.estado)).map((r) => r.usuario_id)} /></>
         : <Retardos lista={lista} inicial={seleccion} onRegistrado={cargar} />}
     </>

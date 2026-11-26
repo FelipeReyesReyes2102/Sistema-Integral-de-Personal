@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SIP-O Caseta</string>
+    <string name="title_activity_main">SIP-O Caseta</string>
+    <string name="package_name">com.otek.sipo.caseta</string>
+    <string name="custom_url_scheme">com.otek.sipo.caseta</string>
+</resources>

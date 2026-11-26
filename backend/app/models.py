@@ -904,3 +904,28 @@ class PasoSolicitud(Base):
     permiso: Mapped[Permiso] = relationship(back_populates="pasos")
     usuario: Mapped[Usuario | None] = relationship(foreign_keys=[usuario_id])
     decidido_por: Mapped[Usuario | None] = relationship(foreign_keys=[decidido_por_id])
+
+
+class MovimientoCaseta(Base):
+    """Entradas y salidas registradas en caseta escaneando el QR del empleado o el código de barras de un equipo.
+
+    Se guarda siempre, aunque no haya permiso aprobado (con_permiso = False), para que quede constancia del intento."""
+    __tablename__ = "movimientos_caseta"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sede_id: Mapped[int | None] = mapped_column(ForeignKey("sedes.id", ondelete="SET NULL"), index=True)
+    clase: Mapped[str] = mapped_column(String(10))            # persona | equipo
+    tipo: Mapped[str] = mapped_column(String(10))             # salida | entrada
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"), index=True)
+    permiso_id: Mapped[int | None] = mapped_column(ForeignKey("permisos.id", ondelete="SET NULL"))
+    equipo_codigo: Mapped[str | None] = mapped_column(String(120), index=True)
+    con_permiso: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    detalle: Mapped[str | None] = mapped_column(Text)
+    registrado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id", ondelete="SET NULL"))
+    fecha: Mapped[date] = mapped_column(Date, index=True)      # día local de la sede
+    hora: Mapped[time] = mapped_column(Time)                   # hora local de la sede
+    creado: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    usuario: Mapped[Usuario | None] = relationship(foreign_keys=[usuario_id])
+    permiso: Mapped["Permiso | None"] = relationship(foreign_keys=[permiso_id])
+    registrado_por: Mapped[Usuario | None] = relationship(foreign_keys=[registrado_por_id])

@@ -86,7 +86,9 @@ def hoy(fecha: date | None = None, db: Session = Depends(get_db), user: Usuario 
     q = select(Permiso).where(Permiso.estado == VALIDADO, Permiso.usuario_id.in_(usuarios), Permiso.fecha <= dia,
                               func.coalesce(Permiso.fecha_fin, Permiso.fecha) >= dia)
     filas = [_fila(db, p) for p in db.scalars(q)]
-    por_horas = sorted([f for f in filas if not f["por_dias"]], key=lambda f: (f["hora_inicio"] or "", f["nombre"]))
+    # Por la hora del movimiento en la puerta: la entrada en una llegada tarde, la salida en los demás
+    por_horas = sorted([f for f in filas if not f["por_dias"]],
+                       key=lambda f: ((f["hora_fin"] if f["tipo"] == TIPO_RETARDO else f["hora_inicio"]) or "", f["nombre"]))
     por_dias = sorted([f for f in filas if f["por_dias"]], key=lambda f: f["nombre"])
     return {"fecha": dia.isoformat(), "hora_local": ahora_en(user.sede).strftime("%H:%M"),
             "por_horas": por_horas, "por_dias": por_dias}
@@ -109,7 +111,8 @@ def mes(anio: int, mes: int, db: Session = Depends(get_db), user: Usuario = Depe
             por_dia.setdefault(d, []).append(fila)
             d += timedelta(days=1)
     dias = [{"fecha": d.isoformat(),
-             "permisos": sorted(f, key=lambda x: (x["por_dias"], x["hora_inicio"] or "", x["nombre"]))}
+             "permisos": sorted(f, key=lambda x: (x["por_dias"], (x["hora_fin"] if x["tipo"] == TIPO_RETARDO else x["hora_inicio"]) or "",
+                                                  x["nombre"]))}
             for d, f in sorted(por_dia.items())]
     return {"anio": anio, "mes": mes, "hoy": ahora_en(user.sede).date().isoformat(), "dias": dias,
             "total": sum(len(d["permisos"]) for d in dias)}

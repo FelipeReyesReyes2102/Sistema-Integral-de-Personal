@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solo HTTPS. Para los sitios internos de O-tek se confía también en la CA interna (incluida en la app),
+     así no hay que instalar el certificado a mano en cada teléfono. El resto de internet usa solo las CA del sistema. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">otek.internal</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/otek_ca" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>

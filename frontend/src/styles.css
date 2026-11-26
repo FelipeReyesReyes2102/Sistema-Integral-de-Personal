@@ -993,3 +993,25 @@ button.ley-especial.oculto { background: #f1f3f6; color: var(--muted); text-deco
 .app-caseta-aviso h2 { margin: 12px 0 8px; font-size: 19px; }
 .app-caseta-aviso p { margin: 0 0 16px; line-height: 1.45; color: var(--muted); }
 @media (min-width: 900px) { .app-caseta-contenido { max-width: 1100px; width: 100%; margin: 0 auto; padding: 20px; } }
+
+/* ---------- Caseta: escaneo, avisos y QR ---------- */
+.escanear-bloque { display: flex; flex-direction: column; align-items: stretch; }
+.escanear-btn { justify-content: center; font-size: 16px; padding: 14px 18px; border-radius: 12px; width: 100%; }
+.escaneo-resultado { margin-top: 14px; padding: 14px; border-radius: 12px; border: 2px solid; }
+.escaneo-resultado.ok { border-color: #2e7d32; background: #edf7ee; }
+.escaneo-resultado.no { border-color: #c62828; background: #fdecea; }
+.escaneo-titulo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; }
+.escaneo-resultado.ok .escaneo-titulo { color: #1b5e20; }
+.escaneo-resultado.no .escaneo-titulo { color: #b71c1c; }
+.lector-web { position: fixed; inset: 0; z-index: 100; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; }
+.lector-web video { width: 100%; max-width: 520px; border-radius: 12px; }
+.lector-marco { position: absolute; width: 60vw; max-width: 300px; aspect-ratio: 1; border: 3px solid rgba(255, 255, 255, .8); border-radius: 16px; pointer-events: none; }
+.avisos-caseta { background: #fff8e1; border: 1px solid #f6c400; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+.avisos-caseta .aviso-fila { font-size: 13px; padding: 4px 0; border-top: 1px dashed #f0dca0; }
+.avisos-caseta .aviso-fila.hoy .aviso-cuando { background: #c62828; color: #fff; }
+.aviso-cuando { display: inline-block; font-weight: 700; font-size: 11px; padding: 1px 6px; border-radius: 6px; background: #eceff4; margin-right: 4px; }
+.avisos-activar { display: flex; align-items: center; gap: 6px; width: 100%; justify-content: center; margin-bottom: 10px; padding: 8px; border: 1px dashed var(--primary); border-radius: 10px; background: var(--primary-light); color: var(--primary); font: inherit; font-size: 13px; cursor: pointer; }
+.qr-empleado { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.qr-empleado img { border: 1px solid var(--border); border-radius: 10px; background: #fff; padding: 6px; }
+/* En el teléfono, campos de 16px para que el navegador no acerque la pantalla al escribir */
+.app-caseta input, .app-caseta select, .app-caseta textarea { font-size: 16px; }

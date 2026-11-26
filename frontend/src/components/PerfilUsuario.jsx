@@ -6,6 +6,7 @@ import { ROLES, SALIDAS_EQUIPO, diaMes, fmtFecha, num, sinVacaciones } from '../
 import Avatar from './Avatar'
 import Modal from './Modal'
 import MisDatosForm from './MisDatosForm'
+import QrEmpleado from './QrEmpleado'
 
 function Dato({ icono: Icono, etiqueta, children }) {
   if (children === null || children === undefined || children === '' || children === false) return null
@@ -103,6 +104,14 @@ export default function PerfilUsuario({ onClose, onPassword }) {
         {(user.contacto_nombre || user.contacto_telefono) && [user.contacto_nombre, user.contacto_telefono].filter(Boolean).join(' · ')}
       </Dato>
       <Dato icono={Cake} etiqueta="Cumpleaños">{user.fecha_nacimiento && diaMes(user.fecha_nacimiento)}</Dato>
+
+      {user.rol !== 'caseta' && (
+        <>
+          <div className="perfil-seccion">Mi QR para caseta</div>
+          <p className="muted" style={{ fontSize: 12, margin: '0 0 8px' }}>Muéstralo en caseta al salir o entrar con un permiso: registra tu movimiento y revisa que tu permiso esté aprobado.</p>
+          <QrEmpleado />
+        </>
+      )}
 
       <div className="perfil-seccion">Cuenta</div>
       <Dato icono={ShieldCheck} etiqueta="Sesión iniciada con">{user.auth_method === 'microsoft' ? 'Microsoft' : 'Usuario y contraseña'}</Dato>

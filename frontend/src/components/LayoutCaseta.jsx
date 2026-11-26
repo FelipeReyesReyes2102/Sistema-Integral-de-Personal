@@ -4,6 +4,8 @@ import { BookOpen, KeyRound, LogOut } from 'lucide-react'
 import { elegirSede, sedeActiva } from '../api'
 import { useAuth } from '../auth'
 import CambiarPassword from './CambiarPassword'
+import AvisosCaseta from './AvisosCaseta'
+import { detenerAvisosNativos } from '../nativo'
 
 /** Marco de la app de Caseta (Android): sin menú lateral ni otras secciones de SIP-O, solo Caseta. */
 export default function LayoutCaseta() {
@@ -32,9 +34,10 @@ export default function LayoutCaseta() {
         {user.puede_usar_password && user.auth_method !== 'microsoft' && (
           <button className="app-caseta-accion" onClick={() => setPwd(true)} title="Cambiar contraseña"><KeyRound size={20} /></button>
         )}
-        <button className="app-caseta-accion" onClick={logout} title="Salir"><LogOut size={20} /></button>
+        <button className="app-caseta-accion" onClick={async () => { await detenerAvisosNativos(); logout() }} title="Salir"><LogOut size={20} /></button>
       </header>
       <main className="app-caseta-contenido">
+        <AvisosCaseta />
         <Outlet />
       </main>
       <footer className="app-caseta-pie">{user.nombre}</footer>

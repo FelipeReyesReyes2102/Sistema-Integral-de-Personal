@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icono pequeño de las notificaciones (puerta, en blanco) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M13,4h3a2,2 0,0 1,2 2v14M2,20h3M13,20h9M10,12v0.01M13,4.562v16.157a1,1 0,0 1,-1.242 0.97L5,20V5.562a2,2 0,0 1,1.515 -1.94l4,-1A2,2 0,0 1,13 4.561Z" />
+</vector>

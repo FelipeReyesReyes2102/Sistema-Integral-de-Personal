@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Briefcase, CalendarDays, Cloud, Copy, Download, FileSpreadsheet, KeyRound, Pencil, Plus, Scale, Search, ShieldCheck, UserPlus, UserRound, UserX } from 'lucide-react'
+import { Briefcase, CalendarDays, Cloud, Copy, Download, FileSpreadsheet, KeyRound, Pencil, Plus, QrCode, Scale, Search, ShieldCheck, UserPlus, UserRound, UserX } from 'lucide-react'
 import { api, sedeActiva } from '../api'
 import Avatar from '../components/Avatar'
 import Modal from '../components/Modal'
 import ImportarEmpleados from '../components/ImportarEmpleados'
+import QrEmpleado from '../components/QrEmpleado'
 import { ROLES, SALIDAS_EQUIPO, esSuperAdmin, fmtFecha, num } from '../utils'
 import { useAuth } from '../auth'
 
@@ -25,6 +26,7 @@ export default function Empleados() {
   const [filtros, setFiltros] = useState({ q: '', rol: '', grupo_id: '' })
   const [editar, setEditar] = useState(null)
   const [saldos, setSaldos] = useState(null)
+  const [qr, setQr] = useState(null)  // gafete con QR para caseta
   const [temporal, setTemporal] = useState(null) // usuario con contraseña temporal recién generada
   const [importar, setImportar] = useState(false)
   const [sel, setSel] = useState(() => new Set())  // empleados elegidos para restablecer su contraseña
@@ -150,6 +152,7 @@ export default function Empleados() {
                 <td style={{ whiteSpace: 'nowrap' }}>
                   <button className="icon-btn" title="Vacaciones y permisos" onClick={() => navigate(`/empleados/${u.id}/vacaciones`)}><CalendarDays size={16} /></button>{' '}
                   <button className="icon-btn" title="Saldos y ajustes" onClick={() => setSaldos(u)}><Scale size={16} /></button>{' '}
+                  {u.activo && <><button className="icon-btn" title="QR para caseta (gafete)" onClick={() => setQr(u)}><QrCode size={16} /></button>{' '}</>}
                   {(soySuper || u.rol !== 'superadmin') && u.activo && (
                     <><button className="icon-btn" title="Restablecer contraseña (temporal de 6 dígitos)" onClick={() => restablecer(u)}><KeyRound size={16} /></button>{' '}</>
                   )}
@@ -168,6 +171,12 @@ export default function Empleados() {
       {temporal && <PasswordTemporal usuario={temporal} onClose={() => setTemporal(null)} />}
       {importar && <ImportarEmpleados onClose={() => setImportar(false)} onImportado={cargar} />}
       {saldos && <Saldos usuario={saldos} onClose={() => setSaldos(null)} />}
+      {qr && (
+        <Modal titulo={`QR para caseta · ${qr.nombre}`} onClose={() => setQr(null)} pie={<button className="btn btn-primary" onClick={() => setQr(null)}>Cerrar</button>}>
+          <p className="muted" style={{ marginTop: 0 }}>Con este QR caseta registra sus entradas y salidas y valida sus permisos. Imprímelo para su gafete; también lo ve en SIP-O, en «Mi información».</p>
+          <QrEmpleado usuarioId={qr.id} tam={220} />
+        </Modal>
+      )}
     </div>
   )
 }
