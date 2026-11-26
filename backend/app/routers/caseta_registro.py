@@ -5,7 +5,7 @@
   para ese momento. Siempre se guarda el movimiento, con o sin permiso, para que quede constancia.
 - Los equipos de cómputo se registran por su código de barras (etiqueta de inventario o número de serie): salida o
   entrada, quién lo lleva y si tiene un permiso «Salida de equipo» aprobado para hoy.
-- /avisos devuelve los permisos por horas aprobados de hoy y de los próximos días; la app los compara con los que ya
+- /avisos devuelve los permisos por horas aprobados de hoy y de las próximas 48 horas; la app los compara con los que ya
   conoce para avisar de los nuevos (sin servicios externos de notificaciones).
 """
 import hashlib
@@ -25,14 +25,13 @@ from ..database import get_db
 from ..models import TIPO_RETARDO, VALIDADO, MovimientoCaseta, Permiso, Usuario, es_admin
 from ..security import auditar, get_current_user
 from ..sedes import ahora_en
-from .caseta import _persona, _sedes, require_caseta
+from .caseta import _persona, _sedes, permisos_proximos, require_caseta
 
 router = APIRouter(prefix="/api/caseta", tags=["caseta"])
 
 PREFIJO_QR = "SIPO-E1"
 TOLERANCIA = timedelta(minutes=15)   # margen antes de la salida autorizada y después de la entrada autorizada
 DOBLE_ESCANEO = timedelta(seconds=60)
-DIAS_AVISOS = 7
 
 
 # ---------------- QR del empleado ----------------
@@ -292,19 +291,15 @@ def movimientos(fecha: date | None = None, clase: str | None = None, db: Session
 
 @router.get("/avisos")
 def avisos(db: Session = Depends(get_db), user: Usuario = Depends(require_caseta)):
-    """Permisos por horas aprobados de hoy y de los próximos días; primero los de hoy, por la hora del movimiento."""
+    """Permisos por horas aprobados de hoy y de las próximas 48 horas; primero los de hoy, por la hora del movimiento."""
     hoy = ahora_en(user.sede).date()
-    hasta = hoy + timedelta(days=DIAS_AVISOS)
-    q = select(Permiso).where(Permiso.estado == VALIDADO, Permiso.usuario_id.in_(_usuarios_de(db, user)),
-                              Permiso.fecha <= hasta, func.coalesce(Permiso.fecha_fin, Permiso.fecha) >= hoy)
-    lista = []
-    for p in db.scalars(q):
-        if tipos_permiso.por_dias(db, p.usuario.sede_id, p.tipo):
+    lista, vistos = [], set()
+    for d, p in permisos_proximos(db, user):  # hoy y las próximas 48 horas, ya ordenados
+        if p.id in vistos:
             continue
-        es_hoy = p.fecha <= hoy
+        vistos.add(p.id)
         lista.append({"id": p.id, "nombre": p.usuario.nombre, "numero_empleado": p.usuario.numero_empleado,
                       "tipo": p.tipo, "tipo_nombre": tipos_permiso.nombre(db, p.usuario.sede_id, p.tipo),
-                      "fecha": max(p.fecha, hoy).isoformat(), "es_hoy": es_hoy, "hora": _hhmm(hora_evento(p)),
+                      "fecha": d.isoformat(), "es_hoy": d == hoy, "hora": _hhmm(hora_evento(p)),
                       "hora_inicio": _hhmm(p.hora_inicio), "hora_fin": _hhmm(p.hora_fin)})
-    lista.sort(key=lambda a: (not a["es_hoy"], a["fecha"], a["hora"] or "", a["nombre"]))
     return {"hoy": hoy.isoformat(), "avisos": lista}

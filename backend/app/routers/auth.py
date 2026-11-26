@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, object_session
 from .. import microsoft
 from ..config import settings
 from ..database import get_db
-from ..models import FlujoOAuth, Usuario
+from ..models import ROL_CASETA, FlujoOAuth, Usuario
 from ..schemas import CambioPassword, LoginIn, MeOut, MisDatosIn
 from ..security import (
     poner_cookie_csrf,
@@ -58,6 +58,17 @@ def config_publica():
         "microsoft": settings.microsoft_configurado,
         "password_login": settings.password_login_enabled,
     }
+
+
+@router.get("/usuarios-caseta")
+def usuarios_caseta(db: Session = Depends(get_db)):
+    """Personal de caseta activo, para elegirlo rápido en la pantalla de inicio de la app de Caseta.
+
+    Solo nombre y número de nómina (el usuario con el que entra); la contraseña se sigue pidiendo."""
+    if not settings.password_login_enabled:
+        return []
+    q = select(Usuario).where(Usuario.rol == ROL_CASETA, Usuario.activo.is_(True)).order_by(Usuario.nombre)
+    return [{"nombre": u.nombre, "usuario": u.numero_empleado} for u in db.scalars(q) if puede_usar_password(u)]
 
 
 # ---------------- Usuario y contraseña ----------------

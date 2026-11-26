@@ -138,3 +138,66 @@ def test_equipo_por_codigo_de_barras():
         with SessionLocal() as db:
             db.query(MovimientoCaseta).filter(MovimientoCaseta.equipo_codigo == cod).delete()
             db.commit()
+
+
+def _permiso_en(uid, tipo, dias, delta_min=0):
+    """Permiso validado a `dias` de hoy, a la hora local actual + `delta_min` (una hora de duración)."""
+    with SessionLocal() as db:
+        u = db.get(Usuario, uid)
+        base = ahora_en(u.sede).replace(tzinfo=None, second=0, microsecond=0) + timedelta(days=dias, minutes=delta_min)
+        fin = base + timedelta(hours=1)
+        p = Permiso(usuario_id=uid, tipo=tipo, fecha=base.date(), hora_inicio=base.time(),
+                    hora_fin=fin.time() if fin.date() == base.date() else base.time().replace(hour=23, minute=59),
+                    horas=1, motivo="prueba caseta", estado=VALIDADO)
+        db.add(p)
+        db.commit()
+        return p.id
+
+
+def test_proximos_solo_hoy_y_48_horas():
+    cas = _caseta()
+    uid = _usuario("carlos@empresa.com")
+    ayer = _permiso_en(uid, "salida_temprana", -1)
+    manana = _permiso_en(uid, "salida_temprana", 1)
+    dentro = _permiso_en(uid, "salida_temprana", 2, -30)   # pasado mañana, antes de cumplir 48 h
+    fuera = _permiso_en(uid, "salida_temprana", 2, 30)     # pasado mañana, después de 48 h
+    lejos = _permiso_en(uid, "salida_temprana", 4)
+    try:
+        dias = cas.get("/api/caseta/proximos").json()["dias"]
+        ids = [p["id"] for d in dias for p in d["permisos"]]
+        assert manana in ids and dentro in ids
+        assert not {ayer, fuera, lejos} & set(ids)
+        assert all(not p["por_dias"] for d in dias for p in d["permisos"])
+        av = [a["id"] for a in cas.get("/api/caseta/avisos").json()["avisos"]]
+        assert manana in av and dentro in av and not {ayer, fuera, lejos} & set(av)
+    finally:
+        _limpiar(uid, ayer, manana, dentro, fuera, lejos)
+
+
+def test_usuarios_de_caseta_para_el_inicio():
+    _caseta()
+    from fastapi.testclient import TestClient
+    from app.main import app
+    lista = TestClient(app).get("/api/auth/usuarios-caseta").json()
+    assert {"nombre": "Guardia Caseta", "usuario": "CAS-1"} in lista
+    assert all(set(u) == {"nombre", "usuario"} for u in lista)  # sin correos ni otros datos
+
+
+def test_retardo_con_hora_automatica(monkeypatch):
+    from app import correo
+    from app.routers import caseta as mod
+    monkeypatch.setattr(correo, "enviar", lambda *a, **k: None)
+    cas = _caseta()
+    carlos = next(e for e in cas.get("/api/caseta/empleados", params={"q": "perez"}).json() if e["nombre"] == "Carlos Pérez")
+    real = mod.ahora_en
+    entrada = carlos["entrada_hoy"]
+    h, m = map(int, entrada.split(":"))
+    monkeypatch.setattr(mod, "ahora_en", lambda sede: real(sede).replace(hour=h, minute=m) + timedelta(minutes=20))
+    r = cas.post("/api/caseta/retardos", json={"usuario_id": carlos["id"], "motivo": "Tráfico"})
+    try:
+        assert r.status_code == 201, r.text
+        assert r.json()["hora_fin"] == (real(None).replace(hour=h, minute=m) + timedelta(minutes=20)).strftime("%H:%M")
+    finally:
+        with SessionLocal() as db:
+            db.query(Permiso).filter(Permiso.id == r.json().get("id")).delete()
+            db.commit()

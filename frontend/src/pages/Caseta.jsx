@@ -155,16 +155,68 @@ function PermisosMes() {
   )
 }
 
-/** Permisos autorizados: vista del día (con búsqueda y solicitud de ingreso) o del mes. */
+/** Permisos por horas de mañana y pasado mañana (hasta 48 horas desde ahora), por la hora del movimiento. */
+function PermisosProximos() {
+  const [datos, setDatos] = useState(null)
+  const [error, setError] = useState('')
+  const cargar = () => api('/caseta/proximos').then((d) => { setDatos(d); setError('') }).catch((e) => setError(e.message))
+  useEffect(() => {
+    cargar()
+    const t = setInterval(cargar, 60000)
+    return () => clearInterval(t)
+  }, [])
+  const dias = (datos?.dias || []).filter((d) => !d.es_hoy)
+  return (
+    <div className="card">
+      <div className="fila" style={{ marginBottom: 12 }}>
+        <div>
+          <b style={{ fontSize: 16 }}>Próximas 48 horas</b>
+          <div className="muted" style={{ fontSize: 12 }}>Permisos por horas autorizados después de hoy · se actualiza cada minuto</div>
+        </div>
+        <div className="espacio" />
+        <button className="btn btn-sm" onClick={cargar}><RefreshCw size={14} /> Actualizar</button>
+      </div>
+      {error && <div className="alerta error">{error}</div>}
+      {datos && dias.length === 0 && <div className="muted" style={{ padding: 24, textAlign: 'center' }}>No hay permisos autorizados en las próximas 48 horas.</div>}
+      {dias.map((d) => (
+        <div key={d.fecha} className="caseta-dia">
+          <h4>{fmtFecha(d.fecha)} <span className="muted">· {d.permisos.length}</span></h4>
+          <div className="caseta-lista">
+            {d.permisos.map((p) => (
+              <div key={`${d.fecha}-${p.id}`} className="caseta-item" style={{ borderLeftColor: CATEGORIAS[p.categoria]?.color || '#888' }}>
+                <Avatar usuario={{ id: p.usuario_id, nombre: p.nombre, tiene_foto: p.tiene_foto }} tam={40} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="caseta-nombre">{p.nombre}</div>
+                  <div className="muted" style={{ fontSize: 12 }}>No. {p.numero_empleado}{p.departamento ? ` · ${p.departamento}` : ''}</div>
+                  <div className="caseta-mov"><Movimiento p={p} /></div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span className="pill validado">{p.tipo_nombre}</span>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>Autorizó: {p.autorizo || '—'}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Permisos autorizados: vista del día (con búsqueda y solicitud de ingreso) y, en la app, las próximas 48 horas
+ *  (sin permisos pasados); en la web, la vista del mes. */
 function PermisosAutorizados(props) {
   const [vista, setVista] = useState('hoy')
+  const otra = MODO_CASETA ? 'proximos' : 'mes'
   return (
     <>
       <div className="segmentado" role="tablist" style={{ marginBottom: 10 }}>
         <button role="tab" aria-selected={vista === 'hoy'} className={vista === 'hoy' ? 'activo' : ''} onClick={() => setVista('hoy')}>Hoy</button>
-        <button role="tab" aria-selected={vista === 'mes'} className={vista === 'mes' ? 'activo' : ''} onClick={() => setVista('mes')}><CalendarDays size={14} /> Mes</button>
+        <button role="tab" aria-selected={vista === otra} className={vista === otra ? 'activo' : ''} onClick={() => setVista(otra)}>
+          <CalendarDays size={14} /> {MODO_CASETA ? 'Próximas 48 h' : 'Mes'}
+        </button>
       </div>
-      {vista === 'hoy' ? <PermisosHoy {...props} /> : <div className="card"><PermisosMes /></div>}
+      {vista === 'hoy' ? <PermisosHoy {...props} /> : MODO_CASETA ? <PermisosProximos /> : <div className="card"><PermisosMes /></div>}
     </>
   )
 }
@@ -348,6 +400,9 @@ function Pendientes({ lista, onCancelar }) {
   )
 }
 
+// Motivos frecuentes: un toque y la solicitud queda lista (se puede completar a mano)
+const MOTIVOS_RETARDO = ['Tráfico', 'Falla del transporte público', 'Problema con su vehículo', 'Cita médica', 'Asunto familiar', 'Lluvia o clima']
+
 function Retardos({ lista, inicial, onRegistrado }) {
   const [emp, setEmp] = useState(inicial || null)
   const [hora, setHora] = useState(ahoraHHMM())
@@ -357,6 +412,11 @@ function Retardos({ lista, inicial, onRegistrado }) {
   const [enviando, setEnviando] = useState(false)
   useEffect(() => { if (inicial) setEmp(inicial) }, [inicial])
   useEffect(() => { setHora(ahoraHHMM()); setGh(false) }, [emp?.id])
+  // La hora de llegada es la actual y no se puede cambiar (el servidor registra su propia hora)
+  useEffect(() => {
+    const t = setInterval(() => setHora(ahoraHHMM()), 15000)
+    return () => clearInterval(t)
+  }, [])
 
   const retraso = emp?.entrada_hoy ? minutos(emp.entrada_hoy, hora) : 0
   const destino = !emp ? '' : gh || !emp.jefe_nombre ? 'Gestión Humana (GH)' : emp.jefe_nombre
@@ -367,7 +427,7 @@ function Retardos({ lista, inicial, onRegistrado }) {
     setMsg(null)
     setEnviando(true)
     try {
-      const r = await api('/caseta/retardos', { method: 'POST', body: { usuario_id: emp.id, hora_llegada: hora, motivo: motivo.trim() || null, enviar_gh: gh } })
+      const r = await api('/caseta/retardos', { method: 'POST', body: { usuario_id: emp.id, motivo: motivo.trim() || null, enviar_gh: gh } })
       setMsg({ ok: true, t: `Solicitud de ingreso de ${r.nombre} enviada a ${r.va_a_gh ? `GH (${r.aprobador_nombre || 'Gestión Humana'})` : r.aprobador_nombre}${r.teams ? ' en SIP-O y Teams' : ''}. Queda en "Esperando autorización" hasta que responda.` })
       setEmp(null)
       setMotivo('')
@@ -393,15 +453,20 @@ function Retardos({ lista, inicial, onRegistrado }) {
         {emp && (
           <div className="form-grid" style={{ marginTop: 12 }}>
             {yaPendiente && <div className="full alerta warn" style={{ margin: 0 }}>{emp.nombre} ya tiene una solicitud de ingreso hoy (pendiente o autorizada).</div>}
-            <label className="campo">Hora de llegada
-              <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} />
+            <label className="campo">Hora de llegada (automática)
+              <input type="time" value={hora} readOnly disabled title="Se toma la hora actual" />
               <span className="muted" style={{ fontSize: 11 }}>
                 {emp.entrada_hoy ? (retraso > 0 ? `Entrada ${emp.entrada_hoy} · ${retraso} min de retardo` : `Su entrada es ${emp.entrada_hoy}: no es retardo`) : 'No tiene turno asignado'}
               </span>
             </label>
             <label className="campo">Motivo (opcional)
-              <input value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={500} placeholder="Ej. tráfico, transporte" />
+              <input value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={500} placeholder="Elige uno abajo o escríbelo" />
             </label>
+            <div className="full motivos-rapidos">
+              {MOTIVOS_RETARDO.map((m) => (
+                <button key={m} type="button" className={`chip-btn${motivo === m ? ' activo' : ''}`} onClick={() => setMotivo(motivo === m ? '' : m)}>{m}</button>
+              ))}
+            </div>
             <label className="checkbox full">
               <input type="checkbox" checked={gh} onChange={(e) => setGh(e.target.checked)} disabled={!emp.jefe_nombre} />
               El jefe inmediato no está en planta: enviar a GH

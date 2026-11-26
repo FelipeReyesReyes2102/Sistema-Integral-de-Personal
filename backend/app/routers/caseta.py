@@ -9,7 +9,7 @@
 import threading
 import time as _reloj
 from calendar import monthrange
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -94,6 +94,47 @@ def hoy(fecha: date | None = None, db: Session = Depends(get_db), user: Usuario 
             "por_horas": por_horas, "por_dias": por_dias}
 
 
+VENTANA_PROXIMOS = timedelta(hours=48)
+
+
+def hora_movimiento(p: Permiso) -> time:
+    """Hora a la que caseta ve el movimiento: la entrada en una llegada tarde; la salida en los demás."""
+    return p.hora_fin if p.tipo == TIPO_RETARDO else p.hora_inicio
+
+
+def permisos_proximos(db: Session, user: Usuario) -> list[tuple[date, Permiso]]:
+    """Permisos por horas validados de hoy y de las próximas 48 horas, por día y hora del movimiento.
+
+    Hoy aparecen todos; pasado mañana solo los que caen dentro de las 48 horas desde ahora."""
+    ahora_local = ahora_en(user.sede).replace(tzinfo=None, second=0, microsecond=0)
+    hoy, limite = ahora_local.date(), ahora_local + VENTANA_PROXIMOS
+    usuarios = select(Usuario.id).where(Usuario.sede_id.in_([x for x in _sedes(db, user) if x is not None] or [-1]))
+    q = select(Permiso).where(Permiso.estado == VALIDADO, Permiso.usuario_id.in_(usuarios), Permiso.fecha <= limite.date(),
+                              func.coalesce(Permiso.fecha_fin, Permiso.fecha) >= hoy)
+    res = []
+    for p in db.scalars(q):
+        if tipos_permiso.por_dias(db, p.usuario.sede_id, p.tipo):
+            continue
+        d, fin = max(p.fecha, hoy), min(p.fecha_fin or p.fecha, limite.date())
+        while d <= fin:
+            if d == hoy or datetime.combine(d, hora_movimiento(p)) <= limite:
+                res.append((d, p))
+            d += timedelta(days=1)
+    res.sort(key=lambda x: (x[0], hora_movimiento(x[1]), x[1].usuario.nombre))
+    return res
+
+
+@router.get("/proximos")
+def proximos(db: Session = Depends(get_db), user: Usuario = Depends(require_caseta)):
+    """Permisos por horas validados de hoy y de las próximas 48 horas (sin permisos pasados ni de días completos)."""
+    hoy = ahora_en(user.sede).date()
+    por_dia: dict[date, list[dict]] = {}
+    for d, p in permisos_proximos(db, user):
+        por_dia.setdefault(d, []).append(_fila(db, p))
+    return {"hoy": hoy.isoformat(), "dias": [{"fecha": d.isoformat(), "es_hoy": d == hoy, "permisos": f}
+                                             for d, f in sorted(por_dia.items())]}
+
+
 @router.get("/mes")
 def mes(anio: int, mes: int, db: Session = Depends(get_db), user: Usuario = Depends(require_caseta)):
     """Permisos validados de un mes en la sede, agrupados por día (los de varios días aparecen en cada día)."""
@@ -146,7 +187,7 @@ def empleados(q: str | None = None, con_permisos: bool = False, limite: int = 30
 
 class RetardoIn(BaseModel):
     usuario_id: int
-    hora_llegada: time
+    hora_llegada: time | None = None   # sin hora: se toma la hora actual del servidor (la app no deja cambiarla)
     motivo: str | None = Field(None, max_length=500)
     enviar_gh: bool = False    # el jefe inmediato no está en planta: lo valida GH
 
@@ -234,6 +275,8 @@ def registrar_retardo(data: RetardoIn, tareas: BackgroundTasks, db: Session = De
     if not h:
         raise HTTPException(422, f"{emp.nombre} no tiene turno asignado: no se puede calcular el retardo. Pide a GH que le asigne uno.")
     entrada = h["entrada"]
+    if data.hora_llegada is None:
+        data.hora_llegada = ahora_en(emp.sede).time().replace(second=0, microsecond=0, tzinfo=None)
     if data.hora_llegada <= entrada:
         raise HTTPException(422, f"La hora de llegada ({data.hora_llegada:%H:%M}) no es posterior a su entrada de hoy ({entrada:%H:%M}).")
     duplicado = db.scalar(select(Permiso.id).where(

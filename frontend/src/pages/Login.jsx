@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
@@ -77,7 +77,12 @@ export default function Login() {
   const t = TEXTOS[idioma]
   const mensaje = error || (codigoError ? t.errores[codigoError] || codigoError : '')
 
+  const [casetas, setCasetas] = useState([])
+  const passRef = useRef(null)
   useEffect(() => { api('/auth/config').then(setConfig).catch(() => {}) }, [])
+  // App de Caseta: el personal de caseta aparece al inicio para elegirse con un toque
+  useEffect(() => { if (MODO_CASETA) api('/auth/usuarios-caseta').then(setCasetas).catch(() => {}) }, [])
+  const elegir = (u) => { setEmail(u.usuario); setPassword(''); setError(''); setTimeout(() => passRef.current?.focus(), 0) }
 
   function cambiarIdioma(i) {
     setIdioma(i)
@@ -125,12 +130,24 @@ export default function Login() {
         {/* Por defecto: usuario y contraseña; Microsoft como opción debajo */}
         {config.password_login && (
           <form onSubmit={entrar} className="login-form">
+            {MODO_CASETA && casetas.length > 0 && (
+              <div className="login-casetas">
+                <span>¿Quién entra?</span>
+                <div>
+                  {casetas.map((u) => (
+                    <button key={u.usuario} type="button" className={email === u.usuario ? 'activo' : ''} onClick={() => elegir(u)}>
+                      <b>{u.nombre.split(' ').filter(Boolean).map((x) => x[0]).slice(0, 2).join('')}</b>{u.nombre}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <label>{t.correo}
-              <input type="text" autoFocus autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required
+              <input type="text" autoFocus={!MODO_CASETA} autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required
                 placeholder="nombre@o-tek.com o 2001" />
             </label>
             <label>{t.password}
-              <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+              <input ref={passRef} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </label>
             <button className="login-btn" disabled={enviando}>{enviando ? t.entrando : t.entrar}</button>
           </form>
