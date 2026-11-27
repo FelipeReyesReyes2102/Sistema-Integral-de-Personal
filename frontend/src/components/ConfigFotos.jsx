@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ExternalLink, Image, Link2, Unplug, UploadCloud } from 'lucide-react'
+import { ExternalLink, Image, Link2, RefreshCw, Unplug, UploadCloud } from 'lucide-react'
 import { api } from '../api'
 
 /** Super administrador: biblioteca de SharePoint donde se guardan las fotos de los empleados. */
@@ -34,6 +34,27 @@ export default function ConfigFotos() {
     ejecutar('mover', () => api('/fotos-sharepoint/mover', { method: 'POST' }),
       (r) => `${r.movidas} fotos movidas a SharePoint.${r.pendientes ? ` ${r.pendientes} siguen en el servidor.` : ''}${r.errores?.length ? ' Errores: ' + r.errores.join(' · ') : ''}`)
   }
+  async function actualizarMicrosoft() {
+    if (!window.confirm('Se volverá a traer de Microsoft la foto de cada empleado activo con cuenta de Microsoft, en la mayor resolución disponible (432×432). Las que no cambiaron no se tocan y a quien no tenga foto en Microsoft se le conserva la actual. ¿Continuar?')) return
+    setOcupado('microsoft'); setError(''); setAviso('')
+    const suma = { revisadas: 0, actualizadas: 0, sin_foto: 0, iguales: 0, errores: [] }
+    try {
+      let desde = 0
+      for (;;) {
+        const r = await api('/fotos-sharepoint/actualizar-microsoft', { method: 'POST', body: { desde } })
+        for (const k of ['revisadas', 'actualizadas', 'sin_foto', 'iguales']) suma[k] += r[k]
+        suma.errores.push(...r.errores)
+        setD(r)
+        setAviso(`Revisando… ${suma.revisadas} de ${r.total}`)
+        if (!r.siguiente) break
+        desde = r.siguiente
+      }
+      setAviso(`${suma.actualizadas} fotos actualizadas · ${suma.iguales} sin cambios · ${suma.sin_foto} sin foto en Microsoft (de ${suma.revisadas} revisadas).`)
+      if (suma.errores.length) setError(suma.errores.slice(0, 5).join(' · '))
+    } catch (e) {
+      setError(e.message + (suma.revisadas ? ` (se alcanzaron a revisar ${suma.revisadas}; ${suma.actualizadas} actualizadas)` : ''))
+    } finally { setOcupado('') }
+  }
   const desconectar = () => {
     if (!window.confirm('Las fotos nuevas volverán a guardarse en el servidor. Las que ya están en SharePoint se seguirán leyendo de ahí. ¿Desconectar?')) return
     ejecutar('desconectar', () => api('/fotos-sharepoint', { method: 'DELETE' }), 'Biblioteca desconectada.')
@@ -51,8 +72,8 @@ export default function ConfigFotos() {
       </p>
 
       <div className="fila" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <label className="campo" style={{ flex: '1 1 380px' }}>URL de la biblioteca o de una carpeta
-          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://empresa.sharepoint.com/sites/GH/Documentos compartidos/..." />
+        <label className="campo" style={{ flex: '1 1 380px' }}>URL de la biblioteca o carpeta, o cuenta de OneDrive
+          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="ti.mexico@o-tek.com  o  https://empresa.sharepoint.com/sites/GH/Documentos compartidos" />
         </label>
         <label className="campo" style={{ flex: '0 1 220px' }}>Carpeta (opcional)
           <input value={carpeta} onChange={(e) => setCarpeta(e.target.value)} placeholder={d.carpeta || 'Fotos SIP-O'} />
@@ -62,8 +83,8 @@ export default function ConfigFotos() {
         </button>
       </div>
       <p className="muted" style={{ fontSize: 12, margin: '4px 0 0' }}>
-        Abre en SharePoint la biblioteca (o la carpeta) y copia la dirección del navegador. Si no indicas carpeta y la URL es
-        de la biblioteca, se crea «Fotos SIP-O».
+        Escribe una cuenta (por ejemplo ti.mexico@o-tek.com) para guardarlas en el OneDrive de esa cuenta, o pega la dirección
+        de una biblioteca o carpeta de SharePoint. Si no indicas carpeta, se crea «Fotos SIP-O».
       </p>
 
       {d.conectada && (
@@ -95,6 +116,14 @@ export default function ConfigFotos() {
           )}
         </div>
       )}
+      <h4 className="fila" style={{ gap: 8, margin: '20px 0 4px' }}><RefreshCw size={16} /> Fotos de Microsoft en mayor resolución</h4>
+      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+        Las fotos que se trajeron antes de Microsoft son de 96×96 y se ven pixeladas en la tarjeta impresa. Esto las vuelve a
+        traer en 432×432. {d.conectada && d.activo ? 'Se guardan directamente en SharePoint (la anterior queda como versión del archivo).' : 'Se guardan en el servidor (o en SharePoint si lo activas antes).'}
+      </p>
+      <button className="btn" onClick={actualizarMicrosoft} disabled={!!ocupado}>
+        <RefreshCw size={16} /> {ocupado === 'microsoft' ? 'Actualizando…' : 'Actualizar fotos desde Microsoft'}
+      </button>
       {aviso && <div className="alerta ok" style={{ marginTop: 10 }}>{aviso}</div>}
       {error && <div className="alerta error" style={{ marginTop: 10 }}>{error}</div>}
     </div>

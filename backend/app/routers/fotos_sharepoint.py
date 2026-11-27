@@ -73,6 +73,25 @@ def mover(request: Request, db: Session = Depends(get_db), admin: Usuario = Depe
     return {**_estado(db), **res}
 
 
+class ActualizarIn(BaseModel):
+    desde: int = 0
+
+
+@router.post("/actualizar-microsoft")
+def actualizar_microsoft(data: ActualizarIn, request: Request, db: Session = Depends(get_db),
+                         admin: Usuario = Depends(require_superadmin)):
+    """Vuelve a traer de Microsoft las fotos en mayor resolución (por lotes; el navegador pide el siguiente)."""
+    try:
+        res = fotos.actualizar_desde_microsoft(db, data.desde)
+    except fotos.ErrorFotos as e:
+        raise HTTPException(400, e.mensaje)
+    if res["actualizadas"]:
+        auditar(db, "fotos_actualizadas_microsoft", actor_id=admin.id,
+                detalle=f"{res['actualizadas']} actualizadas de {res['revisadas']} revisadas", request=request)
+        db.commit()
+    return {**_estado(db), **res}
+
+
 @router.delete("")
 def desconectar(request: Request, db: Session = Depends(get_db), admin: Usuario = Depends(require_superadmin)):
     """Deja de usar la biblioteca para fotos nuevas. Las que ya están en SharePoint se siguen leyendo de ahí."""

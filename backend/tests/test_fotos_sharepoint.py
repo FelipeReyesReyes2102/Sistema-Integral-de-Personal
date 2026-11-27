@@ -57,6 +57,14 @@ def graph(monkeypatch):
             estado["borrados"].append(n)
             estado["archivos"].pop(n, None)
             return httpx.Response(204)
+        if p == "/v1.0/users/ti.mexico@o-tek.com/drive":
+            return httpx.Response(200, json={"id": "drv1", "name": "OneDrive",
+                                             "webUrl": "https://otek-my.sharepoint.com/personal/ti_mexico_o-tek_com/Documents"})
+        if p.startswith("/v1.0/users/") and "/photos/" in p:
+            quien = p.split("/")[3]
+            if quien in estado.get("fotos_ms", {}) and "432x432" in p:
+                return httpx.Response(200, content=estado["fotos_ms"][quien], headers={"content-type": "image/jpeg"})
+            return httpx.Response(404)
         return httpx.Response(404)
     microsoft.transporte = httpx.MockTransport(manejador)
     microsoft._token_app.update(valor=None, expira=0)
@@ -156,3 +164,45 @@ def test_url_de_carpeta_y_solo_superadmin(graph):
     assert (host, ruta) == ("otek.sharepoint.com", "/sites/GH/Documentos compartidos/RH/Fotos")
     with pytest.raises(fotos.ErrorFotos):
         fotos._ruta_url("https://otro.com/sites/GH")
+
+
+def test_actualizar_fotos_desde_microsoft(graph):
+    adm = super_login()
+    uid = _empleado("FS-3", "Marta Ruiz")
+    with SessionLocal() as db:
+        u = db.get(Usuario, uid)
+        u.microsoft_oid = "oid-marta"
+        db.commit()
+    nueva = b"JPG" + b"alta-resolucion" * 200
+    graph["fotos_ms"] = {"oid-marta": nueva}
+    desde, total = 0, {"actualizadas": 0, "iguales": 0}
+    while True:
+        r = adm.post("/api/fotos-sharepoint/actualizar-microsoft", json={"desde": desde})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        total["actualizadas"] += d["actualizadas"]
+        if not d["siguiente"]:
+            break
+        desde = d["siguiente"]
+    assert total["actualizadas"] >= 1
+    assert adm.get(f"/api/usuarios/{uid}/foto").content == nueva
+    # Sin cambios la segunda vez; con SharePoint activo, se sube y deja la base vacía
+    adm.put("/api/fotos-sharepoint/conectar", json={"url": URL})
+    adm.put("/api/fotos-sharepoint/activo", json={"activo": True})
+    graph["fotos_ms"]["oid-marta"] = nueva + b"v2"
+    d = adm.post("/api/fotos-sharepoint/actualizar-microsoft", json={"desde": uid - 1}).json()
+    assert d["actualizadas"] == 1
+    with SessionLocal() as db:
+        u = db.get(Usuario, uid)
+        assert u.foto is None and u.foto_ref
+    d = adm.post("/api/fotos-sharepoint/actualizar-microsoft", json={"desde": uid - 1}).json()
+    assert d["actualizadas"] == 0 and d["iguales"] == 1
+
+
+def test_onedrive_de_una_cuenta(graph):
+    adm = super_login()
+    r = adm.put("/api/fotos-sharepoint/conectar", json={"url": "TI.Mexico@o-tek.com"})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["sitio_nombre"] == "OneDrive de ti.mexico@o-tek.com" and d["carpeta"] == "Fotos SIP-O"
+    assert d["web_url"].endswith("/Documents/Fotos%20SIP-O")

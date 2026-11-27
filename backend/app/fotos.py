@@ -121,11 +121,20 @@ def _ruta_url(url: str) -> tuple[str, str]:
     return u.netloc.lower(), ruta.rstrip("/")
 
 
+CORREO = re.compile(r"^[^@\s/]+@[^@\s/]+\.[a-z]{2,}$", re.IGNORECASE)
+
+
 def conectar(url: str, carpeta: str | None = None) -> dict:
-    """Busca el sitio, la biblioteca y la carpeta, y comprueba que se pueda escribir creando la carpeta."""
+    """Busca el sitio, la biblioteca y la carpeta, y comprueba que se pueda escribir creando la carpeta.
+
+    En lugar de la URL se puede indicar una cuenta de Microsoft 365 (p. ej. ti.mexico@o-tek.com): las fotos se
+    guardan en el OneDrive de esa cuenta."""
+    url = (url or "").strip()
+    if CORREO.match(url):
+        return _conectar_onedrive(url.lower(), carpeta)
     host, ruta = _ruta_url(url)
     partes = [p for p in ruta.split("/") if p]
-    ruta_sitio = "/" + "/".join(partes[:2]) if len(partes) >= 2 and partes[0].lower() in ("sites", "teams") else ""
+    ruta_sitio = "/" + "/".join(partes[:2]) if len(partes) >= 2 and partes[0].lower() in ("sites", "teams", "personal") else ""
     r = _graph("GET", f"sites/{host}:{quote(ruta_sitio)}" if ruta_sitio else f"sites/{host}")
     if r.status_code == 404:
         raise ErrorFotos(f"No se encontró el sitio {host}{ruta_sitio}.")
@@ -146,12 +155,32 @@ def conectar(url: str, carpeta: str | None = None) -> dict:
         raise ErrorFotos("La URL no corresponde a una biblioteca de documentos del sitio. Abre la biblioteca (por "
                          "ejemplo «Documentos») en SharePoint y copia la dirección.")
     d = drive[0]
-    carpeta = (carpeta or "").strip().strip("/") or resto or CARPETA_DEFECTO
-    if re.search(r'[~"#%&*:<>?\\{|}]', carpeta):
-        raise ErrorFotos('El nombre de la carpeta no puede llevar los caracteres ~ " # % & * : < > ? \\ { | }.')
+    carpeta = _validar_carpeta(carpeta, resto)
     _crear_carpeta(d["id"], carpeta)
     return {"url": url.strip(), "sitio_id": sitio["id"], "sitio_nombre": sitio.get("displayName"), "drive_id": d["id"],
             "drive_nombre": d.get("name"), "carpeta": carpeta,
+            "web_url": f"{d.get('webUrl', '').rstrip('/')}/{quote(carpeta)}"}
+
+
+def _validar_carpeta(carpeta: str | None, resto: str = "") -> str:
+    carpeta = (carpeta or "").strip().strip("/") or resto or CARPETA_DEFECTO
+    if re.search(r'[~"#%&*:<>?\\{|}]', carpeta):
+        raise ErrorFotos('El nombre de la carpeta no puede llevar los caracteres ~ " # % & * : < > ? \\ { | }.')
+    return carpeta
+
+
+def _conectar_onedrive(cuenta: str, carpeta: str | None) -> dict:
+    r = _graph("GET", f"users/{quote(cuenta)}/drive?$select=id,name,webUrl,owner")
+    if r.status_code == 404:
+        raise ErrorFotos(f"No se encontró el OneDrive de {cuenta}. Verifica que la cuenta exista, tenga licencia con "
+                         "OneDrive y que haya entrado a OneDrive al menos una vez." + _detalle(r))
+    if r.status_code != 200:
+        raise ErrorFotos(f"Microsoft respondió HTTP {r.status_code} al buscar el OneDrive de {cuenta}." + _detalle(r))
+    d = r.json()
+    carpeta = _validar_carpeta(carpeta)
+    _crear_carpeta(d["id"], carpeta)
+    return {"url": cuenta, "sitio_id": None, "sitio_nombre": f"OneDrive de {cuenta}", "drive_id": d["id"],
+            "drive_nombre": d.get("name") or "OneDrive", "carpeta": carpeta,
             "web_url": f"{d.get('webUrl', '').rstrip('/')}/{quote(carpeta)}"}
 
 
@@ -206,7 +235,7 @@ def subir(db: Session, u: Usuario, cfg: dict | None = None) -> bool:
         raise ErrorFotos("SharePoint no confirmó la foto completa; se conserva en el servidor.")
     nuevo = f"{cfg['drive_id']}|{item['id']}"
     _cache_poner(nuevo, contenido)
-    u.foto_ref, u.foto_huella, u.foto = nuevo, hashlib.sha1(contenido).hexdigest()[:16], None
+    u.foto_ref, u.foto_huella, u.foto = nuevo, _huella(contenido), None
     db.commit()
     return True
 
@@ -281,6 +310,54 @@ def mover_pendientes(db: Session, limite: int = 500) -> dict:
             if len(errores) >= 5 and not movidas:  # Microsoft no responde: no insistir con todas
                 break
     return {"movidas": movidas, "errores": errores[:10], "pendientes": pendientes(db)}
+
+
+def _huella(contenido: bytes) -> str:
+    return hashlib.sha1(contenido).hexdigest()[:16]
+
+
+def actualizar_desde_microsoft(db: Session, desde: int = 0, lote: int = 25) -> dict:
+    """Vuelve a traer de Microsoft la foto de los empleados activos con cuenta de Microsoft, en la mayor resolución
+    disponible (432x432). Va por lotes para no exceder el tiempo de la petición: `desde` es el último id procesado.
+
+    Si la foto no cambió no se toca; si Microsoft no tiene foto de la persona, se conserva la que hay."""
+    if not settings.graph_configurado:
+        raise ErrorFotos("La consulta de empleados en Microsoft (Graph) no está habilitada.")
+    try:
+        token = microsoft.token_aplicacion()
+    except microsoft.ErrorMicrosoft as e:
+        raise ErrorFotos(e.mensaje)
+    cuenta = (Usuario.microsoft_oid.is_not(None)) | (Usuario.email.is_not(None))
+    base = select(Usuario.id).where(Usuario.activo.is_(True), cuenta)
+    total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
+    ids = db.scalars(base.where(Usuario.id > desde).order_by(Usuario.id).limit(lote)).all()
+    cfg = activa(db)
+    res = {"revisadas": 0, "actualizadas": 0, "sin_foto": 0, "iguales": 0, "errores": [], "total": total,
+           "siguiente": ids[-1] if ids else None}
+    for uid in ids:
+        u = db.get(Usuario, uid)
+        res["revisadas"] += 1
+        imagen = microsoft.foto(token, f"users/{u.microsoft_oid or u.email}")
+        if not imagen:
+            res["sin_foto"] += 1
+            continue
+        contenido, tipo = imagen
+        actual = u.foto or None
+        if (actual and actual == contenido) or (not actual and u.foto_huella == _huella(contenido)):
+            res["iguales"] += 1
+            continue
+        u.foto, u.foto_tipo = contenido, tipo
+        db.commit()
+        res["actualizadas"] += 1
+        if cfg:
+            try:
+                subir(db, u, cfg)
+            except ErrorFotos as e:
+                db.rollback()
+                res["errores"].append(f"{u.nombre}: {e.mensaje} (la foto quedó en el servidor)")
+    if len(ids) < lote:
+        res["siguiente"] = None
+    return res
 
 
 def pendientes(db: Session) -> int:
