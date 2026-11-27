@@ -289,9 +289,9 @@ function Equipos({ onCambio, qr }) {
   )
 }
 
-function MovimientosHoy({ version }) {
+function MovimientosHoy({ version, clase }) {
   const [lista, setLista] = useState([])
-  const cargar = () => api('/caseta/movimientos').then(setLista).catch(() => {})
+  const cargar = () => api('/caseta/movimientos', { query: { clase } }).then(setLista).catch(() => {})
   useEffect(() => { cargar() }, [version])
   return (
     <div className="card" style={{ marginTop: 12 }}>
@@ -299,7 +299,7 @@ function MovimientosHoy({ version }) {
         <b>Registros de hoy</b><div className="espacio" />
         <button className="btn btn-sm" onClick={cargar}><RefreshCw size={14} /> Actualizar</button>
       </div>
-      {lista.length === 0 && <div className="muted" style={{ padding: 12, textAlign: 'center' }}>Todavía no hay entradas ni salidas registradas hoy.</div>}
+      {lista.length === 0 && <div className="muted" style={{ padding: 12, textAlign: 'center' }}>{clase === 'equipo' ? 'Todavía no hay entradas ni salidas de equipos registradas hoy.' : 'Todavía no hay entradas ni salidas registradas hoy.'}</div>}
       <div className="caseta-lista">
         {lista.map((m) => (
           <div key={m.id} className="caseta-item compacto" style={{ borderLeftColor: m.con_permiso ? '#2e7d32' : '#c62828' }}>
@@ -316,20 +316,24 @@ function MovimientosHoy({ version }) {
   )
 }
 
-/** Pestaña Escanear de Caseta: personas por QR y equipos de cómputo por código de barras. */
-export default function CasetaEscaneo({ onSolicitar, qr = true }) {
-  const [elegido, setModo] = useState('personas')
-  const modo = qr ? elegido : 'equipos'  // sin QR de empleados solo se escanean equipos
+/** Pestaña Escanear de Caseta: entradas y salidas de personas con su QR (solo si la sede tiene el QR activo). */
+export default function CasetaEscaneo({ onSolicitar }) {
   const [version, setVersion] = useState(0)
-  const cambio = () => setVersion((v) => v + 1)
   return (
     <>
-      {qr && <div className="segmentado" role="tablist" style={{ marginBottom: 10 }}>
-        <button role="tab" aria-selected={modo === 'personas'} className={modo === 'personas' ? 'activo' : ''} onClick={() => setModo('personas')}><QrCode size={14} /> Personas</button>
-        <button role="tab" aria-selected={modo === 'equipos'} className={modo === 'equipos' ? 'activo' : ''} onClick={() => setModo('equipos')}><Laptop size={14} /> Equipos</button>
-      </div>}
-      {modo === 'personas' ? <Personas onSolicitar={onSolicitar} onCambio={cambio} /> : <Equipos onCambio={cambio} qr={qr} />}
-      <MovimientosHoy version={version} />
+      <Personas onSolicitar={onSolicitar} onCambio={() => setVersion((v) => v + 1)} />
+      <MovimientosHoy version={version} clase="persona" />
+    </>
+  )
+}
+
+/** Pestaña Equipos de Caseta: entradas y salidas de equipos de cómputo por código de barras. */
+export function CasetaEquipos({ qr = false }) {
+  const [version, setVersion] = useState(0)
+  return (
+    <>
+      <Equipos onCambio={() => setVersion((v) => v + 1)} qr={qr} />
+      <MovimientosHoy version={version} clase="equipo" />
     </>
   )
 }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AlarmClock, Ban, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, DoorOpen, Footprints, Hourglass, Laptop, MessageSquare, RefreshCw, Search, Send, X, XCircle } from 'lucide-react'
 import { api } from '../api'
 import { MODO_CASETA } from '../appCaseta'
-import Escaneo from '../components/CasetaEscaneo'
+import Escaneo, { CasetaEquipos } from '../components/CasetaEscaneo'
 import Avatar from '../components/Avatar'
 import BuscadorPaciente from '../components/BuscadorPaciente'
 import { CATEGORIAS, MESES, SALIDAS_EQUIPO, datosEmp, fmtFecha, noEmp } from '../utils'
@@ -559,8 +559,9 @@ function Retardos({ lista, inicial, onRegistrado }) {
 
 /** Caseta: permisos validados del día y solicitudes de ingreso por retardo. */
 export default function Caseta() {
-  const [tab, setTab] = useState('hoy')
+  const [elegida, setTab] = useState('hoy')
   const [qr, setQr] = useState(false)
+  const tab = elegida === 'escanear' && !qr ? 'hoy' : elegida  // sin QR de empleados no hay pestaña Escanear
   useEffect(() => { api('/politica').then((p) => setQr(!!p.caseta_qr)).catch(() => {}) }, [])
   const [seleccion, setSeleccion] = useState(null)
   const [lista, setLista] = useState([])
@@ -600,7 +601,8 @@ export default function Caseta() {
     <>
       <div className="pestanas" role="tablist">
         <button className={tab === 'hoy' ? 'activo' : ''} onClick={() => setTab('hoy')}>Permisos</button>
-        <button className={tab === 'escanear' ? 'activo' : ''} onClick={() => setTab('escanear')}>Escanear</button>
+        {qr && <button className={tab === 'escanear' ? 'activo' : ''} onClick={() => setTab('escanear')}>Escanear</button>}
+        <button className={tab === 'equipos' ? 'activo' : ''} onClick={() => setTab('equipos')}>Equipos</button>
         <button className={tab === 'retardos' ? 'activo' : ''} onClick={() => setTab('retardos')}>
           Ingreso por retardo{pendientes > 0 && <span className="badge tab-badge" title={`${pendientes} esperando autorización`}>{pendientes}</span>}
         </button>
@@ -611,8 +613,10 @@ export default function Caseta() {
         </div>
       )}
       <Pendientes lista={lista} onCancelar={cancelar} />
-      {tab === 'escanear' ? <Escaneo onSolicitar={solicitar} qr={qr} /> : tab === 'hoy'
-        ? <>{SALIDAS_EQUIPO && <EquiposHoy />}<PermisosAutorizados onSolicitar={solicitar} pendientesIds={lista.filter((r) => ['solicitado', 'validado'].includes(r.estado)).map((r) => r.usuario_id)} /></>
+      {tab === 'escanear' ? <Escaneo onSolicitar={solicitar} />
+        : tab === 'equipos' ? <>{SALIDAS_EQUIPO && <EquiposHoy />}<CasetaEquipos qr={qr} /></>
+        : tab === 'hoy'
+        ? <><PermisosAutorizados onSolicitar={solicitar} pendientesIds={lista.filter((r) => ['solicitado', 'validado'].includes(r.estado)).map((r) => r.usuario_id)} /></>
         : <Retardos lista={lista} inicial={seleccion} onRegistrado={cargar} />}
     </>
   )

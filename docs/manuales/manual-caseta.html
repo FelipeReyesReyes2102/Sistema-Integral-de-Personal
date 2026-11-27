@@ -150,12 +150,12 @@ a { color: var(--primary); }
     </section>
     <section id="escanear">
       <h2><span class="n">03</span>Escanear personas y equipos</h2>
-      <p>En la pestaña <span class="ui">Escanear</span> hay dos opciones:</p>
-      <div class="nota aviso"><strong>QR del empleado activado por GH</strong><p>El registro con el QR del empleado solo aparece si GH de tu sede lo activó en <i>Configuración → Política</i>. Mientras esté desactivado, en <span class="ui">Escanear</span> solo verás <b>Equipos</b> y el uso del permiso se registra con un toque en la lista de <span class="ui">Permisos</span> (sección 04).</p></div>
-      <h3>Personas (QR del empleado)</h3>
+      <p>Las personas se registran en la pestaña <span class="ui">Escanear</span> (con su QR) y los equipos de cómputo en la pestaña <span class="ui">Equipos</span>, cada una con sus propios <b>Registros de hoy</b>.</p>
+      <div class="nota aviso"><strong>QR del empleado activado por GH</strong><p>El registro con el QR del empleado solo aparece si GH de tu sede lo activó en <i>Configuración → Política</i>. Mientras esté desactivado no aparece la pestaña <span class="ui">Escanear</span> y el uso del permiso se registra con un toque en la lista de <span class="ui">Permisos</span> (sección 04).</p></div>
+      <h3>Personas: pestaña Escanear (QR del empleado)</h3>
       <ol class="pasos"><li><span>Pide a la persona su <b>QR</b>: está en su gafete o en SIP-O, en <i>Mi información</i>.</span></li><li><span>Pulsa <span class="ui">Escanear QR del empleado</span> y apunta la cámara.</span></li><li><span>SIP-O registra si <b>sale</b> o <b>entra</b> y revisa su permiso. Verás su foto y un aviso grande: <b style="color:#2e7d32">verde</b> = autorizado; <b style="color:#c62828">rojo</b> = sin permiso aprobado (o fuera de la hora autorizada, con el margen de minutos que configura GH de tu sede; 15 por defecto).</span></li><li><span>Si SIP-O lo tomó al revés, pulsa <span class="ui">Era una entrada</span> / <span class="ui">Era una salida</span>. Si llegó tarde sin permiso, pulsa <span class="ui">Solicitar ingreso por retardo</span>.</span></li></ol>
-      <h3>Equipos de cómputo (código de barras)</h3>
-      <ol class="pasos"><li><span>Pulsa <span class="ui">Escanear código del equipo</span> y apunta a la etiqueta.</span></li><li><span>SIP-O propone <b>Sale</b> o <b>Entra</b> según el último movimiento del equipo. Indica <b>quién lo lleva</b> (búscalo por nombre o escanea su QR) y, si quieres, una nota.</span></li><li><span>Pulsa <span class="ui">Registrar</span>. En una salida, SIP-O revisa que la persona tenga un permiso <b>Salida de equipo</b> aprobado para hoy.</span></li></ol>
+      <h3>Equipos de cómputo: pestaña Equipos (código de barras)</h3><p>Arriba se muestran las salidas de equipo autorizadas del día (F-630-03) y los equipos que siguen fuera de planta; abajo, el escaneo.</p>
+      <ol class="pasos"><li><span>Pulsa <span class="ui">Escanear código del equipo</span> y apunta a la etiqueta.</span></li><li><span>SIP-O propone <b>Sale</b> o <b>Entra</b> según el último movimiento del equipo. Indica <b>quién lo lleva</b> (búscalo por nombre; si el QR está activo, también puedes escanear su QR) y, si quieres, una nota.</span></li><li><span>Pulsa <span class="ui">Registrar</span>. En una salida, SIP-O revisa que la persona tenga un permiso <b>Salida de equipo</b> aprobado para hoy.</span></li></ol>
       <p>Todo queda guardado —con o sin permiso— en <b>Registros de hoy</b>, con la hora y quién lo registró. Si el teléfono no tiene cámara, usa <span class="ui">Escribir el código</span>.</p>
     </section>
     <section id="hoy">
@@ -169,7 +169,7 @@ a { color: var(--primary); }
     </section>
     <section id="equipo">
       <h2><span class="n">05</span>Salidas de equipo de cómputo</h2>
-      <p>La salida de equipo ahora es un permiso más: <b>Salida de equipo</b>. Cuando está autorizado aparece en <i>Permisos de hoy</i> (en <b>Fuera de planta todo el día</b>, por ser un permiso por días) con quién autorizó; el motivo indica el equipo. Si alguien quiere sacar un equipo sin ese permiso autorizado, pídele que lo solicite en SIP-O.</p>
+      <p>La salida de equipo ahora es un permiso más: <b>Salida de equipo</b>. Cuando está autorizado aparece en <i>Permisos de hoy</i> (en <b>Fuera de planta todo el día</b>, por ser un permiso por días) con quién autorizó; el motivo indica el equipo. Si alguien quiere sacar un equipo sin ese permiso autorizado, pídele que lo solicite en SIP-O. La salida y el regreso del equipo se registran en la pestaña <span class="ui">Equipos</span> (sección 03).</p>
     </section>
     <section id="ingreso">
       <h2><span class="n">06</span>Solicitar ingreso por retardo</h2>
