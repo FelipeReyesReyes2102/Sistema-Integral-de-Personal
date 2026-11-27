@@ -1036,3 +1036,9 @@ button.ley-especial.oculto { background: #f1f3f6; color: var(--muted); text-deco
 .sidebar nav:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,.32); }
 .sidebar nav::-webkit-scrollbar-thumb:active { background: rgba(255,255,255,.45); }
 .sidebar nav::-webkit-scrollbar-button { display: none; height: 0; }
+
+/* Tarjetas (gafetes) de empleados: opciones a la izquierda y vista previa a la derecha */
+.tarjetas-config { display: grid; grid-template-columns: 1fr 250px; gap: 18px; align-items: start; }
+.tarjetas-muestra { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.tarjetas-muestra iframe { width: 250px; height: 400px; border: 1px solid var(--borde, #dde2ea); border-radius: 10px; background: #f3f5f8; }
+@media (max-width: 720px) { .tarjetas-config { grid-template-columns: 1fr; } }

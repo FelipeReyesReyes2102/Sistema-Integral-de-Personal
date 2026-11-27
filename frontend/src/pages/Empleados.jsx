@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Briefcase, CalendarDays, Cloud, Copy, Download, FileSpreadsheet, KeyRound, Pencil, Plus, QrCode, Scale, Search, ShieldCheck, UserPlus, UserRound, UserX } from 'lucide-react'
+import { Briefcase, CalendarDays, Cloud, Copy, Download, FileSpreadsheet, IdCard, KeyRound, Pencil, Plus, QrCode, Scale, Search, ShieldCheck, UserPlus, UserRound, UserX } from 'lucide-react'
 import { api, sedeActiva } from '../api'
 import Avatar from '../components/Avatar'
 import Modal from '../components/Modal'
 import ImportarEmpleados from '../components/ImportarEmpleados'
 import QrEmpleado from '../components/QrEmpleado'
+import TarjetasEmpleados from '../components/TarjetasEmpleados'
 import { ROLES, SALIDAS_EQUIPO, esSuperAdmin, fmtFecha, num } from '../utils'
 import { useAuth } from '../auth'
 
@@ -33,6 +34,7 @@ export default function Empleados() {
   const [importar, setImportar] = useState(false)
   const [sel, setSel] = useState(() => new Set())  // empleados elegidos para restablecer su contraseña
   const [masivo, setMasivo] = useState(false)
+  const [tarjetas, setTarjetas] = useState(false)  // imprimir tarjetas (gafetes) con foto y QR
 
   async function restablecer(u) {
     if (!window.confirm(`¿Generar una nueva contraseña temporal para ${u.nombre}? La actual dejará de funcionar y se cerrarán sus sesiones.`)) return
@@ -93,6 +95,7 @@ export default function Empleados() {
             <button className="btn btn-sm" onClick={() => setSel(new Set())} title="Quitar la selección">Quitar selección</button>
           </span>
         )}
+        <button className="btn" onClick={() => setTarjetas(true)} title="Tarjetas con foto, datos y QR para caseta"><IdCard size={16} /> Tarjetas{sel.size > 0 ? ` (${sel.size})` : ''}</button>
         <button className="btn" onClick={() => setImportar(true)}><FileSpreadsheet size={16} /> Importar desde Excel</button>
         <button className="btn btn-primary" onClick={() => setEditar({ ...VACIO, sede_id: Number(sedeActiva()) || user.sede_id || '' })}>
           <Plus size={16} /> Nuevo empleado
@@ -102,7 +105,7 @@ export default function Empleados() {
         <table className="tabla">
           <thead>
             <tr><th><input type="checkbox" style={{ width: 'auto' }} checked={todos} onChange={marcarTodos}
-              title="Elegir a todos los de la lista para restablecer su contraseña" aria-label="Elegir a todos" /></th><th>No. nómina</th><th>Nombre</th>{variasSedes && <th>Sede</th>}<th>Tipo</th><th>Jefe directo</th><th>Ingreso</th><th>Antigüedad</th><th>Días disponibles</th><th>Grupo</th><th>Turno</th><th>Estado</th><th /></tr>
+              title="Elegir a todos los de la lista (para restablecer su contraseña o imprimir sus tarjetas)" aria-label="Elegir a todos" /></th><th>No. nómina</th><th>Nombre</th>{variasSedes && <th>Sede</th>}<th>Tipo</th><th>Jefe directo</th><th>Ingreso</th><th>Antigüedad</th><th>Días disponibles</th><th>Grupo</th><th>Turno</th><th>Estado</th><th /></tr>
           </thead>
           <tbody>
             {lista.map((u) => (
@@ -170,6 +173,7 @@ export default function Empleados() {
         onClose={() => setEditar(null)}
         onSaved={(creado) => { setEditar(null); cargar(); if (creado?.password_temporal) setTemporal(creado) }} />}
       {masivo && <RestablecerVarios usuarios={lista.filter((u) => sel.has(u.id))} onClose={(hecho) => { setMasivo(false); if (hecho) { setSel(new Set()); cargar() } }} />}
+      {tarjetas && <TarjetasEmpleados seleccionados={lista.filter((u) => sel.has(u.id))} lista={lista} onClose={() => setTarjetas(false)} />}
       {temporal && <PasswordTemporal usuario={temporal} onClose={() => setTemporal(null)} />}
       {importar && <ImportarEmpleados onClose={() => setImportar(false)} onImportado={cargar} />}
       {saldos && <Saldos usuario={saldos} onClose={() => setSaldos(null)} />}

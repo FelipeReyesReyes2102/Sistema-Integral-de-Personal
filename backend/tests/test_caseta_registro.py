@@ -325,3 +325,16 @@ def test_caseta_solo_ve_nombre_corto_y_el_permiso():
         with SessionLocal() as db:
             db.get(Usuario, uid).nombre = completo
             db.commit()
+
+
+def test_tarjetas_para_imprimir():
+    carlos, laura = _usuario("carlos@empresa.com"), _usuario("laura@empresa.com")
+    _qr(False)  # se pueden imprimir antes de activar el QR
+    adm = entrar("admin@empresa.com", "Admin123")
+    r = adm.post("/api/caseta/tarjetas", json={"ids": [carlos, laura]})
+    assert r.status_code == 200, r.text
+    t = {x["id"]: x for x in r.json()}
+    assert t[carlos]["codigo"] == codigo_qr(carlos) and t[carlos]["qr_activo"] is False
+    assert {"nombre", "numero_empleado", "puesto", "departamento", "tiene_foto"} <= t[laura].keys()
+    assert entrar("carlos@empresa.com").post("/api/caseta/tarjetas", json={"ids": [carlos]}).status_code == 403
+    assert adm.post("/api/caseta/tarjetas", json={"ids": []}).status_code == 422

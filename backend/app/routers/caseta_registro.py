@@ -81,6 +81,30 @@ def qr_de(usuario_id: int, db: Session = Depends(get_db), user: Usuario = Depend
     return {"activo": True, "codigo": codigo_qr(u.id), "nombre": u.nombre, "numero_empleado": u.numero_empleado}
 
 
+class TarjetasIn(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=500)
+
+
+@router.post("/tarjetas")
+def tarjetas(data: TarjetasIn, db: Session = Depends(get_db), user: Usuario = Depends(get_current_user)):
+    """Datos para imprimir las tarjetas (gafetes) con foto y QR de varios empleados (solo GH de sus sedes).
+
+    No depende de que la sede tenga el QR activo: GH puede imprimirlas antes de activarlo."""
+    if not es_admin(user):
+        raise HTTPException(403, "Solo GH puede imprimir las tarjetas de los empleados.")
+    sedes = _sedes(db, user)
+    usuarios = [u for u in db.scalars(select(Usuario).where(Usuario.id.in_(set(data.ids))).order_by(Usuario.nombre))
+                if u.activo and u.sede_id in sedes]
+    if not usuarios:
+        raise HTTPException(404, "Ninguno de los empleados elegidos está activo en tus sedes.")
+    auditar(db, "tarjetas_qr_impresas", actor_id=user.id,
+            detalle=f"{len(usuarios)} tarjeta(s): " + ", ".join(u.numero_empleado or str(u.id) for u in usuarios[:50]))
+    db.commit()
+    return [{"id": u.id, "codigo": codigo_qr(u.id), "nombre": u.nombre, "numero_empleado": u.numero_empleado,
+             "puesto": u.puesto, "departamento": u.departamento, "sede_nombre": u.sede.nombre if u.sede else None,
+             "tiene_foto": u.foto_tipo is not None, "qr_activo": qr_activo(u)} for u in usuarios]
+
+
 # ---------------- Utilidades ----------------
 
 def hora_evento(p: Permiso) -> time:
