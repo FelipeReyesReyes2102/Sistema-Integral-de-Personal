@@ -30,7 +30,8 @@ from .caseta import _persona, _sedes, pasos_permiso, movimientos_permiso, permis
 
 router = APIRouter(prefix="/api/caseta", tags=["caseta"])
 
-PREFIJO_QR = "SIPO-E1"
+PREFIJO_QR = "SIPO-E2"      # QR con el número de nómina (sin datos personales) y una firma
+PREFIJO_QR_ANTERIOR = "SIPO-E1"  # gafetes anteriores: id interno y firma; se siguen aceptando
 TOLERANCIA_DEFECTO = 15  # minutos; cada sede configura las suyas en su política (GH)
 DOBLE_ESCANEO = timedelta(seconds=60)
 DESHACER = timedelta(minutes=10)     # caseta puede deshacer su propio registro por un toque equivocado
@@ -39,21 +40,29 @@ QR_APAGADO = "El registro con QR está desactivado en esta sede: registra el per
 
 # ---------------- QR del empleado ----------------
 
-def _firma(usuario_id: int) -> str:
+def _firma(prefijo: str, valor) -> str:
     llave = hashlib.sha256(f"sip-qr:{settings.secret_key}".encode()).digest()
-    return hmac.new(llave, f"{PREFIJO_QR}.{usuario_id}".encode(), hashlib.sha256).hexdigest()[:20]
+    return hmac.new(llave, f"{prefijo}.{valor}".encode(), hashlib.sha256).hexdigest()[:20]
 
 
-def codigo_qr(usuario_id: int) -> str:
-    return f"{PREFIJO_QR}.{usuario_id}.{_firma(usuario_id)}"
+def codigo_qr(numero_empleado: str) -> str:
+    """Contenido del QR: solo el número de nómina y una firma, para que nadie pueda fabricar el QR de otra persona
+    con solo conocer su número (p. ej. SIPO-E2.0222.<firma>)."""
+    return f"{PREFIJO_QR}.{numero_empleado}.{_firma(PREFIJO_QR, numero_empleado)}"
 
 
-def leer_qr(codigo: str) -> int | None:
-    partes = (codigo or "").strip().split(".")
-    if len(partes) != 3 or partes[0] != PREFIJO_QR or not partes[1].isdigit():
+def leer_qr(db: Session, codigo: str) -> int | None:
+    """Id del empleado del QR si la firma es válida (acepta también los QR anteriores con el id interno)."""
+    codigo = (codigo or "").strip()
+    prefijo, _, resto = codigo.partition(".")
+    valor, _, firma = resto.rpartition(".")
+    if not valor or not firma or not hmac.compare_digest(firma, _firma(prefijo, valor)):
         return None
-    uid = int(partes[1])
-    return uid if hmac.compare_digest(partes[2], _firma(uid)) else None
+    if prefijo == PREFIJO_QR:
+        return db.scalar(select(Usuario.id).where(Usuario.numero_empleado == valor))
+    if prefijo == PREFIJO_QR_ANTERIOR and valor.isdigit():
+        return int(valor)
+    return None
 
 
 def qr_activo(u: Usuario | None) -> bool:
@@ -65,7 +74,7 @@ def mi_qr(user: Usuario = Depends(get_current_user)):
     """QR personal para registrar entradas y salidas en caseta (si la sede lo tiene activo)."""
     if not qr_activo(user):
         return {"activo": False}
-    return {"activo": True, "codigo": codigo_qr(user.id), "nombre": user.nombre, "numero_empleado": user.numero_empleado}
+    return {"activo": True, "codigo": codigo_qr(user.numero_empleado), "nombre": user.nombre, "numero_empleado": user.numero_empleado}
 
 
 @router.get("/qr/{usuario_id}")
@@ -78,7 +87,7 @@ def qr_de(usuario_id: int, db: Session = Depends(get_db), user: Usuario = Depend
         raise HTTPException(404, "Empleado no encontrado")
     if not qr_activo(u):
         return {"activo": False}
-    return {"activo": True, "codigo": codigo_qr(u.id), "nombre": u.nombre, "numero_empleado": u.numero_empleado}
+    return {"activo": True, "codigo": codigo_qr(u.numero_empleado), "nombre": u.nombre, "numero_empleado": u.numero_empleado}
 
 
 class TarjetasIn(BaseModel):
@@ -100,7 +109,7 @@ def tarjetas(data: TarjetasIn, db: Session = Depends(get_db), user: Usuario = De
     auditar(db, "tarjetas_qr_impresas", actor_id=user.id,
             detalle=f"{len(usuarios)} tarjeta(s): " + ", ".join(u.numero_empleado or str(u.id) for u in usuarios[:50]))
     db.commit()
-    return [{"id": u.id, "codigo": codigo_qr(u.id), "nombre": u.nombre, "numero_empleado": u.numero_empleado,
+    return [{"id": u.id, "codigo": codigo_qr(u.numero_empleado), "nombre": u.nombre, "numero_empleado": u.numero_empleado,
              "puesto": u.puesto, "departamento": u.departamento, "sede_nombre": u.sede.nombre if u.sede else None,
              "tiene_foto": u.foto_tipo is not None, "qr_activo": qr_activo(u)} for u in usuarios]
 
@@ -171,7 +180,7 @@ def _empleado_visible(db: Session, user: Usuario, usuario_id: int) -> Usuario:
 @router.get("/persona-qr")
 def persona_qr(codigo: str, db: Session = Depends(get_db), user: Usuario = Depends(require_caseta)):
     """Identifica a la persona de un QR sin registrar movimiento (p. ej. quién lleva un equipo)."""
-    uid = leer_qr(codigo)
+    uid = leer_qr(db, codigo)
     if uid is None:
         raise HTTPException(422, "El código no es un QR de empleado de SIP-O.")
     u = _empleado_visible(db, user, uid)
@@ -240,7 +249,7 @@ def _decidir(db: Session, u: Usuario, ahora_local: datetime, tipo: str | None) -
 
 @router.post("/escanear", status_code=201)
 def escanear(data: EscaneoIn, db: Session = Depends(get_db), user: Usuario = Depends(require_caseta)):
-    uid = leer_qr(data.codigo)
+    uid = leer_qr(db, data.codigo)
     if uid is None:
         raise HTTPException(422, "El código no es un QR de empleado de SIP-O.")
     u = _empleado_visible(db, user, uid)

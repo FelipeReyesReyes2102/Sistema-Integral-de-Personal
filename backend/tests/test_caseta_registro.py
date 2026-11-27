@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from app.database import SessionLocal
 from app.models import VALIDADO, MovimientoCaseta, Permiso, Usuario
-from app.routers.caseta_registro import codigo_qr
+from app.routers.caseta_registro import _firma, codigo_qr as _codigo_qr
 from app.sedes import ahora_en
 from tests.test_caseta import _caseta
 from tests.test_consultas import entrar
@@ -26,6 +26,12 @@ def qr_activo():
     _qr(True)
     yield
     _qr(False)
+
+
+def _qr_de(uid):
+    """QR del empleado (número de nómina firmado)."""
+    with SessionLocal() as db:
+        return _codigo_qr(db.get(Usuario, uid).numero_empleado)
 
 
 def _usuario(email):
@@ -57,7 +63,7 @@ def _limpiar(uid, *permisos):
 def test_qr_del_empleado():
     carlos = entrar("carlos@empresa.com")
     mio = carlos.get("/api/caseta/qr/mio").json()
-    assert mio["codigo"] == codigo_qr(_usuario("carlos@empresa.com")) and mio["codigo"].startswith("SIPO-E1.")
+    assert mio["codigo"] == _qr_de(_usuario("carlos@empresa.com")) and mio["codigo"].startswith("SIPO-E2.")
     # Solo GH ve el QR de otros
     assert carlos.get(f"/api/caseta/qr/{_usuario('laura@empresa.com')}").status_code == 403
     adm = entrar("admin@empresa.com", "Admin123")
@@ -78,19 +84,19 @@ def test_salida_y_regreso_con_permiso_y_sin_permiso():
     _limpiar(otro)
     pid = _permiso(uid, "salida_intermedia", -5, 60)
     try:
-        r = cas.post("/api/caseta/escanear", json={"codigo": codigo_qr(uid)})
+        r = cas.post("/api/caseta/escanear", json={"codigo": _qr_de(uid)})
         assert r.status_code == 201, r.text
         s = r.json()
         assert s["tipo"] == "salida" and s["con_permiso"] and s["permiso"]["id"] == pid and "regresar" in s["mensaje"]
         # Doble escaneo seguido: el mismo registro
-        again = cas.post("/api/caseta/escanear", json={"codigo": codigo_qr(uid)}).json()
+        again = cas.post("/api/caseta/escanear", json={"codigo": _qr_de(uid)}).json()
         assert again["repetido"] and again["id"] == s["id"]
         # Regreso
-        e = cas.post("/api/caseta/escanear", json={"codigo": codigo_qr(uid), "tipo": "entrada"}).json()
+        e = cas.post("/api/caseta/escanear", json={"codigo": _qr_de(uid), "tipo": "entrada"}).json()
         assert e["tipo"] == "entrada" and e["con_permiso"] and "Regreso" in e["mensaje"]
 
         # Sin permiso: se guarda, pero no válido
-        n = cas.post("/api/caseta/escanear", json={"codigo": codigo_qr(otro)}).json()
+        n = cas.post("/api/caseta/escanear", json={"codigo": _qr_de(otro)}).json()
         assert n["tipo"] == "salida" and n["con_permiso"] is False and "No tiene" in n["mensaje"]
 
         movs = cas.get("/api/caseta/movimientos", params={"clase": "persona"}).json()
@@ -106,13 +112,13 @@ def test_salida_antes_de_hora_y_llegada_tarde():
     _limpiar(uid)
     temprano = _permiso(uid, "salida_temprana", 120, 180)
     try:
-        r = cas.post("/api/caseta/escanear", json={"codigo": codigo_qr(uid)}).json()
+        r = cas.post("/api/caseta/escanear", json={"codigo": _qr_de(uid)}).json()
         assert r["tipo"] == "salida" and r["con_permiso"] is False and "todavía no es hora" in r["mensaje"]
     finally:
         _limpiar(uid, temprano)
     tarde = _permiso(uid, "llegada_tarde", -60, 5)
     try:
-        r = cas.post("/api/caseta/escanear", json={"codigo": codigo_qr(uid)}).json()
+        r = cas.post("/api/caseta/escanear", json={"codigo": _qr_de(uid)}).json()
         assert r["tipo"] == "entrada" and r["con_permiso"] and "Llegada tarde autorizada" in r["mensaje"]
     finally:
         _limpiar(uid, tarde)
@@ -237,14 +243,14 @@ def test_tolerancias_configurables_por_sede():
                                                                   "aprobacion_gh_vacaciones", "aprobacion_gh_permisos")},
                                            "tol_salida_antes": 5})
         assert r.status_code == 200 and r.json()["tol_salida_antes"] == 5
-        m = cas.post("/api/caseta/escanear", json={"codigo": codigo_qr(uid), "tipo": "salida"}).json()
+        m = cas.post("/api/caseta/escanear", json={"codigo": _qr_de(uid), "tipo": "salida"}).json()
         assert not m["con_permiso"] and "todavía no es hora" in m["mensaje"]
         # Con 15 min sí (un segundo escaneo como entrada intermedia no aplica: se limpia antes)
         _limpiar(uid)
         with SessionLocal() as db:
             db.get(Usuario, uid).sede.tol_salida_antes = 15
             db.commit()
-        m = cas.post("/api/caseta/escanear", json={"codigo": codigo_qr(uid), "tipo": "salida"}).json()
+        m = cas.post("/api/caseta/escanear", json={"codigo": _qr_de(uid), "tipo": "salida"}).json()
         assert m["con_permiso"]
         assert adm.put("/api/politica", json={"tol_salida_antes": 500}).status_code == 422
     finally:
@@ -261,7 +267,7 @@ def test_qr_desactivado_y_uso_del_permiso_con_un_clic():
     uid = _usuario("carlos@empresa.com")
     carlos = entrar("carlos@empresa.com")
     assert carlos.get("/api/caseta/qr/mio").json() == {"activo": False}
-    assert cas.post("/api/caseta/escanear", json={"codigo": codigo_qr(uid)}).status_code == 422
+    assert cas.post("/api/caseta/escanear", json={"codigo": _qr_de(uid)}).status_code == 422
     salida = _permiso(uid, "salida_intermedia", -5, 60)   # sale ahora y regresa en una hora
     tarde = _permiso(uid, "llegada_tarde", -60, 0)
     try:
@@ -334,7 +340,31 @@ def test_tarjetas_para_imprimir():
     r = adm.post("/api/caseta/tarjetas", json={"ids": [carlos, laura]})
     assert r.status_code == 200, r.text
     t = {x["id"]: x for x in r.json()}
-    assert t[carlos]["codigo"] == codigo_qr(carlos) and t[carlos]["qr_activo"] is False
+    assert t[carlos]["codigo"] == _qr_de(carlos) and t[carlos]["qr_activo"] is False
     assert {"nombre", "numero_empleado", "puesto", "departamento", "tiene_foto"} <= t[laura].keys()
     assert entrar("carlos@empresa.com").post("/api/caseta/tarjetas", json={"ids": [carlos]}).status_code == 403
     assert adm.post("/api/caseta/tarjetas", json={"ids": []}).status_code == 422
+
+
+def test_qr_con_numero_de_nomina():
+    uid = _usuario("carlos@empresa.com")
+    with SessionLocal() as db:
+        u = db.get(Usuario, uid)
+        numero, nombre = u.numero_empleado, u.nombre
+    codigo = _qr_de(uid)
+    # Solo número de nómina y firma: nada del nombre, correo ni id interno
+    assert codigo.split(".")[1] == numero and nombre.split()[0] not in codigo and "@" not in codigo
+    cas = _caseta()
+    _limpiar(uid)
+    try:
+        assert cas.get("/api/caseta/persona-qr", params={"codigo": codigo}).status_code == 200
+        # Un QR con solo el número (sin firma) o con la firma de otro número no sirve
+        assert cas.get("/api/caseta/persona-qr", params={"codigo": f"SIPO-E2.{numero}"}).status_code == 422
+        assert cas.get("/api/caseta/persona-qr", params={"codigo": numero}).status_code == 422
+        otro = _qr_de(_usuario("laura@empresa.com")).split(".")[2]
+        assert cas.get("/api/caseta/persona-qr", params={"codigo": f"SIPO-E2.{numero}.{otro}"}).status_code == 422
+        # Los gafetes anteriores (id interno firmado) siguen funcionando
+        anterior = f"SIPO-E1.{uid}.{_firma('SIPO-E1', uid)}"
+        assert cas.get("/api/caseta/persona-qr", params={"codigo": anterior}).json()["usuario_id"] == uid
+    finally:
+        _limpiar(uid)
