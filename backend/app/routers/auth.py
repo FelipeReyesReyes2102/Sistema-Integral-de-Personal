@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, object_session
 
-from .. import microsoft
+from .. import fotos, microsoft
 from ..config import settings
 from ..database import get_db
 from ..models import ROL_CASETA, FlujoOAuth, Usuario
@@ -195,16 +195,20 @@ def microsoft_callback(request: Request, code: str | None = None, state: str | N
     if not user.microsoft_oid and oid:
         user.microsoft_oid = oid
         auditar(db, "microsoft_vinculado", usuario_id=user.id, request=request)
+    foto_nueva = False
     if user.foto_tipo is None and tokens.get("access_token") and "User.Read" in settings.microsoft_scopes:
         imagen = microsoft.foto(tokens["access_token"])  # mejor esfuerzo; no bloquea el acceso
         if imagen:
             user.foto, user.foto_tipo = imagen
+            foto_nueva = True
 
     resp = RedirectResponse(flujo.siguiente or "/", 302)
     resp.delete_cookie(COOKIE_STATE, path=RUTA_CALLBACK)
     crear_sesion(db, resp, user, "microsoft", request)
     auditar(db, "login", usuario_id=user.id, detalle="microsoft", request=request)
     db.commit()
+    if foto_nueva:
+        fotos.tras_cambio(user)
     return resp
 
 

@@ -19,7 +19,7 @@ from .models import ROL_CASETA
 from .vista_caseta import limpiar as limpiar_vista_caseta
 from .routers import (
     auth, calendario, catalogos, configuracion, consultas, correo, equipo, permisos,
-    politica, rotacion as rotacion_router, sedes, usuarios, vacaciones, bitacora as bitacora_router, sharepoint as sharepoint_router,
+    politica, rotacion as rotacion_router, sedes, usuarios, vacaciones, bitacora as bitacora_router, sharepoint as sharepoint_router, fotos_sharepoint as fotos_router,
     aprobacion_flujo as aprobacion_router, tipos_permiso as tipos_permiso_router, flujos as flujos_router, incapacidades as incapacidades_router, caseta as caseta_router, caseta_registro as caseta_registro_router, equipos as equipos_router, estimados as estimados_router, importar as importar_router, manuales as manuales_router,
 )
 
@@ -86,7 +86,7 @@ aprobacion_flujo.activar()
 flujos_aprobacion.activar()
 
 for r in (auth, sedes, politica, importar_router, usuarios, catalogos, vacaciones, permisos, calendario, equipo, configuracion, consultas, correo,
-          rotacion_router, bitacora_router, sharepoint_router, aprobacion_router, tipos_permiso_router, flujos_router,
+          rotacion_router, bitacora_router, sharepoint_router, fotos_router, aprobacion_router, tipos_permiso_router, flujos_router,
           incapacidades_router, caseta_router, caseta_registro_router, equipos_router, estimados_router, manuales_router):
     app.include_router(r.router)
 

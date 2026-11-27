@@ -191,9 +191,14 @@ def _graph(ruta: str, token: str) -> httpx.Response:
 
 
 def foto(token: str, sujeto: str = "me") -> tuple[bytes, str] | None:
-    """Foto de perfil (96x96) o None si no tiene. `sujeto` = 'me' o 'users/{id}'."""
+    """Foto de perfil o None si no tiene. `sujeto` = 'me' o 'users/{id}'.
+
+    Pide 432x432 (nítida en la tarjeta impresa, ~30-60 KB); si Microsoft no tiene ese tamaño, uno menor."""
     try:
-        r = _graph(f"{sujeto}/photos/96x96/$value", token)
+        for tam in ("432x432", "240x240", "96x96"):
+            r = _graph(f"{sujeto}/photos/{tam}/$value", token)
+            if r.status_code != 404:
+                break
         if r.status_code == 404:
             r = _graph(f"{sujeto}/photo/$value", token)
     except httpx.HTTPError:

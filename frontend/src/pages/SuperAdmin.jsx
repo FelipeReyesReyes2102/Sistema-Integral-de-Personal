@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Building2, KeyRound, MapPin, MessageSquareMore, Share2, ShieldCheck } from 'lucide-react'
+import { Building2, Image, KeyRound, MapPin, MessageSquareMore, Share2, ShieldCheck } from 'lucide-react'
 import { api, sedeActiva } from '../api'
 import ConfigAprobacionFlujo from '../components/ConfigAprobacionFlujo'
+import ConfigFotos from '../components/ConfigFotos'
 import ConfigMicrosoft from '../components/ConfigMicrosoft'
 import ConfigSedes from '../components/ConfigSedes'
 import ConfigSharePoint from '../components/ConfigSharePoint'
@@ -10,6 +11,7 @@ import ConfigSharePoint from '../components/ConfigSharePoint'
 const SECCIONES = [
   ['sedes', 'Sedes', Building2],
   ['microsoft', 'Conexión con Microsoft', KeyRound],
+  ['fotos', 'Fotos en SharePoint', Image],
   ['teams', 'Aprobación en Teams', MessageSquareMore],
   ['sharepoint', 'Listas de SharePoint', Share2],
 ]
@@ -44,6 +46,7 @@ export default function SuperAdmin() {
       <div className="config-seccion" role="tabpanel">
         {seccion === 'sedes' && <ConfigSedes />}
         {seccion === 'microsoft' && <ConfigMicrosoft />}
+        {seccion === 'fotos' && <ConfigFotos />}
         {porSede && (
           <div className="card sa-sede">
             <h3 className="fila" style={{ gap: 8, margin: 0 }}><MapPin size={18} /> Sede a configurar</h3>

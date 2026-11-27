@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..departamentos import normalizar as normalizar_departamento
-from .. import microsoft
+from .. import fotos, microsoft
 from ..config import settings
 from ..database import get_db
 from ..models import (
@@ -170,6 +170,7 @@ def registrar_jefe(data: RegistrarJefeIn, request: Request, db: Session = Depend
     auditar(db, "usuario_creado", usuario_id=u.id, actor_id=admin.id, detalle=f"{u.email} · jefe desde Microsoft",
             request=request)
     db.commit()
+    fotos.tras_cambio(u)
     sincronizar_periodos(db, u)
     out = usuario_out(u)
     if temporal:
@@ -180,9 +181,12 @@ def registrar_jefe(data: RegistrarJefeIn, request: Request, db: Session = Depend
 @router.get("/usuarios/{usuario_id}/foto")
 def foto(usuario_id: int, db: Session = Depends(get_db), _=Depends(get_current_user)):
     u = db.get(Usuario, usuario_id)
-    if not u or u.foto_tipo is None or not u.foto:
+    if not u or u.foto_tipo is None:
         raise HTTPException(404, "Sin foto")
-    return Response(u.foto, media_type=u.foto_tipo, headers={"Cache-Control": "private, max-age=3600"})
+    contenido = fotos.leer(db, u)
+    if not contenido:
+        raise HTTPException(404, "Sin foto")
+    return Response(contenido, media_type=u.foto_tipo, headers={"Cache-Control": "private, max-age=86400"})
 
 
 @router.get("/usuarios/{usuario_id}", response_model=UsuarioOut)
@@ -223,6 +227,7 @@ def crear(data: UsuarioIn, request: Request, db: Session = Depends(get_db), admi
                 detalle=", ".join(f"{n}: {d:g} d" for n, d in reparto), request=request)
     auditar(db, "usuario_creado", usuario_id=u.id, actor_id=admin.id, detalle=f"{u.email or u.email_personal or u.numero_empleado} · {u.rol}", request=request)
     db.commit()
+    fotos.tras_cambio(u)
     out = usuario_out(u)
     if temporal:
         out.password_temporal, out.password_temporal_expira = temporal, u.password_temporal_expira
@@ -319,7 +324,7 @@ def editar(usuario_id: int, data: UsuarioIn, request: Request, db: Session = Dep
     if data.password:  # contraseña indicada por el administrador: se debe cambiar al entrar
         u.password_hash, u.debe_cambiar_password = hash_password(data.password), True
         u.password_temporal_expira = None
-    _aplicar_foto(u, data)
+    quitada = _aplicar_foto(u, data)
     if estaba_activo and not u.activo:
         limpiar_sesiones_de(db, u.id)
     if u.sede_id != sede_anterior:
@@ -333,6 +338,7 @@ def editar(usuario_id: int, data: UsuarioIn, request: Request, db: Session = Dep
     auditar(db, "usuario_editado", usuario_id=u.id, actor_id=admin.id,
             detalle=f"{u.email or u.email_personal or u.numero_empleado} · {u.rol}", request=request)
     _commit(db)
+    fotos.tras_cambio(u, quitada)
     _guardar_sedes_admin(db, admin, u, data.sedes_admin)
     db.refresh(u)
     sincronizar_periodos(db, u)
@@ -468,12 +474,15 @@ def _guardar_sedes_admin(db: Session, actor: Usuario, u: Usuario, sedes: list[in
 
 
 def _aplicar_foto(u: Usuario, data: UsuarioIn):
+    """La foto nueva se guarda primero en la base; tras guardar al empleado se sube a SharePoint (fotos.tras_cambio).
+    Devuelve el archivo de SharePoint de la foto quitada, para enviarlo a la papelera después de guardar."""
     if data.quitar_foto:
-        u.foto, u.foto_tipo = None, None
-    elif data.foto:
+        return fotos.quitar(u)
+    if data.foto:
         cabecera, contenido = data.foto.split(",", 1)
         u.foto = base64.b64decode(contenido)
         u.foto_tipo = cabecera[5:].split(";")[0]
+    return None
 
 
 def _limpiar(data: UsuarioIn) -> dict:
