@@ -169,3 +169,7 @@ export function horasEntre(ini, fin) {
 }
 
 export const hoyISO = () => toISO(new Date())
+
+/** Datos de un empleado en un renglón; omite los que no llegan (caseta no recibe nómina, puesto ni departamento). */
+export const datosEmp = (...partes) => partes.filter(Boolean).join(' · ')
+export const noEmp = (n) => (n ? `No. ${n}` : null)

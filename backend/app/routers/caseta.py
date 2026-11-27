@@ -191,7 +191,7 @@ def mes(anio: int, mes: int, db: Session = Depends(get_db), user: Usuario = Depe
 
 
 @router.get("/empleados")
-def empleados(q: str | None = None, con_permisos: bool = False, limite: int = 30, db: Session = Depends(get_db),
+def empleados(q: str | None = None, con_permisos: bool = False, limite: int = 30, usuario_id: int | None = None, db: Session = Depends(get_db),
               user: Usuario = Depends(require_caseta)):
     """Buscador de empleados de la sede (sin acentos, por palabras, nombre/nómina/puesto/departamento/correo).
 
@@ -199,7 +199,13 @@ def empleados(q: str | None = None, con_permisos: bool = False, limite: int = 30
     pendientes) para la pestaña "Permisos de hoy"; ahí también puede buscarse uno mismo."""
     dia = ahora_en(user.sede).date()
     res = []
-    for u in buscar_usuarios(db, _sedes(db, user), q, excluir_id=None if con_permisos else user.id, limite=max(limite, 1) * 2):
+    if usuario_id:  # una persona ya identificada (p. ej. por su QR)
+        u = db.get(Usuario, usuario_id)
+        lista = [u] if u and u.activo and u.sede_id in _sedes(db, user) else []
+    else:  # caseta solo busca por nombre: no debe poder relacionar nómina, puesto o correo con una persona
+        lista = buscar_usuarios(db, _sedes(db, user), q, excluir_id=None if con_permisos else user.id,
+                                limite=max(limite, 1) * 2, solo_nombre=user.rol == ROL_CASETA)
+    for u in lista:
         if u.rol in ROLES_SIN_VACACIONES:  # médico y caseta no tienen permisos en el sistema
             continue
         h = horarios.horario_de(u.turno, dia)

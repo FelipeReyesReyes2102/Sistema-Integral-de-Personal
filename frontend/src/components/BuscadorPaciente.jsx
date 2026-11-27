@@ -76,7 +76,7 @@ export default function BuscadorPaciente({ value, onChange, endpoint = '/consult
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="paciente-nombre">{value.nombre}</div>
           <div className="muted" style={{ fontSize: 12 }}>
-            {[`No. ${value.numero_empleado}`, ROLES[value.rol], value.puesto, value.departamento, value.sede_nombre].filter(Boolean).join(' · ')}
+            {[value.numero_empleado && `No. ${value.numero_empleado}`, ROLES[value.rol], value.puesto, value.departamento, value.sede_nombre].filter(Boolean).join(' · ')}
           </div>
           {extra && <div style={{ fontSize: 12, marginTop: 2 }}>{extra(value)}</div>}
           {(value.telefono || value.contacto_nombre || value.contacto_telefono) && (
@@ -117,7 +117,7 @@ export default function BuscadorPaciente({ value, onChange, endpoint = '/consult
               <div style={{ minWidth: 0 }}>
                 <div className="bp-nombre"><Resaltado texto={p.nombre} palabras={palabras} /></div>
                 <div className="muted bp-detalle">
-                  {[`No. ${p.numero_empleado}`, ROLES[p.rol], p.puesto || p.departamento, p.sede_nombre].filter(Boolean).join(' · ')}
+                  {[p.numero_empleado && `No. ${p.numero_empleado}`, ROLES[p.rol], p.puesto || p.departamento, p.sede_nombre].filter(Boolean).join(' · ')}
                 </div>
               </div>
             </li>

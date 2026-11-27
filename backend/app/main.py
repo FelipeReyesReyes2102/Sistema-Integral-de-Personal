@@ -1,10 +1,11 @@
 import asyncio
+import json
 import logging
 import os
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from starlette.concurrency import run_in_threadpool
@@ -14,6 +15,8 @@ from . import flujos as flujos_aprobacion
 from .config import settings
 from .database import SessionLocal, engine
 from .migraciones import actualizar_esquema
+from .models import ROL_CASETA
+from .vista_caseta import limpiar as limpiar_vista_caseta
 from .routers import (
     auth, calendario, catalogos, configuracion, consultas, correo, equipo, permisos,
     politica, rotacion as rotacion_router, sedes, usuarios, vacaciones, bitacora as bitacora_router, sharepoint as sharepoint_router,
@@ -86,6 +89,24 @@ for r in (auth, sedes, politica, importar_router, usuarios, catalogos, vacacione
           rotacion_router, bitacora_router, sharepoint_router, aprobacion_router, tipos_permiso_router, flujos_router,
           incapacidades_router, caseta_router, caseta_registro_router, equipos_router, estimados_router, manuales_router):
     app.include_router(r.router)
+
+
+@app.middleware("http")
+async def vista_caseta(request: Request, call_next):
+    """Al personal de caseta solo le llega el permiso y el nombre corto de la persona (ver vista_caseta.py)."""
+    resp = await call_next(request)
+    if (not request.url.path.startswith(("/api/caseta", "/api/equipos"))
+            or getattr(request.state, "rol", None) != ROL_CASETA
+            or "application/json" not in resp.headers.get("content-type", "")):
+        return resp
+    cuerpo = b"".join([c async for c in resp.body_iterator])
+    try:
+        nuevo = json.dumps(limpiar_vista_caseta(json.loads(cuerpo)), ensure_ascii=False).encode()
+    except ValueError:
+        nuevo = cuerpo
+    out = Response(nuevo, status_code=resp.status_code, media_type="application/json")
+    out.raw_headers = [(k, v) for k, v in resp.raw_headers if k.lower() != b"content-length"] +         [(b"content-length", str(len(nuevo)).encode())]
+    return out
 
 
 @app.middleware("http")

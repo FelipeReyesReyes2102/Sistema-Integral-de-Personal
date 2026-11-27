@@ -100,7 +100,7 @@ function Resultado({ r, onCambiar, onSolicitar }) {
           <Avatar usuario={{ id: r.persona.usuario_id, nombre: r.persona.nombre, tiene_foto: r.persona.tiene_foto }} tam={64} />
           <div style={{ minWidth: 0 }}>
             <div className="caseta-nombre" style={{ fontSize: 17 }}>{r.persona.nombre}</div>
-            <div className="muted" style={{ fontSize: 12 }}>No. {r.persona.numero_empleado}{r.persona.departamento ? ` · ${r.persona.departamento}` : ''}</div>
+            {r.persona.numero_empleado && <div className="muted" style={{ fontSize: 12 }}>No. {r.persona.numero_empleado}{r.persona.departamento ? ` · ${r.persona.departamento}` : ''}</div>}
             {r.permiso && <div style={{ fontSize: 13, marginTop: 2 }}><b>{r.permiso.tipo_nombre}</b> · {r.permiso.hora_inicio}–{r.permiso.hora_fin}</div>}
           </div>
         </div>
@@ -147,7 +147,7 @@ function Personas({ onSolicitar, onCambio }) {
   }
   async function solicitar() {
     try {
-      const lista = await api('/caseta/empleados', { query: { q: res.persona.numero_empleado, limite: 5 } })
+      const lista = await api('/caseta/empleados', { query: { usuario_id: res.persona.usuario_id } })
       const p = lista.find((x) => x.id === res.persona.usuario_id)
       if (p) onSolicitar(p)
     } catch (e) {
@@ -178,7 +178,7 @@ function BuscarPersona({ valor, onElegir }) {
   if (valor) {
     return (
       <div className="fila" style={{ gap: 8 }}>
-        <UserRound size={16} /> <b>{valor.nombre}</b> <span className="muted">No. {valor.numero_empleado}</span>
+        <UserRound size={16} /> <b>{valor.nombre}</b> {valor.numero_empleado && <span className="muted">No. {valor.numero_empleado}</span>}
         <button className="icon-btn plain" title="Quitar" onClick={() => onElegir(null)}><X size={14} /></button>
       </div>
     )
@@ -191,7 +191,7 @@ function BuscarPersona({ valor, onElegir }) {
           {lista.map((e) => (
             <button key={e.id} className="caseta-item compacto" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => { onElegir(e); setQ('') }}>
               <Avatar usuario={{ id: e.id, nombre: e.nombre, tiene_foto: e.tiene_foto }} tam={28} />
-              <span><b>{e.nombre}</b> <span className="muted">No. {e.numero_empleado}</span></span>
+              <span><b>{e.nombre}</b> {e.numero_empleado && <span className="muted">No. {e.numero_empleado}</span>}</span>
             </button>
           ))}
         </div>

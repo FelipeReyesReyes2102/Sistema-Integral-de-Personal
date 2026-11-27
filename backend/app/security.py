@@ -177,6 +177,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Usuario
         sesion.ultimo_uso = t
         db.commit()
     request.state.sesion = sesion
+    request.state.rol = user.rol  # el middleware de caseta limita lo que ve ese rol
     if request.method not in METODOS_SEGUROS:  # los cambios de esta petición quedan en la bitácora a su nombre
         from .bitacora import asignar_actor
         asignar_actor(db, user, request.client.host if request.client else None)

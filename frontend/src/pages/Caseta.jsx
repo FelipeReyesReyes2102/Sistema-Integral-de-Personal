@@ -5,7 +5,7 @@ import { MODO_CASETA } from '../appCaseta'
 import Escaneo from '../components/CasetaEscaneo'
 import Avatar from '../components/Avatar'
 import BuscadorPaciente from '../components/BuscadorPaciente'
-import { CATEGORIAS, MESES, SALIDAS_EQUIPO, fmtFecha } from '../utils'
+import { CATEGORIAS, MESES, SALIDAS_EQUIPO, datosEmp, fmtFecha, noEmp } from '../utils'
 
 const ahoraHHMM = () => new Date().toTimeString().slice(0, 5)
 const minutos = (a, b) => {
@@ -57,7 +57,7 @@ function EquiposHoy() {
               <Avatar usuario={{ id: s.usuario_id, nombre: s.usuario_nombre, tiene_foto: s.tiene_foto }} tam={40} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="caseta-nombre">{s.usuario_nombre}</div>
-                <div className="muted" style={{ fontSize: 12 }}>No. {s.usuario_numero}{s.usuario_departamento ? ` · ${s.usuario_departamento}` : ''} · plazo {fmtFecha(s.fecha_inicio)} → {fmtFecha(s.fecha_fin)}</div>
+                <div className="muted" style={{ fontSize: 12 }}>{datosEmp(noEmp(s.usuario_numero), s.usuario_departamento, `plazo ${fmtFecha(s.fecha_inicio)} → ${fmtFecha(s.fecha_fin)}`)}</div>
                 <div className="caseta-mov"><Laptop size={14} /> <b>{TIPOS_EQUIPO[s.tipo_equipo]} {s.marca} {s.modelo}</b> · SN <b>{s.serie}</b>{s.accesorios ? ` · ${s.accesorios}` : ''}</div>
                 {rechazada
                   ? <div className="acceso no"><XCircle size={18} /> <b>NO DEJAR SALIR</b><span>{s.motivo_rechazo}</span></div>
@@ -107,7 +107,7 @@ function PermisosMes() {
   }
   const norm = (t) => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   const palabras = norm(buscar).split(/\s+/).filter(Boolean)
-  const coincide = (p) => (!MODO_CASETA || !p.por_dias) && palabras.every((w) => norm(`${p.nombre} ${p.numero_empleado} ${p.tipo_nombre}`).includes(w))
+  const coincide = (p) => (!MODO_CASETA || !p.por_dias) && palabras.every((w) => norm(`${p.nombre} ${p.numero_empleado || ''} ${p.tipo_nombre}`).includes(w))
   const dias = (datos?.dias || []).map((d) => ({ ...d, permisos: d.permisos.filter(coincide) })).filter((d) => d.permisos.length)
 
   return (
@@ -140,7 +140,7 @@ function PermisosMes() {
                 {d.permisos.map((p) => (
                   <tr key={`${d.fecha}-${p.id}`}>
                     <td style={{ width: 44 }}><Avatar usuario={{ id: p.usuario_id, nombre: p.nombre, tiene_foto: p.tiene_foto }} tam={32} /></td>
-                    <td><b>{p.nombre}</b><div className="muted" style={{ fontSize: 12 }}>No. {p.numero_empleado}{p.departamento ? ` · ${p.departamento}` : ''}</div></td>
+                    <td><b>{p.nombre}</b><div className="muted" style={{ fontSize: 12 }}>{datosEmp(noEmp(p.numero_empleado), p.departamento)}</div></td>
                     <td><span className="chip" style={{ background: `${(CATEGORIAS[p.categoria] || {}).color || '#6d4c41'}1f` }}>{p.tipo_nombre}</span></td>
                     <td>{movimiento(p)}</td>
                     <td className="muted" style={{ fontSize: 12 }}>{p.autorizo ? `Autorizó: ${p.autorizo}` : ''}</td>
@@ -187,7 +187,7 @@ function PermisosProximos() {
                 <Avatar usuario={{ id: p.usuario_id, nombre: p.nombre, tiene_foto: p.tiene_foto }} tam={40} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="caseta-nombre">{p.nombre}</div>
-                  <div className="muted" style={{ fontSize: 12 }}>No. {p.numero_empleado}{p.departamento ? ` · ${p.departamento}` : ''}</div>
+                  {datosEmp(noEmp(p.numero_empleado), p.departamento) && <div className="muted" style={{ fontSize: 12 }}>{datosEmp(noEmp(p.numero_empleado), p.departamento)}</div>}
                   <div className="caseta-mov"><Movimiento p={p} /></div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
@@ -327,8 +327,7 @@ function PermisosHoy({ onSolicitar, pendientesIds = [] }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="caseta-nombre">{e.nombre}</div>
                 <div className="muted" style={{ fontSize: 12 }}>
-                  No. {e.numero_empleado}{e.departamento ? ` · ${e.departamento}` : ''}{e.turno ? ` · ${e.turno}` : ''}
-                  {e.entrada_hoy ? ` · hoy ${e.entrada_hoy}–${e.salida_hoy}` : ' · sin turno'}{e.jefe_nombre ? ` · Jefe: ${e.jefe_nombre}` : ''}
+                  {datosEmp(noEmp(e.numero_empleado), e.departamento, e.turno, e.entrada_hoy ? `hoy ${e.entrada_hoy}–${e.salida_hoy}` : 'sin turno', e.jefe_nombre && `Jefe: ${e.jefe_nombre}`)}
                 </div>
                 {e.permisos_hoy.length === 0 && <div className="caseta-mov muted">Sin permisos hoy</div>}
                 {e.permisos_hoy.map((p) => (
@@ -362,7 +361,7 @@ function PermisosHoy({ onSolicitar, pendientesIds = [] }) {
             <Avatar usuario={{ id: p.usuario_id, nombre: p.nombre, tiene_foto: p.tiene_foto }} tam={40} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="caseta-nombre">{p.nombre}</div>
-              <div className="muted" style={{ fontSize: 12 }}>No. {p.numero_empleado}{p.departamento ? ` · ${p.departamento}` : ''}{p.turno ? ` · ${p.turno}` : ''}</div>
+              {datosEmp(noEmp(p.numero_empleado), p.departamento, p.turno) && <div className="muted" style={{ fontSize: 12 }}>{datosEmp(noEmp(p.numero_empleado), p.departamento, p.turno)}</div>}
               <div className="caseta-mov"><Movimiento p={p} /></div>
             </div>
             <div style={{ textAlign: 'right' }}>
@@ -383,7 +382,7 @@ function PermisosHoy({ onSolicitar, pendientesIds = [] }) {
                 <Avatar usuario={{ id: p.usuario_id, nombre: p.nombre, tiene_foto: p.tiene_foto }} tam={32} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="caseta-nombre">{p.nombre}</div>
-                  <div className="muted" style={{ fontSize: 12 }}>No. {p.numero_empleado} · {p.tipo_nombre} · {fmtFecha(p.fecha)} → {fmtFecha(p.fecha_fin)}</div>
+                  <div className="muted" style={{ fontSize: 12 }}>{datosEmp(noEmp(p.numero_empleado), p.tipo_nombre, `${fmtFecha(p.fecha)} → ${fmtFecha(p.fecha_fin)}`)}</div>
                 </div>
               </div>
             ))}
@@ -437,7 +436,7 @@ function Pendientes({ lista, onCancelar }) {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="caseta-nombre">{r.nombre}</div>
               <div className="muted" style={{ fontSize: 12 }}>
-                No. {r.numero_empleado}{r.departamento ? ` · ${r.departamento}` : ''} · llegó {r.hora_fin} (entrada {r.hora_inicio}, {minutos(r.hora_inicio, r.hora_fin)} min)
+                {datosEmp(noEmp(r.numero_empleado), r.departamento, `llegó ${r.hora_fin}`)} (entrada {r.hora_inicio}, {minutos(r.hora_inicio, r.hora_fin)} min)
               </div>
               <Acceso r={r} />
             </div>
@@ -500,7 +499,7 @@ function Retardos({ lista, inicial, onRegistrado }) {
           <b> Teams</b>). Si no tiene jefe o el jefe no está en planta, se pide a GH. Queda como permiso de llegada tarde.
         </p>
         <BuscadorPaciente value={emp} onChange={setEmp} endpoint="/caseta/empleados"
-          placeholder="Nombre, apellido o número de nómina…"
+          placeholder={MODO_CASETA ? "Nombre o apellido…" : "Nombre, apellido o número de nómina…"}
           extra={(p) => [p.entrada_hoy ? `Entrada hoy ${p.entrada_hoy}` : 'Sin turno', p.jefe_nombre ? `Jefe: ${p.jefe_nombre}` : 'Sin jefe (GH)'].join(' · ')} />
         {emp && (
           <div className="form-grid" style={{ marginTop: 12 }}>
@@ -544,7 +543,7 @@ function Retardos({ lista, inicial, onRegistrado }) {
               {resueltos.length === 0 && <tr><td colSpan={4} className="muted" style={{ textAlign: 'center' }}>Aún no hay solicitudes resueltas hoy.</td></tr>}
               {resueltos.map((r) => (
                 <tr key={r.id}>
-                  <td>{r.nombre}<div className="muted" style={{ fontSize: 12 }}>No. {r.numero_empleado}{r.departamento ? ` · ${r.departamento}` : ''}</div></td>
+                  <td>{r.nombre}<div className="muted" style={{ fontSize: 12 }}>{datosEmp(noEmp(r.numero_empleado), r.departamento)}</div></td>
                   <td>{r.hora_inicio}</td>
                   <td><b>{r.hora_fin}</b> <span className="muted">({minutos(r.hora_inicio, r.hora_fin)} min)</span></td>
                   <td><Acceso r={r} />{r.teams?.nota && <div className="muted" style={{ fontSize: 11 }}><MessageSquare size={11} /> {r.teams.nota}</div>}</td>

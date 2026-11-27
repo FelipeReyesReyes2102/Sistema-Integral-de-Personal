@@ -284,3 +284,44 @@ def test_qr_desactivado_y_uso_del_permiso_con_un_clic():
         assert carlos.delete(f"/api/caseta/movimientos/{t['id']}").status_code == 403
     finally:
         _limpiar(uid, salida, tarde)
+
+
+def test_caseta_solo_ve_nombre_corto_y_el_permiso():
+    from app.vista_caseta import nombre_corto
+    assert nombre_corto("Felipe De Jesus Reyes Reyes") == "Felipe Reyes"
+    assert nombre_corto("Jose Antonio Lanuza Razo") == "Jose Lanuza"
+    assert nombre_corto("Juan Carlos De la Cruz López") == "Juan De la Cruz"
+    assert nombre_corto("Juan Pérez García") == "Juan Pérez"
+    assert nombre_corto("Ana López") == "Ana López"
+    uid = _usuario("carlos@empresa.com")
+    with SessionLocal() as db:
+        u = db.get(Usuario, uid)
+        completo, numero = u.nombre, u.numero_empleado
+        u.nombre = "Carlos Alberto Méndez Ruiz"
+        db.commit()
+    _limpiar(uid)
+    pid = _permiso(uid, "salida_intermedia", -5, 60)
+    try:
+        cas = _caseta()
+        hoy = cas.get("/api/caseta/hoy")
+        assert hoy.status_code == 200
+        fila = next(f for f in hoy.json()["por_horas"] if f["id"] == pid)
+        assert fila["nombre"] == "Carlos Méndez"
+        assert not {"numero_empleado", "puesto", "departamento"} & fila.keys()
+        assert "Carlos Alberto" not in hoy.text and f'"{numero}"' not in hoy.text
+        # Al registrar, el mensaje también lleva el nombre corto
+        r = cas.post(f"/api/caseta/permisos/{pid}/usar")
+        assert r.status_code == 201 and "Carlos Alberto" not in r.text and "numero_empleado" not in r.text
+        assert "numero_empleado" not in cas.get("/api/caseta/movimientos").text
+        # La búsqueda de caseta es solo por nombre
+        assert cas.get("/api/caseta/empleados", params={"q": numero}).json() == [] or numero.isalpha()
+        assert [e["id"] for e in cas.get("/api/caseta/empleados", params={"usuario_id": uid}).json()] == [uid]
+        # GH sigue viendo todo
+        adm = entrar("admin@empresa.com", "Admin123")
+        f2 = next(f for f in adm.get("/api/caseta/hoy").json()["por_horas"] if f["id"] == pid)
+        assert f2["nombre"] == "Carlos Alberto Méndez Ruiz" and f2["numero_empleado"] == numero
+    finally:
+        _limpiar(uid, pid)
+        with SessionLocal() as db:
+            db.get(Usuario, uid).nombre = completo
+            db.commit()

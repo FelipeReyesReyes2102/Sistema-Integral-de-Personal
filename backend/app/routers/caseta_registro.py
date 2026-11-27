@@ -25,6 +25,7 @@ from ..database import get_db
 from ..models import TIPO_RETARDO, VALIDADO, MovimientoCaseta, Permiso, Usuario, es_admin
 from ..security import auditar, get_current_user
 from ..sedes import ahora_en
+from ..vista_caseta import nombre_corto
 from .caseta import _persona, _sedes, pasos_permiso, movimientos_permiso, permisos_proximos, require_caseta, uso_permiso
 
 router = APIRouter(prefix="/api/caseta", tags=["caseta"])
@@ -137,7 +138,7 @@ def _empleado_visible(db: Session, user: Usuario, usuario_id: int) -> Usuario:
     if not u or u.sede_id not in _sedes(db, user):
         raise HTTPException(404, "La persona no es de tu sede.")
     if not u.activo:
-        raise HTTPException(422, f"{u.nombre} está dado de baja en SIP-O.")
+        raise HTTPException(422, f"{nombre_corto(u.nombre)} está dado de baja en SIP-O.")
     return u
 
 
@@ -261,7 +262,7 @@ def usar_permiso(pid: int, db: Session = Depends(get_db), user: Usuario = Depend
     movs = movimientos_permiso(db, p, dia)
     pasos = pasos_permiso(p)
     if len(movs) >= len(pasos):
-        raise HTTPException(409, f"El permiso de {u.nombre} ya se registró como usado.")
+        raise HTTPException(409, f"El permiso de {nombre_corto(u.nombre)} ya se registró como usado.")
     tipo = pasos[len(movs)]
     hora = _hhmm
     if tipo == "salida":
@@ -351,9 +352,9 @@ def registrar_equipo(data: EquipoIn, db: Session = Depends(get_db), user: Usuari
     elif not u:
         texto = "Salida sin indicar quién lleva el equipo."
     elif valido:
-        texto = f"Salida autorizada: {u.nombre} tiene permiso «{tipos_permiso.nombre(db, u.sede_id, permiso.tipo)}» aprobado."
+        texto = f"Salida autorizada: {nombre_corto(u.nombre)} tiene permiso «{tipos_permiso.nombre(db, u.sede_id, permiso.tipo)}» aprobado."
     else:
-        texto = f"{u.nombre} NO tiene un permiso de salida de equipo aprobado para hoy."
+        texto = f"{nombre_corto(u.nombre)} NO tiene un permiso de salida de equipo aprobado para hoy."
     if data.nota:
         texto += f" Nota: {data.nota.strip()}"
     m = _guardar(db, user, sede_id=sede.id if sede else None, clase="equipo", tipo=data.tipo, usuario_id=u.id if u else None,
